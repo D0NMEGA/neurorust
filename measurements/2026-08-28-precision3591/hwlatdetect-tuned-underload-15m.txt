@@ -1,0 +1,41 @@
+hwlatdetect:  test duration 900 seconds
+   detector: tracer
+   parameters:
+        CPU list:          None
+        Latency threshold: 10us
+        Sample window:      1000000us
+        Sample width:      500000us
+     Non-sampling period:  500000us
+        Output File:       None
+
+Starting test
+test finished
+Max Latency: 29us
+Samples recorded: 26
+Samples exceeding threshold: 26
+ts: 1787950654.173419278, inner:0, outer:29, cpu:21
+ts: 1787950739.019867212, inner:0, outer:28, cpu:21
+ts: 1787950851.623718900, inner:0, outer:27, cpu:20
+ts: 1787950870.742175531, inner:18, outer:0, cpu:14
+ts: 1787950888.922324595, inner:0, outer:19, cpu:13
+ts: 1787950906.246684792, inner:17, outer:0, cpu:13
+ts: 1787950923.571539215, inner:0, outer:19, cpu:13
+ts: 1787950940.894572274, inner:14, outer:0, cpu:13
+ts: 1787951011.288998895, inner:16, outer:0, cpu:15
+ts: 1787951028.608586788, inner:0, outer:16, cpu:15
+ts: 1787951045.929503830, inner:17, outer:0, cpu:15
+ts: 1787951063.249843716, inner:0, outer:12, cpu:15
+ts: 1787951115.236079607, inner:0, outer:15, cpu:15
+ts: 1787951132.558038000, inner:0, outer:14, cpu:15
+ts: 1787951149.877230632, inner:0, outer:15, cpu:15
+ts: 1787951167.197375420, inner:0, outer:16, cpu:15
+ts: 1787951253.817134168, inner:15, outer:0, cpu:15
+ts: 1787951271.146366082, inner:15, outer:0, cpu:15
+ts: 1787951288.471644335, inner:0, outer:15, cpu:15
+ts: 1787951305.800384838, inner:17, outer:0, cpu:15
+ts: 1787951323.129830857, inner:0, outer:16, cpu:15
+ts: 1787951392.428689910, inner:17, outer:0, cpu:15
+ts: 1787951409.752341930, inner:1, outer:15, cpu:15
+ts: 1787951427.072562815, inner:16, outer:0, cpu:15
+ts: 1787951444.390171763, inner:1, outer:16, cpu:15
+ts: 1787951529.062151107, inner:0, outer:11, cpu:14
