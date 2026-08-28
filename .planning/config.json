@@ -1,0 +1,44 @@
+{
+  "model_profile": "balanced",
+  "commit_docs": true,
+  "parallelization": false,
+  "search_gitignored": false,
+  "brave_search": true,
+  "firecrawl": false,
+  "exa_search": false,
+  "git": {
+    "branching_strategy": "none",
+    "phase_branch_template": "donny/phase-{phase}-{slug}",
+    "milestone_branch_template": "donny/{milestone}-{slug}",
+    "quick_branch_template": null
+  },
+  "workflow": {
+    "research": true,
+    "browser_research": true,
+    "plan_check": true,
+    "verifier": true,
+    "nyquist_validation": true,
+    "auto_advance": false,
+    "node_repair": true,
+    "node_repair_budget": 2,
+    "max_replan_iterations": 2,
+    "ui_phase": true,
+    "ui_safety_gate": true,
+    "ui_review": true,
+    "security_enforcement": true,
+    "security_asvs_level": 1,
+    "security_block_on": "high",
+    "text_mode": false,
+    "research_before_questions": false,
+    "discuss_mode": "discuss",
+    "skip_discuss": false
+  },
+  "hooks": {
+    "context_warnings": true
+  },
+  "project_code": null,
+  "phase_naming": "sequential",
+  "agent_skills": {},
+  "mode": "interactive",
+  "granularity": "standard"
+}
