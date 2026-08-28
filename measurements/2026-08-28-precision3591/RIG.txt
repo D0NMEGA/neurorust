@@ -1,0 +1,20 @@
+captured_utc: 2026-08-28T20:36:21Z
+system:       Dell Inc. Precision 3591
+bios:         1.23.0  released 04/24/2026
+cpu:          Intel(R) Core(TM) Ultra 9 185H
+topology:     22 logical / 16 cores / 1 socket
+p_cores:      0-11
+e_cores:      12-21
+microcode:    0x28
+kernel:       7.0.0-30-generic  (#30-Ubuntu SMP PREEMPT_DYNAMIC Fri Jul 31 18:22:54 UTC 2026)
+os:           Ubuntu 26.04.1 LTS
+session:      live USB (RAM overlay), root fs = /cow
+memory_gb:    30
+cmdline:      BOOT_IMAGE=/casper/vmlinuz --- quiet splash
+governor:     performance
+no_turbo:     1
+cstates:      POLL=on C1E=on C6=off C10=off 
+power:        AC=1 battery=Charging 85%
+nic_wired:    enp0s31f6 driver=e1000e state=down
+nic_ptp:      	hardware-raw-clock 
+nic_wifi:     wlp0s20f3 driver=iwlwifi
