@@ -21,7 +21,7 @@ Core Ultra 9 185H, P-cores 0-11, E-cores 12-21.
 | `hwlatdetect-stock-15m.txt` | powersave, turbo on, C-states to C10 | idle | **125 us** | 291 |
 | `hwlatdetect-tuned-15m.txt` | performance, turbo off, C6/C10 off | idle | **<10 us** (7 us at 1us threshold) | 0 |
 | `hwlatdetect-tuned-underload-15m.txt` | performance, turbo off, C6/C10 off | 22 cores saturated, 91-93 C | **29 us** | 26 |
-| `hwlatdetect-pcore-underload-10m.txt` | as above, sampling restricted to P-cores 0-11 | 22 cores saturated, 93-95 C | see file | see file |
+| `hwlatdetect-pcore-underload-10m.txt` | as above, sampling restricted to P-cores 0-11 | 22 cores saturated, 93-95 C | **22 us** | 13 / 600 s (~19 / 900 s) |
 
 Tuning was three sysfs writes: `performance` governor on all CPUs, `no_turbo=1`, and
 disabling C6 and C10 while keeping POLL and C1E.
@@ -36,11 +36,13 @@ on the stock configuration disappeared entirely.
 26 events, worst case 29 us. This is the load-triggered SMI behaviour that idle screening
 cannot detect, and it is why the idle result alone is not sufficient evidence.
 
-**Under load, every event landed on an E-core.** Distribution by CPU was cpu13 (4), cpu14 (2),
-cpu15 (17), cpu20 (1), cpu21 (2). All are in the E-core range 12-21. No event occurred on a
-P-core. Since the intended design isolates P-cores for the hot path and leaves E-cores to the
-OS, this suggests the isolated cores may be materially cleaner than the whole-machine figure
-implies. The P-core-restricted run tests that directly rather than inferring it.
+**P-cores are not firmware-clean.** In the whole-machine run every event happened to land on
+an E-core (cpu13, 14, 15, 20, 21), which suggested that isolating P-cores might avoid SMIs
+entirely. A run pinned explicitly to `--cpu-list=0-11` refuted that: 13 events in 600 s with a
+22 us max, a comparable rate to the whole-machine figure. The E-core clustering was a sampling
+artifact of `hwlatdetect` rotating across CPUs, not a property of the hardware. P-cores are
+modestly better (22 us versus 29 us) but not exempt, and no core-isolation choice removes the
+firmware floor.
 
 **The 22-core saturation is deliberately pessimistic.** The real workload isolates a handful
 of P-cores and runs a pipeline; it does not saturate the package. 29 us should be read as a
