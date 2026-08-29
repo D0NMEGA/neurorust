@@ -166,16 +166,93 @@ Completed and measured 2026-08-28. Raw captures and rig manifest in
 
 ## Traceability
 
-Populated during roadmap creation.
+Populated from ROADMAP.md on 2026-08-28. RIG-01 through RIG-04 were validated before the
+roadmap existed and map to no phase; they are listed for completeness.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (pending roadmap) | | |
+| RIG-01 | Complete (pre-roadmap) | Validated |
+| RIG-02 | Complete (pre-roadmap) | Validated |
+| RIG-03 | Complete (pre-roadmap) | Validated |
+| RIG-04 | Complete (pre-roadmap) | Validated |
+| PLAT-01 | Phase 1 | Pending |
+| PLAT-02 | Phase 1 | Pending |
+| PLAT-03 | Phase 1 | Pending |
+| SUBS-01 | Phase 3 | Pending |
+| SUBS-02 | Phase 3 | Pending |
+| SUBS-03 | Phase 3 | Pending |
+| SUBS-04 | Phase 3 | Pending |
+| SUBS-05 | Phase 3 | Pending |
+| SUBS-06 | Phase 3 | Pending |
+| SUBS-07 | Phase 3 | Pending |
+| GRAPH-01 | Phase 5 | Pending |
+| GRAPH-02 | Phase 5 | Pending |
+| GRAPH-03 | Phase 4 | Pending |
+| GRAPH-04 | Phase 6 | Pending |
+| CHAN-01 | Phase 4 | Pending |
+| CHAN-02 | Phase 4 | Pending |
+| CHAN-03 | Phase 4 | Pending |
+| CHAN-04 | Phase 4 | Pending |
+| CHAN-05 | Phase 4 | Pending |
+| CHAN-06 | Phase 4 | Pending |
+| CHAN-07 | Phase 4 | Pending |
+| STOP-01 | Phase 2 | Pending |
+| STOP-02 | Phase 2 | Pending |
+| STOP-03 | Phase 2 | Pending |
+| STOP-04 | Phase 2 | Pending |
+| STOP-05 | Phase 2 | Pending |
+| STOP-06 | Phase 2 | Pending |
+| STOP-07 | Phase 2 | Pending |
+| FILT-01 | Phase 5 | Pending |
+| FILT-02 | Phase 5 | Pending |
+| FILT-03 | Phase 5 | Pending |
+| FILT-04 | Phase 5 | Pending |
+| FILT-05 | Phase 5 | Pending |
+| DEC-01 | Phase 6 | Pending |
+| DEC-02 | Phase 6 | Pending |
+| DEC-03 | Phase 6 | Pending |
+| DEC-04 | Phase 6 | Pending |
+| WIRE-01 | Phase 5 | Pending |
+| WIRE-02 | Phase 8 | Pending |
+| WIRE-03 | Phase 8 | Pending |
+| WIRE-04 | Phase 8 | Pending |
+| WIRE-05 | Phase 8 | Pending |
+| WIRE-06 | Phase 8 | Pending |
+| WIRE-07 | Phase 8 | Pending |
+| LSL-01 | Phase 7 | Pending |
+| LSL-02 | Phase 7 | Pending |
+| LSL-03 | Phase 7 | Pending |
+| OBS-01 | Phase 5 | Pending |
+| OBS-02 | Phase 5 | Pending |
+| OBS-03 | Phase 5 | Pending |
+| OBS-04 | Phase 5 | Pending |
+| BENCH-01 | Phase 6 | Pending |
+| BENCH-02 | Phase 6 | Pending |
+| BENCH-03 | Phase 6 | Pending |
+| BENCH-04 | Phase 1 | Pending |
+| BENCH-05 | Phase 1 | Pending |
+| BENCH-06 | Phase 1 | Pending |
+| BENCH-07 | Phase 6 | Pending |
+| BENCH-08 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 59 total
-- Mapped to phases: 0
-- Unmapped: 59
+- Mapped to phases: 59
+- Unmapped: 0
+- Duplicated across phases: 0
+
+**Per phase:**
+
+| Phase | Name | Requirements | IDs |
+|-------|------|--------------|-----|
+| Phase 1 | Trustworthy measurement | 7 | PLAT-01, PLAT-02, PLAT-03, BENCH-04, BENCH-05, BENCH-06, BENCH-08 |
+| Phase 2 | Proven emergency_stop | 7 | STOP-01, STOP-02, STOP-03, STOP-04, STOP-05, STOP-06, STOP-07 |
+| Phase 3 | Deterministic substrate | 7 | SUBS-01, SUBS-02, SUBS-03, SUBS-04, SUBS-05, SUBS-06, SUBS-07 |
+| Phase 4 | Lock-free transport | 8 | CHAN-01, CHAN-02, CHAN-03, CHAN-04, CHAN-05, CHAN-06, CHAN-07, GRAPH-03 |
+| Phase 5 | Instrumented pipeline | 12 | GRAPH-01, GRAPH-02, WIRE-01, FILT-01, FILT-02, FILT-03, FILT-04, FILT-05, OBS-01, OBS-02, OBS-03, OBS-04 |
+| Phase 6 | Decoder and the end-to-end result | 9 | GRAPH-04, DEC-01, DEC-02, DEC-03, DEC-04, BENCH-01, BENCH-02, BENCH-03, BENCH-07 |
+| Phase 7 | pylsl compatibility | 3 | LSL-01, LSL-02, LSL-03 |
+| Phase 8 | Wire protocol and sustained throughput | 6 | WIRE-02, WIRE-03, WIRE-04, WIRE-05, WIRE-06, WIRE-07 |
 
 ---
-*Requirements defined: 2026-08-28*
+*Requirements defined: 2026-08-28. Traceability populated at roadmap creation, 2026-08-28.*

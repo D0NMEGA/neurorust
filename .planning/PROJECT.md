@@ -24,11 +24,12 @@ If everything else is cut, those two artifacts are the project.
 
 ### Validated
 
-(None yet - ship to validate)
+- [x] Reference rig on PREEMPT_RT with documented firmware-latency and stock-kernel baselines
+      (RIG-01..04, completed 2026-08-28, raw captures in `measurements/2026-08-28-precision3591/`)
 
 ### Active
 
-- [ ] Reference rig stood up on PREEMPT_RT with a documented cyclictest baseline
+
 - [ ] Node graph (DAG) runtime with per-node WCET annotations and deadline-aware scheduling
 - [ ] Lock-free SPSC intra-process transport with published p99, verified exhaustively under loom
 - [ ] No heap allocation on the hot path, enforced by an allocator hook and asserted across a soak
@@ -132,7 +133,9 @@ materially tighter jitter, plus a safety guarantee BRAND does not offer.
 - **Platform**: Linux only for deployment; PREEMPT_RT required for any published RT number
 - **Rig discipline**: every quoted figure names the machine it was measured on, and no number
   from an unpinned or shared machine is accepted
-- **Timestamps**: software timestamping only - no available NIC has a PTP hardware clock
+- **Timestamps**: hardware timestamping IS available on the reference rig's wired `e1000e` NIC
+  (PTP hardware clock confirmed 2026-08-28). Requires an ethernet cable; the wifi adapter has none.
+  The earlier "software only" constraint applied to the BIC Broadcom NICs and to a Raspberry Pi.
 - **Network**: if the rig is a Pi, the wire is capped near 125 MB/s and the 480 MB/s figure
   applies to the in-process and shared-memory path, stated plainly rather than blurred
 - **Budget**: 0 to 55 USD of hardware; the only item money buys is throughput over a fast NIC,
