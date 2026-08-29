@@ -55,3 +55,22 @@ worst-case bound under adversarial thermal conditions, not as the expected opera
 - Detector validity was confirmed: at `--threshold=1` the tuned idle machine reported 6
   events with a 7 us max, so the zero-above-10us result is a real measurement rather than a
   dead instrument.
+
+## Disk preparation (2026-08-28)
+
+Windows NTFS shrunk from 475.8 GiB to 355.8 GiB to free 120 GiB for Ubuntu.
+`partition-table-BEFORE-resize.txt` and `-AFTER-resize.txt` capture the exact sfdisk
+dumps either side, so the operation is reversible with `sfdisk < BEFORE` if the
+filesystem is later shrunk back.
+
+Preconditions verified before touching the disk: NTFS `Volume Flags: 0x0000` (clean),
+no `hiberfil.sys` (so Fast Startup was not leaving the volume suspended), no BitLocker
+signature, Secure Boot already disabled.
+
+The `ntfsresize` dry run reported `Needed relocations: 0`, meaning all in-use data already
+sat below the target boundary and the shrink was a metadata update rather than a 173 GB
+migration. Partition was then set 1.92 GiB larger than the filesystem so the partition can
+never be smaller than its contents.
+
+Post-resize verification: read-only mount succeeded, `/Windows` and `/Users` present,
+space in use unchanged at 173.4 GB.
