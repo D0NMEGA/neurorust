@@ -52,8 +52,11 @@ If everything else is cut, those two artifacts are the project.
 - Live Stanford BRAND installation - downgraded to a comparison against BRAND's published
   figures, because standing up someone else's Redis-based stack is not on the critical path
   for a solo build
-- IEEE 1588 hardware timestamps - no NIC available to this project reports a PTP hardware
-  clock, so ingest uses software timestamping with the added uncertainty measured and stated
+- (CORRECTED 2026-08-28) IEEE 1588 hardware timestamps are back IN SCOPE. The reference rig's
+  wired NIC (`enp0s31f6`, `e1000e`) reports `hardware-transmit`, `hardware-receive`, and
+  `hardware-raw-clock`. The earlier "software timestamps only" constraint was true of the BIC
+  Broadcom NICs and of a Raspberry Pi, and false of this machine. Requires an ethernet cable;
+  the wifi adapter has no PTP clock.
 - Tokio or any work-stealing scheduler on the hot path - control plane only
 - General-purpose async framework - Tokio already exists
 - A new wire protocol for the community to adopt - the adoption path is the LSL shim
@@ -70,7 +73,23 @@ the Kani and Creusot proofs, loom, criterion microbenchmarks, the filter and its
 parity check, the pylsl shim, gRPC, Tauri, and Arrow IPC. The proofs, which are the single
 most differentiating artifact, need no special hardware at all.
 
-**Reference rig, unresolved.** Two candidates:
+**Reference rig: RESOLVED 2026-08-28. Dell Precision 3591, zero hardware cost.**
+Screening decided it. Firmware latency (`hwlatdetect`) fell from 125 us worst case on the
+stock configuration to under 10 us tuned, and 22 us on P-cores under adversarial 95 C load,
+against a 30 us gate. The SMI lottery that usually disqualifies cheap x86 did not materialise
+on a Precision workstation running BIOS 1.23.0. The Pi 5 was not purchased. Full data and the
+rig manifest are in `measurements/2026-08-28-precision3591/`.
+
+Installed state: Ubuntu 26.04.1 LTS dual-booting alongside Windows (shrunk from 475.8 to
+355.8 GiB, 120 GiB for Ubuntu), kernel 7.0.0-30-realtime with `/sys/kernel/realtime` = 1,
+`isolcpus=6-11` covering whole physical cores 20/24/28, C-states capped at C1E, `performance`
+governor and `no_turbo=1` made persistent via `rt-tuning.service`.
+
+Note on core selection: the brief's `isolcpus=2-7` is wrong on this hardware. Hyperthread
+siblings pair as (0,5) (1,2) (3,4) (6,7) (8,9) (10,11), so 2-7 splits two physical cores and
+leaves their siblings running OS work. `6-11` covers three whole cores.
+
+Original candidates, retained for the record:
 
 - Dell Precision 3591, Intel Core Ultra 7/9 185H (Meteor Lake), 16 cores, x86_64. Free and
   fast. Risks: laptop embedded-controller SMIs cause 50-300 us spikes that are invisible to
@@ -152,4 +171,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-28 after initialization*
+*Last updated: 2026-08-28 after rig screening, install, and first RT measurement*
