@@ -74,3 +74,39 @@ never be smaller than its contents.
 
 Post-resize verification: read-only mount succeeded, `/Windows` and `/Users` present,
 space in use unchanged at 173.4 GB.
+
+## First PREEMPT_RT measurement (2026-08-28, CONTAMINATED - see caveat)
+
+`cyclictest-rt-isolated-idle-10m.hist`. Kernel 7.0.0-30-realtime (`/sys/kernel/realtime` = 1),
+`isolcpus=6-11`, 6 threads under SCHED_FIFO prio 99, `mlockall`, 200 us interval, 10 minutes,
+18.0 M samples.
+
+| Percentile | Latency |
+|---|---|
+| p50 | 2 us |
+| p99 | 9 us |
+| p99.9 | 10 us |
+| p99.99 | 12 us |
+| max | ~3800 us |
+
+Samples above the 30 us gate: 1,201 of 17,994,956 (0.0067%).
+
+**Split verdict.** Jitter (p99 - p50) is 7 us against the 500 us target, passing by ~70x.
+`cyclictest max < 30 us` fails by ~127x. This is the project's own thesis in data: a 2 us
+median says nothing about a 3.8 ms stall.
+
+**Two structural clues.** The distribution is bimodal, with zero samples between 13 and 100 us
+and then a distinct 101-399 us population, which indicates a specific recurring event rather
+than gradual noise. The ~3.8 ms maximum appeared on all six threads at nearly identical values
+(3785, 3679, 3787, 3693, 3806, 3726), the signature of a global stall such as `stop_machine()`
+or a system-wide TLB shootdown rather than per-core interference.
+
+**CAVEAT - do not publish this figure.** The run was contaminated. SSH commands were executed
+against the machine during the measurement (`ps -L`, `tmux capture-pane`, `scp`), each creating
+processes, taking network interrupts, and triggering TLB shootdown IPIs that broadcast to the
+isolated cores; `/proc/interrupts` showed CAL (function-call interrupt) counts of ~137k on
+CPUs 6-11. A GNOME session was also active with a user typing into it.
+
+**Next measurement must**: run with no SSH activity, with the desktop idle or the system
+dropped to `multi-user.target`, and with `--tracemark` plus ftrace armed so the kernel records
+what it was executing at the moment of the worst spike instead of leaving us to speculate.
