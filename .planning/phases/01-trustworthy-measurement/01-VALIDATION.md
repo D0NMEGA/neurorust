@@ -1,8 +1,8 @@
 ---
 phase: 1
 slug: trustworthy-measurement
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-08-30
 ---
@@ -49,22 +49,22 @@ the planner fills the Task ID and Plan columns when plans are written.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | 0 | infra | - | N/A | build | `cargo test --workspace` | no W0 | pending |
-| TBD | TBD | 1 | BENCH-04 | T-1-03 | Manifest rejects missing required field | unit | `cargo test -p manifest required_fields` | no W0 | pending |
-| TBD | TBD | 1 | BENCH-04 | T-1-05 | Provenance gate rejects capture with no manifest | integration | `cargo test -p cli provenance_gate_rejects_orphan_capture` | no W0 | pending |
-| TBD | TBD | 1 | BENCH-04 | T-1-03 | Checksum mismatch fails validation | unit | `cargo test -p manifest checksum_mismatch_rejected` | no W0 | pending |
-| TBD | TBD | 1 | BENCH-05 | - | Percentiles reproduce known values from committed fixture | unit | `cargo test -p histogram percentiles_from_fixture` | no W0 | pending |
-| TBD | TBD | 1 | BENCH-05 | - | Overflow samples counted in percentiles and over-gate count | unit | `cargo test -p histogram overflow_counted` | no W0 | pending |
-| TBD | TBD | 2 | BENCH-06 | - | Run marked `contaminated` is retained and rendered, not dropped | unit | `cargo test -p metrics contaminated_run_retained` | no W0 | pending |
-| TBD | TBD | 2 | BENCH-06 | - | Losing configuration appears in generated report output | unit | `cargo test -p metrics losing_config_rendered` | no W0 | pending |
-| TBD | TBD | 2 | BENCH-08 | - | Metrics JSON carries p50/p95/p99 per stage and validates against schema | unit | `cargo test -p metrics schema_roundtrip` | no W0 | pending |
-| TBD | TBD | 2 | BENCH-08 | T-1-04 | Regression check fails when p99 exceeds baseline threshold | integration | `cargo test -p metrics regression_gate` | no W0 | pending |
-| TBD | TBD | 2 | BENCH-08 | - | Missed week recorded as an explicit gap, not backfilled (D-08) | unit | `cargo test -p metrics missed_week_records_gap` | no W0 | pending |
-| TBD | TBD | 1 | PLAT-02 | T-1-02 | Precondition assertions refuse the run on a violated fixture state | integration | `cargo test -p capture preconditions_refuse_on_violation` | no W0 | pending |
-| TBD | TBD | 1 | PLAT-02 | - | Every precondition result is recorded in the manifest, pass or fail | unit | `cargo test -p capture all_precondition_results_recorded` | no W0 | pending |
-| TBD | TBD | 2 | PLAT-03 | - | Report renders total max AND kernel contribution above firmware floor (D-22) | unit | `cargo test -p metrics plat03_report_decomposition` | no W0 | pending |
-| TBD | TBD | 2 | D-16 | - | Reconstructed manifest carries `reconstructed` provenance tier, tier non-optional | unit | `cargo test -p manifest provenance_tier_required` | no W0 | pending |
-| TBD | TBD | 3 | PLAT-01 | - | Named kernel path with committed trace | **manual, rig-only** | not automatable | n/a | pending |
+| 01-01-T | 01-01 | 0 | infra | - | N/A | build | `cargo test --workspace` | no W0 | pending |
+| 01-03-T | 01-03 | 1 | BENCH-04 | T-1-03 | Manifest rejects missing required field | unit | `cargo test -p manifest required_fields` | no W0 | pending |
+| 01-08-T | 01-08 | 5 | BENCH-04 | T-1-05 | Provenance gate rejects capture with no manifest | integration | `cargo test -p cli provenance_gate_rejects_orphan_capture` | no W0 | pending |
+| 01-03-T | 01-03 | 1 | BENCH-04 | T-1-03 | Checksum mismatch fails validation | unit | `cargo test -p manifest checksum_mismatch_rejected` | no W0 | pending |
+| 01-04-T | 01-04 | 2 | BENCH-05 | - | Percentiles reproduce known values from committed fixture | unit | `cargo test -p histogram percentiles_from_fixture` | no W0 | pending |
+| 01-04-T | 01-04 | 2 | BENCH-05 | - | Overflow samples counted in percentiles and over-gate count | unit | `cargo test -p histogram overflow_counted` | no W0 | pending |
+| 01-06-T | 01-06 | 3 | BENCH-06 | - | Run marked `contaminated` is retained and rendered, not dropped | unit | `cargo test -p metrics contaminated_run_retained` | no W0 | pending |
+| 01-06-T | 01-06 | 3 | BENCH-06 | - | Losing configuration appears in generated report output | unit | `cargo test -p metrics losing_config_rendered` | no W0 | pending |
+| 01-06-T | 01-06 | 3 | BENCH-08 | - | Metrics JSON carries p50/p95/p99 per stage and validates against schema | unit | `cargo test -p metrics schema_roundtrip` | no W0 | pending |
+| 01-06-T | 01-06 | 3 | BENCH-08 | T-1-04 | Regression check fails when p99 exceeds baseline threshold | integration | `cargo test -p metrics regression_gate` | no W0 | pending |
+| 01-06-T | 01-06 | 3 | BENCH-08 | - | Missed week recorded as an explicit gap, not backfilled (D-08) | unit | `cargo test -p metrics missed_week_records_gap` | no W0 | pending |
+| 01-05-T | 01-05 | 2 | PLAT-02 | T-1-02 | Precondition assertions refuse the run on a violated fixture state | integration | `cargo test -p capture preconditions_refuse_on_violation` | no W0 | pending |
+| 01-05-T | 01-05 | 2 | PLAT-02 | - | Every precondition result is recorded in the manifest, pass or fail | unit | `cargo test -p capture all_precondition_results_recorded` | no W0 | pending |
+| 01-06-T | 01-06 | 3 | PLAT-03 | - | Report renders total max AND kernel contribution above firmware floor (D-22) | unit | `cargo test -p metrics plat03_report_decomposition` | no W0 | pending |
+| 01-03-T | 01-03 | 1 | D-16 | - | Reconstructed manifest carries `reconstructed` provenance tier, tier non-optional | unit | `cargo test -p manifest provenance_tier_required` | no W0 | pending |
+| 01-12-T | 01-12 | 8 | PLAT-01 | - | Named kernel path with committed trace | **manual, rig-only** | not automatable | n/a | pending |
 
 *Status: pending / green / red / flaky*
 
@@ -106,4 +106,4 @@ the planner fills the Task ID and Plan columns when plans are written.
 - [ ] Rig-only verifications are explicitly listed as manual, not disguised as automated
 - [ ] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-08-30, plans 01-01 through 01-15

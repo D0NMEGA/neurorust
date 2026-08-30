@@ -68,7 +68,25 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Worst-case scheduling latency on isolated cores is either under 30 us on a clean run, or the residual is attributed to a named platform cause and published as a stated limitation
   4. Every published figure is stamped by the capture harness with rig, kernel, BIOS revision, and tuning state, ships as a histogram with its raw capture alongside, and losing configurations appear rather than being omitted
   5. A CI job commits a weekly metrics JSON carrying p50, p95, and p99 for every stage instrumented so far
-**Plans**: TBD
+**Plans**: 15 plans in 12 waves (single operator; waves express dependency, not parallel staffing)
+
+Plans:
+- [ ] 01-01-PLAN.md - Cargo workspace, dual licence, CI skeleton, histogram fixture
+- [ ] 01-02-PLAN.md - Rig recon: tracer availability, tool versions, schema probes (rig runbook)
+- [ ] 01-03-PLAN.md - Manifest schema: the D-14 field set, provenance tier, blake3 checksums
+- [ ] 01-04-PLAN.md - Histogram parser: bins, overflows, hdrhistogram percentiles
+- [ ] 01-05-PLAN.md - Capture crate: preconditions, environment snapshot, contamination verdict
+- [ ] 01-06-PLAN.md - Metrics crate: series, baseline comparison, coverage record, PLAT-03 decomposition
+- [ ] 01-07-PLAN.md - nrmeasure run: orchestration and the stamped run directory
+- [ ] 01-08-PLAN.md - nrmeasure verify and reconstruct, plus the blocking provenance gate
+- [ ] 01-09-PLAN.md - The measurement protocol and the publication layout documents
+- [ ] 01-10-PLAN.md - Reconstructed manifests and the 2026-08-28 README correction
+- [ ] 01-11-PLAN.md - Calibration pair and the RT firmware floor re-run (rig runbook)
+- [ ] 01-12-PLAN.md - PLAT-01 investigation: tracing calibration and three capture cycles (rig runbook)
+- [ ] 01-13-PLAN.md - PLAT-03 headline capture and the decomposed verdict (rig runbook)
+- [ ] 01-14-PLAN.md - Weekly job: nrmeasure series, systemd units, regression gate
+- [ ] 01-15-PLAN.md - Rig install runbook: enable the weekly timer and observe the first fire
+
 **Notes**: The cargo workspace and the CI pipeline are created here as enabling work for the weekly metrics job; later phases add gates to the same pipeline (Kani in Phase 2, loom and criterion in Phase 4). The contaminated `cyclictest-rt-isolated-idle-10m.hist` run is the starting evidence, not a publishable figure.
 
 ### Phase 2: Proven emergency_stop
@@ -164,7 +182,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Trustworthy measurement | 0/TBD | Not started | - |
+| 1. Trustworthy measurement | 0/15 | Planned | - |
 | 2. Proven emergency_stop | 0/TBD | Not started | - |
 | 3. Deterministic substrate | 0/TBD | Not started | - |
 | 4. Lock-free transport | 0/TBD | Not started | - |
