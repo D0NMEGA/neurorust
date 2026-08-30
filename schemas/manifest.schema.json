@@ -1,0 +1,901 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunManifest",
+  "description": "The D-12/D-14 run manifest: the full environment snapshot, provenance, checksums\nand preconditions for one measurement run.",
+  "type": "object",
+  "properties": {
+    "absent_fields": {
+      "description": "D-16: fields a reconstructed manifest could not recover. Empty for a\nharness-generated run with nothing missing.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AbsentField"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ArtifactRecord"
+      }
+    },
+    "excluded_from_series": {
+      "description": "BENCH-06: a contaminated or otherwise non-headline run is still published, but\nexcluded from the regression series. See `exclusion_reason`.",
+      "type": "boolean"
+    },
+    "exclusion_reason": {
+      "description": "Required to be `Some` and non-empty when `excluded_from_series` is true; see\n`ValidationError::MissingExclusionReason`.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "harness": {
+      "$ref": "#/$defs/HarnessInfo"
+    },
+    "host": {
+      "$ref": "#/$defs/HostInfo"
+    },
+    "instrument_class": {
+      "$ref": "#/$defs/InstrumentClass"
+    },
+    "interference": {
+      "$ref": "#/$defs/InterferenceSnapshotPair"
+    },
+    "kernel": {
+      "$ref": "#/$defs/KernelInfo"
+    },
+    "network": {
+      "$ref": "#/$defs/NetworkInfo"
+    },
+    "notes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "os": {
+      "$ref": "#/$defs/OsInfo"
+    },
+    "power": {
+      "$ref": "#/$defs/PowerInfo"
+    },
+    "preconditions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PreconditionResult"
+      }
+    },
+    "provenance_tier": {
+      "description": "D-16: never `Option`, never defaulted. See [`crate::provenance`].",
+      "$ref": "#/$defs/ProvenanceTier"
+    },
+    "run_class": {
+      "$ref": "#/$defs/RunClass"
+    },
+    "run_id": {
+      "description": "Matches `^[a-z0-9][a-z0-9-]{0,63}$`; becomes a directory name under\n`measurements/`, so this is also the ASVS V12 boundary (T-1-16).",
+      "type": "string"
+    },
+    "schema_version": {
+      "description": "Schema revision. Must equal [`SCHEMA_VERSION`]; see `validate::validate`.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ToolInvocation"
+      }
+    },
+    "tuning": {
+      "$ref": "#/$defs/TuningInfo"
+    },
+    "utc_end": {
+      "type": "string"
+    },
+    "utc_start": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "provenance_tier",
+    "run_id",
+    "run_class",
+    "instrument_class",
+    "utc_start",
+    "utc_end",
+    "harness",
+    "host",
+    "kernel",
+    "os",
+    "tuning",
+    "power",
+    "network",
+    "preconditions",
+    "interference",
+    "tools",
+    "artifacts",
+    "absent_fields",
+    "excluded_from_series"
+  ],
+  "$defs": {
+    "AbsentField": {
+      "description": "A single field a reconstructed manifest could not recover (D-16).\n\nRecording an explicit absence, rather than guessing a value or silently omitting\nthe field, is what keeps a reconstructed manifest honest about what it actually\nknows.",
+      "type": "object",
+      "properties": {
+        "field_path": {
+          "description": "Dotted path into `RunManifest`, e.g. `\"power.battery_percent\"`.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why the field could not be recovered, e.g. `\"not recorded in RIG.txt\"`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "field_path",
+        "reason"
+      ]
+    },
+    "ArtifactKind": {
+      "type": "string",
+      "enum": [
+        "cyclictest-hist",
+        "cyclictest-json",
+        "hwlatdetect-text",
+        "ftrace-markers",
+        "rtla-timerlat",
+        "other"
+      ]
+    },
+    "ArtifactRecord": {
+      "description": "One raw capture, checksummed (D-12). `path` is validated by `validate::validate`\nagainst traversal and absolute paths before it is ever joined to a run directory\n(ASVS V12, T-1-16).",
+      "type": "object",
+      "properties": {
+        "blake3": {
+          "description": "Lowercase hex blake3 digest.",
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/ArtifactKind"
+        },
+        "path": {
+          "description": "Relative to the run directory. No `..`, no leading `/`.",
+          "type": "string"
+        },
+        "stored": {
+          "$ref": "#/$defs/StorageLocation"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "bytes",
+        "blake3",
+        "kind",
+        "stored"
+      ]
+    },
+    "ContaminationVerdict": {
+      "description": "D-15's automatic contamination call. A `Contaminated` run is still published per\nBENCH-06, but excluded from the headline series.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "clean",
+            "contaminated"
+          ]
+        },
+        {
+          "description": "No calibrated thresholds exist yet to render a verdict against (D-17).",
+          "type": "string",
+          "const": "uncalibrated"
+        }
+      ]
+    },
+    "CpuCounter": {
+      "description": "One counter reading for one isolated CPU.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cpu": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cpu",
+        "count"
+      ]
+    },
+    "CpuGovernor": {
+      "description": "One CPU's scaling governor, as read per-core rather than assumed uniform.",
+      "type": "object",
+      "properties": {
+        "cpu": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "governor": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cpu",
+        "governor"
+      ]
+    },
+    "CstateSetting": {
+      "description": "One CPU's C-state setting. `disabled` records whether that state is blocked, which\nis what the `DeepCstatesDisabled` precondition and D-14's C-state field want.",
+      "type": "object",
+      "properties": {
+        "cpu": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "disabled": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cpu",
+        "name",
+        "disabled"
+      ]
+    },
+    "HarnessInfo": {
+      "description": "Ties a manifest to the exact harness build that produced it (T-1-10).",
+      "type": "object",
+      "properties": {
+        "git_dirty": {
+          "type": "boolean"
+        },
+        "git_sha": {
+          "description": "Full 40-character SHA of the harness commit.",
+          "type": "string"
+        },
+        "version": {
+          "description": "`env!(\"CARGO_PKG_VERSION\")`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "git_sha",
+        "git_dirty"
+      ]
+    },
+    "HostInfo": {
+      "description": "The machine, per BENCH-04's rig-discipline requirement. `rig_slug` is a chosen\nlabel rather than a network-derived machine name, and this snapshot deliberately\nomits any network hardware address, wireless network identifier, or hardware\nidentification number (T-1-06).",
+      "type": "object",
+      "properties": {
+        "bios_release_date": {
+          "type": "string"
+        },
+        "bios_version": {
+          "type": "string"
+        },
+        "cpu_model": {
+          "type": "string"
+        },
+        "e_cores": {
+          "description": "CPU list string, e.g. `\"12-21\"`.",
+          "type": "string"
+        },
+        "logical_cpus": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "memory_gb": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "microcode": {
+          "type": "string"
+        },
+        "p_cores": {
+          "description": "CPU list string, e.g. `\"0-11\"`.",
+          "type": "string"
+        },
+        "physical_cores": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "rig_slug": {
+          "description": "e.g. `\"precision3591\"`. A chosen label, not a network-derived machine name.",
+          "type": "string"
+        },
+        "sockets": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "system_model": {
+          "type": "string"
+        },
+        "system_vendor": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "rig_slug",
+        "system_vendor",
+        "system_model",
+        "bios_version",
+        "bios_release_date",
+        "cpu_model",
+        "microcode",
+        "logical_cpus",
+        "physical_cores",
+        "sockets",
+        "p_cores",
+        "e_cores",
+        "memory_gb"
+      ]
+    },
+    "InstrumentClass": {
+      "description": "RESEARCH.md pattern 2: an investigation run carries its own tracer overhead and\nmust never feed the headline series, independently of `RunClass`.",
+      "type": "string",
+      "enum": [
+        "headline-series",
+        "investigation"
+      ]
+    },
+    "InterferenceDelta": {
+      "description": "The after-minus-before difference for each counter family in [`InterferenceSnapshot`].",
+      "type": "object",
+      "properties": {
+        "cal_ipis": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CpuCounter"
+          }
+        },
+        "context_switches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CpuCounter"
+          }
+        },
+        "irqs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CpuCounter"
+          }
+        },
+        "tlb_ipis": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CpuCounter"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cal_ipis",
+        "tlb_ipis",
+        "context_switches",
+        "irqs"
+      ]
+    },
+    "InterferenceSnapshot": {
+      "description": "D-15's interference signal at one point in time (before or after a run), scoped to\nthe isolated CPUs rather than machine-wide. Tracks exactly the counters D-15 and the\n2026-08-28 post-mortem name as diagnostic: CAL and TLB IPIs, context switches, and\ntotal IRQs per isolated CPU.",
+      "type": "object",
+      "properties": {
+        "cal_ipis": {
+          "description": "Function-call IPIs, per isolated CPU.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CpuCounter"
+          }
+        },
+        "context_switches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CpuCounter"
+          }
+        },
+        "irqs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CpuCounter"
+          }
+        },
+        "isolated_cpus": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "tlb_ipis": {
+          "description": "TLB shootdowns, per isolated CPU.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CpuCounter"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "isolated_cpus",
+        "cal_ipis",
+        "tlb_ipis",
+        "context_switches",
+        "irqs"
+      ]
+    },
+    "InterferenceSnapshotPair": {
+      "type": "object",
+      "properties": {
+        "after": {
+          "$ref": "#/$defs/InterferenceSnapshot"
+        },
+        "before": {
+          "$ref": "#/$defs/InterferenceSnapshot"
+        },
+        "delta": {
+          "$ref": "#/$defs/InterferenceDelta"
+        },
+        "verdict": {
+          "$ref": "#/$defs/ContaminationVerdict"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "before",
+        "after",
+        "delta",
+        "verdict"
+      ]
+    },
+    "KernelInfo": {
+      "description": "The kernel and its real-time tuning. `Option` fields are cmdline parameters that\nmay genuinely be absent, not values the harness failed to read.",
+      "type": "object",
+      "properties": {
+        "cmdline": {
+          "description": "Verbatim `/proc/cmdline`.",
+          "type": "string"
+        },
+        "irqaffinity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "is_realtime": {
+          "description": "`/sys/kernel/realtime == 1`.",
+          "type": "boolean"
+        },
+        "isolcpus": {
+          "description": "Parsed out of `cmdline`. `None` means the parameter was absent, not unread.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "nohz_full": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "preempt_model": {
+          "description": "e.g. `\"PREEMPT_RT\"` or `\"PREEMPT_DYNAMIC\"`.",
+          "type": "string"
+        },
+        "rcu_nocbs": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "release": {
+          "description": "`uname -r`, e.g. `\"7.0.0-30-realtime\"`.",
+          "type": "string"
+        },
+        "version_string": {
+          "description": "The full `uname -v` string.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "release",
+        "version_string",
+        "is_realtime",
+        "preempt_model",
+        "cmdline"
+      ]
+    },
+    "NetworkInfo": {
+      "description": "Deliberately omits any network hardware address or wireless network identifier\n(T-1-06).",
+      "type": "object",
+      "properties": {
+        "ptp_capabilities": {
+          "description": "e.g. `\"hardware-raw-clock\"`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wifi_driver": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wifi_iface": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wifi_state": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wired_driver": {
+          "description": "e.g. `\"e1000e\"`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wired_iface": {
+          "description": "e.g. `\"enp0s31f6\"`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wired_state": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "OsInfo": {
+      "type": "object",
+      "properties": {
+        "display_manager_active": {
+          "type": "boolean"
+        },
+        "distro": {
+          "type": "string"
+        },
+        "session_kind": {
+          "$ref": "#/$defs/SessionKind"
+        },
+        "systemd_default_target": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "distro",
+        "version",
+        "session_kind",
+        "systemd_default_target",
+        "display_manager_active"
+      ]
+    },
+    "PowerInfo": {
+      "type": "object",
+      "properties": {
+        "ac_online": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "battery_percent": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "battery_status": {
+          "description": "e.g. `\"Charging\"`, `\"Discharging\"`, `\"Full\"`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "package_temp_c_max": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "thermal_zones": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThermalZone"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "thermal_zones"
+      ]
+    },
+    "PreconditionCheck": {
+      "description": "D-06: every precondition check the harness knows about, asserted and recorded\nrather than silently assumed. Defined once here as the single source of truth;\n`nr-capture` implements the checks and `docs/measurement-protocol.md` documents\nthem.\n\n`TracersQuiescent` mechanises RESEARCH.md pattern 2: for a `HeadlineSeries` run,\n`/sys/kernel/tracing/current_tracer` must read `nop`, so an investigation run's\ntracer overhead can never leak into the published series.",
+      "type": "string",
+      "enum": [
+        "no-active-ssh-sessions",
+        "systemd-default-target-is-multi-user",
+        "display-manager-inactive",
+        "no-graphical-session",
+        "governor-is-performance-on-all-cpus",
+        "no-turbo-enabled",
+        "deep-cstates-disabled",
+        "isolcpus-covers-target-cpus",
+        "kernel-is-realtime",
+        "rt-tuning-service-active",
+        "on-ac-power",
+        "thermal-headroom-at-start",
+        "no-package-manager-activity",
+        "tracers-quiescent"
+      ]
+    },
+    "PreconditionResult": {
+      "description": "One precondition check's outcome. Recorded whether it passed or failed (D-06:\nassert-and-record, never enforce beyond refusing the run), so the assertion list\ndoubles as PLAT-02's third-party reproduction checklist.",
+      "type": "object",
+      "properties": {
+        "check": {
+          "$ref": "#/$defs/PreconditionCheck"
+        },
+        "expected": {
+          "description": "What the check required, e.g. `\"performance\"`.",
+          "type": "string"
+        },
+        "observed": {
+          "description": "What was actually seen, e.g. `\"powersave\"` or `\"2 sessions\"`.",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/PreconditionStatus"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "check",
+        "status",
+        "observed",
+        "expected"
+      ]
+    },
+    "PreconditionStatus": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail",
+        "not-applicable",
+        "unavailable"
+      ]
+    },
+    "ProvenanceTier": {
+      "description": "Whether a manifest was written by the harness while the run happened, or rebuilt\nafterward from other records (D-16).",
+      "oneOf": [
+        {
+          "description": "The harness wrote this manifest at capture time; the full contract was\npopulated by code that was present when the run happened.",
+          "type": "string",
+          "const": "harness-generated"
+        },
+        {
+          "description": "Rebuilt after the fact from other evidence (e.g. `RIG.txt`, a README). Every\nfield that could not be recovered is listed in `RunManifest::absent_fields`,\nnever guessed.",
+          "type": "string",
+          "const": "reconstructed"
+        }
+      ]
+    },
+    "RunClass": {
+      "description": "D-10 run cadence tag. Kept distinct so run classes are never averaged together.",
+      "type": "string",
+      "enum": [
+        "recon",
+        "screen",
+        "calibration-clean",
+        "calibration-contaminated",
+        "investigation",
+        "headline",
+        "weekly",
+        "soak"
+      ]
+    },
+    "ServiceState": {
+      "description": "systemd unit state for `rt-tuning.service`, the authoritative source for tuning\nstate (CONTEXT.md \"Reusable assets\": query it, do not re-derive tuning from sysfs).",
+      "type": "object",
+      "properties": {
+        "active_state": {
+          "type": "string"
+        },
+        "sub_state": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "unit_file_state": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "active_state",
+        "sub_state",
+        "unit_file_state"
+      ]
+    },
+    "SessionKind": {
+      "description": "Whether the run happened on the installed system or a live-USB session, since the\ntwo have different persistence and tuning guarantees.",
+      "type": "string",
+      "enum": [
+        "installed",
+        "live-usb"
+      ]
+    },
+    "StorageLocation": {
+      "description": "Where an artifact's bytes actually live. D-12: raw captures stay byte-identical to\nwhat the tool emitted, so this only ever points at a file, never embeds one.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "in-repo"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "external": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "url"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "external"
+          ]
+        }
+      ]
+    },
+    "ThermalZone": {
+      "description": "One thermal zone's temperature at the start and, once the run finishes, the end of\na run. `temp_c_end` is `None` until the run completes.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "From `/sys/class/thermal`; names hardware, e.g. `\"x86_pkg_temp\"`.",
+          "type": "string"
+        },
+        "temp_c_end": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "temp_c_start": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "temp_c_start"
+      ]
+    },
+    "ToolInvocation": {
+      "description": "One external tool the harness shelled out to, e.g. `cyclictest`.",
+      "type": "object",
+      "properties": {
+        "argv": {
+          "description": "The exact argument vector, for reproduction.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exit_code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "description": "As reported by the tool itself.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "argv",
+        "exit_code"
+      ]
+    },
+    "TuningInfo": {
+      "type": "object",
+      "properties": {
+        "cstates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CstateSetting"
+          }
+        },
+        "no_turbo": {
+          "description": "`None` when `intel_pstate/no_turbo` is absent, e.g. non-Intel hardware.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "per_cpu_governor": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CpuGovernor"
+          }
+        },
+        "rt_tuning_service": {
+          "$ref": "#/$defs/ServiceState"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "per_cpu_governor",
+        "cstates",
+        "rt_tuning_service"
+      ]
+    }
+  }
+}
