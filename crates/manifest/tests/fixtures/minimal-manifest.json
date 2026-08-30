@@ -1,0 +1,153 @@
+{
+  "schema_version": 1,
+  "provenance_tier": "harness-generated",
+  "run_id": "2026-08-30-precision3591-recon-001",
+  "run_class": "recon",
+  "instrument_class": "headline-series",
+  "utc_start": "2026-08-30T20:36:21Z",
+  "utc_end": "2026-08-30T20:46:21Z",
+  "harness": {
+    "version": "0.1.0",
+    "git_sha": "0000000000000000000000000000000000000000",
+    "git_dirty": false
+  },
+  "host": {
+    "rig_slug": "precision3591",
+    "system_vendor": "Dell Inc.",
+    "system_model": "Precision 3591",
+    "bios_version": "1.23.0",
+    "bios_release_date": "2026-04-24",
+    "cpu_model": "Intel(R) Core(TM) Ultra 9 185H",
+    "microcode": "0x28",
+    "logical_cpus": 22,
+    "physical_cores": 16,
+    "sockets": 1,
+    "p_cores": "0-11",
+    "e_cores": "12-21",
+    "memory_gb": 30
+  },
+  "kernel": {
+    "release": "7.0.0-30-realtime",
+    "version_string": "#30-Ubuntu SMP PREEMPT_RT Fri Jul 31 18:22:54 UTC 2026",
+    "is_realtime": true,
+    "preempt_model": "PREEMPT_RT",
+    "cmdline": "BOOT_IMAGE=/vmlinuz root=UUID=00000000-0000-0000-0000-000000000000 ro quiet splash isolcpus=6-11 nohz_full=6-11 rcu_nocbs=6-11",
+    "isolcpus": "6-11",
+    "nohz_full": "6-11",
+    "rcu_nocbs": "6-11",
+    "irqaffinity": null
+  },
+  "os": {
+    "distro": "Ubuntu",
+    "version": "26.04.1 LTS",
+    "session_kind": "installed",
+    "systemd_default_target": "multi-user.target",
+    "display_manager_active": false
+  },
+  "tuning": {
+    "per_cpu_governor": [
+      { "cpu": 6, "governor": "performance" },
+      { "cpu": 7, "governor": "performance" }
+    ],
+    "no_turbo": true,
+    "cstates": [
+      { "cpu": 6, "name": "C1E", "disabled": false },
+      { "cpu": 6, "name": "C6", "disabled": true }
+    ],
+    "rt_tuning_service": {
+      "unit": "rt-tuning.service",
+      "active_state": "active",
+      "sub_state": "exited",
+      "unit_file_state": "enabled"
+    }
+  },
+  "power": {
+    "ac_online": true,
+    "battery_status": "Charging",
+    "battery_percent": 85,
+    "thermal_zones": [
+      { "name": "x86_pkg_temp", "temp_c_start": 42.0, "temp_c_end": 45.5 }
+    ],
+    "package_temp_c_max": 45.5
+  },
+  "network": {
+    "wired_iface": "enp0s31f6",
+    "wired_driver": "e1000e",
+    "wired_state": "down",
+    "ptp_capabilities": "hardware-raw-clock",
+    "wifi_iface": "wlp0s20f3",
+    "wifi_driver": "iwlwifi",
+    "wifi_state": "up"
+  },
+  "preconditions": [
+    { "check": "no-active-ssh-sessions", "status": "pass", "observed": "0 sessions", "expected": "0 sessions" },
+    { "check": "systemd-default-target-is-multi-user", "status": "pass", "observed": "multi-user.target", "expected": "multi-user.target" },
+    { "check": "display-manager-inactive", "status": "pass", "observed": "inactive", "expected": "inactive" },
+    { "check": "no-graphical-session", "status": "pass", "observed": "0 sessions", "expected": "0 sessions" },
+    { "check": "governor-is-performance-on-all-cpus", "status": "pass", "observed": "performance", "expected": "performance" },
+    { "check": "no-turbo-enabled", "status": "pass", "observed": "1", "expected": "1" },
+    { "check": "deep-cstates-disabled", "status": "pass", "observed": "C6=off C10=off", "expected": "C6=off C10=off" },
+    { "check": "isolcpus-covers-target-cpus", "status": "pass", "observed": "6-11", "expected": "6-11" },
+    { "check": "kernel-is-realtime", "status": "pass", "observed": "1", "expected": "1" },
+    { "check": "rt-tuning-service-active", "status": "pass", "observed": "active", "expected": "active" },
+    { "check": "on-ac-power", "status": "pass", "observed": "AC=1", "expected": "AC=1" },
+    { "check": "thermal-headroom-at-start", "status": "pass", "observed": "42.0 C", "expected": "< 80.0 C" },
+    { "check": "no-package-manager-activity", "status": "pass", "observed": "no lock held", "expected": "no lock held" },
+    { "check": "tracers-quiescent", "status": "pass", "observed": "nop", "expected": "nop" }
+  ],
+  "interference": {
+    "before": {
+      "isolated_cpus": [6, 7, 8, 9, 10, 11],
+      "cal_ipis": [{ "cpu": 6, "count": 0 }],
+      "tlb_ipis": [{ "cpu": 6, "count": 0 }],
+      "context_switches": [{ "cpu": 6, "count": 100 }],
+      "irqs": [{ "cpu": 6, "count": 5 }]
+    },
+    "after": {
+      "isolated_cpus": [6, 7, 8, 9, 10, 11],
+      "cal_ipis": [{ "cpu": 6, "count": 0 }],
+      "tlb_ipis": [{ "cpu": 6, "count": 0 }],
+      "context_switches": [{ "cpu": 6, "count": 102 }],
+      "irqs": [{ "cpu": 6, "count": 5 }]
+    },
+    "delta": {
+      "cal_ipis": [{ "cpu": 6, "count": 0 }],
+      "tlb_ipis": [{ "cpu": 6, "count": 0 }],
+      "context_switches": [{ "cpu": 6, "count": 2 }],
+      "irqs": [{ "cpu": 6, "count": 0 }]
+    },
+    "verdict": "clean"
+  },
+  "tools": [
+    {
+      "name": "cyclictest",
+      "version": "2.5-1",
+      "argv": [
+        "cyclictest",
+        "--mainaffinity=0,1",
+        "--affinity=6-11",
+        "--threads",
+        "--mlockall",
+        "--priority=99",
+        "--interval=200",
+        "--histofall=400",
+        "--json=results.json",
+        "--histfile=cyclictest-rt-isolated-idle-10m.hist"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "cyclictest-rt-isolated-idle-10m.hist",
+      "bytes": 23399,
+      "blake3": "495c45891c866a627334e74d810a5377be684beb6d8e8a17b7853f8c4cb9c88f",
+      "kind": "cyclictest-hist",
+      "stored": "in-repo"
+    }
+  ],
+  "absent_fields": [],
+  "excluded_from_series": false,
+  "exclusion_reason": null,
+  "notes": null
+}

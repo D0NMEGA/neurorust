@@ -4,6 +4,12 @@
 //! blake3 checksums, and the D-16 provenance tier. Platform independent by design so the
 //! macOS CI leg exercises it for real.
 
+pub mod fields;
+pub mod provenance;
+
+pub use fields::*;
+pub use provenance::{AbsentField, ProvenanceTier};
+
 #[cfg(test)]
 mod tests {
     #[test]
