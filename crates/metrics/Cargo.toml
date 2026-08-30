@@ -1,0 +1,23 @@
+[package]
+name = "nr-metrics"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Metrics series, baseline comparison, and index rendering for neurorust"
+
+[lints]
+workspace = true
+
+[dependencies]
+nr-manifest = { workspace = true }
+nr-histogram = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }

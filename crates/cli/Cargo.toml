@@ -1,0 +1,30 @@
+[package]
+name = "nr-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "nrmeasure: the neurorust measurement harness CLI"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "nrmeasure"
+path = "src/main.rs"
+
+[dependencies]
+nr-manifest = { workspace = true }
+nr-histogram = { workspace = true }
+nr-capture = { workspace = true }
+nr-metrics = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+time = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
