@@ -71,7 +71,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 15 plans in 12 waves (single operator; waves express dependency, not parallel staffing)
 
 Plans:
-- [ ] 01-01-PLAN.md - Cargo workspace, dual licence, CI skeleton, histogram fixture
+- [x] 01-01-PLAN.md - Cargo workspace, dual licence, CI skeleton, histogram fixture
 - [ ] 01-02-PLAN.md - Rig recon: tracer availability, tool versions, schema probes (rig runbook)
 - [ ] 01-03-PLAN.md - Manifest schema: the D-14 field set, provenance tier, blake3 checksums
 - [ ] 01-04-PLAN.md - Histogram parser: bins, overflows, hdrhistogram percentiles
