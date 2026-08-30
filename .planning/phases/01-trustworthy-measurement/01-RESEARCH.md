@@ -417,23 +417,41 @@ how often and how long an SMI window is observed. So D-18's re-run is justified,
 finding is a difference in observed distribution rather than a refutation of the mechanism, and
 the write-up should say so rather than framing any delta as "the assumption was wrong".
 
-## Open questions
+## Open questions (RESOLVED in planning)
+
+All four were carried into the plan set rather than guessed at. Question 1 was resolved by a
+planning decision; questions 2 to 4 require physical rig access and are resolved by the rig-recon
+plan 01-02, whose recorded OUTCOME is consumed by the downstream plans named below. No plan
+assumes an answer to any of these.
 
 1. **Does the roadmap criterion require a literal `cyclictest --tracemark` capture, or is an
    `rtla timerlat` trace an acceptable substitute?** The criterion names the former. The
    recommendation above is to produce both, but if the planner judges that wasteful, this is a
    user decision, not a planner decision. Flagged rather than silently resolved.
+   **RESOLVED (conservative direction):** plan 01-12 takes the literal
+   `cyclictest --breaktrace --tracemark` capture in every investigation cycle regardless of
+   whether `rtla` is available ("The capture the roadmap success criterion names literally.
+   Take it either way."), and runs `rtla timerlat` alongside it when available. Both artifacts
+   are produced; neither substitutes for the other.
 2. **Is `rtla` obtainable on the rig?** It is not in the Ubuntu package archive (searching `rtla`
    returns only reportlab false positives). It is packaged for Debian and it builds from the
    kernel source tree at `tools/tracing/rtla`. The plan needs an explicit enabling task, and if
    the build fails the fallback is driving the tracers through raw tracefs, which works but is
    more manual.
+   **RESOLVED:** plan 01-02 attempts the build and records the result in `rtla-build-log.txt`
+   with an explicit OUTCOME branch (`rtla-available` vs not). Plan 01-12 branches on that
+   OUTCOME and degrades to raw tracefs rather than blocking.
 3. **What exactly is in `cyclictest --json`?** Needs one command on the rig before the parser is
    designed. Cheap to answer, and it changes how much of D-01's parser is actually needed.
+   **RESOLVED:** plan 01-02 probes the real schema on the rig and commits the sample; plan
+   01-04 designs the parser against that committed sample rather than an assumed shape.
 4. **Are the isolated cores actually `nohz_full`, or only `isolcpus`?** `isolcpus` alone keeps the
    scheduler tick running on those cores. Given the ~10 ms burst spacing matches a 100 Hz tick,
    this is worth checking first in the PLAT-01 investigation. The kernel cmdline is already a D-14
    field so the answer will be recorded regardless.
+   **RESOLVED:** plan 01-02 records the isolation state; plan 01-12 consumes it as the first
+   ordering heuristic when choosing which phenomenon to chase. It remains a hypothesis, not a
+   finding, until a trace confirms it.
 
 ## Environment availability
 
