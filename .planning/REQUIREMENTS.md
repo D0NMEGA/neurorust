@@ -123,9 +123,9 @@ Completed and measured 2026-08-28. Raw captures and rig manifest in
 - [ ] **BENCH-01**: End-to-end DAG latency p99 under 8 ms on a replayed Indy session
 - [ ] **BENCH-02**: Jitter (p99 minus p50) under 0.5 ms, published as the headline metric
 - [ ] **BENCH-03**: Source to first node p99 under 100 us
-- [x] **BENCH-04**: Every published figure names the rig, kernel, BIOS revision, and tuning
+- [ ] **BENCH-04**: Every published figure names the rig, kernel, BIOS revision, and tuning
       state it was measured on
-- [x] **BENCH-05**: Latency histograms are published rather than means, with raw captures
+- [ ] **BENCH-05**: Latency histograms are published rather than means, with raw captures
       alongside so numbers can be recomputed
 - [ ] **BENCH-06**: Losing configurations and failure cases are reported, not omitted
 - [ ] **BENCH-07**: A comparison against BRAND's published figures, with methodology
@@ -229,8 +229,8 @@ roadmap existed and map to no phase; they are listed for completeness.
 | BENCH-01 | Phase 6 | Pending |
 | BENCH-02 | Phase 6 | Pending |
 | BENCH-03 | Phase 6 | Pending |
-| BENCH-04 | Phase 1 | Complete |
-| BENCH-05 | Phase 1 | Complete |
+| BENCH-04 | Phase 1 | Pending |
+| BENCH-05 | Phase 1 | Pending |
 | BENCH-06 | Phase 1 | Pending |
 | BENCH-07 | Phase 6 | Pending |
 | BENCH-08 | Phase 1 | Pending |
