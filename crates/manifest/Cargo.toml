@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Run manifest schema and provenance for neurorust measurement captures"
+publish = false
 
 [lints]
 workspace = true

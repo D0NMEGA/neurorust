@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "nrmeasure: the neurorust measurement harness CLI"
+publish = false
 
 [lints]
 workspace = true

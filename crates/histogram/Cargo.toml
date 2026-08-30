@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Cyclictest histogram parsing and percentile computation for neurorust"
+publish = false
 
 [lints]
 workspace = true

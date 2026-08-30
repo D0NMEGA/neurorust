@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Precondition checks and environment capture for neurorust measurement runs"
+publish = false
 
 [lints]
 workspace = true
