@@ -77,7 +77,7 @@ Plans:
 - [x] 01-04-PLAN.md - Histogram parser: bins, overflows, hdrhistogram percentiles
 - [x] 01-05-PLAN.md - Capture crate: preconditions, environment snapshot, contamination verdict
 - [x] 01-06-PLAN.md - Metrics crate: series, baseline comparison, coverage record, PLAT-03 decomposition
-- [ ] 01-07-PLAN.md - nrmeasure run: orchestration and the stamped run directory
+- [x] 01-07-PLAN.md - nrmeasure run: orchestration and the stamped run directory
 - [ ] 01-08-PLAN.md - nrmeasure verify and reconstruct, plus the blocking provenance gate
 - [ ] 01-09-PLAN.md - The measurement protocol and the publication layout documents
 - [ ] 01-10-PLAN.md - Reconstructed manifests and the 2026-08-28 README correction
@@ -182,7 +182,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Trustworthy measurement | 6/15 | In Progress | - |
+| 1. Trustworthy measurement | 7/15 | In Progress | - |
 | 2. Proven emergency_stop | 0/TBD | Not started | - |
 | 3. Deterministic substrate | 0/TBD | Not started | - |
 | 4. Lock-free transport | 0/TBD | Not started | - |

@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-06-PLAN.md
-last_updated: "2026-08-31T15:26:05.710Z"
+stopped_at: Completed 01-07-PLAN.md
+last_updated: "2026-08-31T16:11:48.755Z"
 last_activity: 2026-08-31
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 15
-  completed_plans: 6
-  percent: 40
+  completed_plans: 7
+  percent: 47
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 01 (trustworthy-measurement) — EXECUTING
-Plan: 7 of 15
+Plan: 8 of 15
 Status: Ready to execute
 Last activity: 2026-08-31
 
-Progress: [████░░░░░░] 40%
+Progress: [█████░░░░░] 47%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [████░░░░░░] 40%
 | Phase 01 P04 | 18min | 3 tasks | 7 files |
 | Phase 01 P05 | 50min | 3 tasks | 12 files |
 | Phase 01 P06 | 11min | 3 tasks | 15 files |
+| Phase 01 P07 | 25min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,13 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-06: record_gap added as a generic single-week gap writer alongside the plan's named record_gaps, so GapReason::RefusedOnPrecondition and RunFailed have a real producer — D-08 requires a refused run to produce the same recorded gap a missed week does, and the refused_run_records_gap test (owned by this plan per 01-VALIDATION.md) had no function to call otherwise.
 - [Phase 01]: 01-06: blake3 added as a direct nr-metrics dependency so render_run_report can name the manifest blake3 it was generated from — nr_manifest's public API exposes only a file-path hasher (blake3_file), not a bytes hasher, and render_run_report receives an in-memory RunManifest, not a path; adding a bytes-hasher to nr_manifest would have touched a crate outside this plan's file list.
 - [Phase 01]: 01-06: no over-gate sample count (samples_above/samples_at_or_above) appears anywhere in this plan's code — PLAT-03's decomposition compares two scalars (observed max vs the 30us gate, and vs the firmware floor), not a population count, so the 2026-08-31 convention change to samples_at_or_above had no code surface to apply to in nr-metrics. Confirmed by grep after implementation.
+- [Phase 01]: 01-07: interference::snapshot ships Linux-gated with no facts parameter (plan 01-05's real shape), not the &facts-parameterized signature this plan's own interfaces block assumed — added NRMEASURE_INTERRUPTS_FIXTURE, a second test-only env var mirroring NRMEASURE_FACTS_FIXTURE, rather than changing nr-capture's already-shipped signature.
+- [Phase 01]: 01-07: std::env::set_var/remove_var are unsafe fn under edition 2024 and this workspace forbids unsafe_code outright — restructured cmd::run into a thin run(args) wrapper over execute(args, &Overrides), so every test constructs an Overrides value directly instead of mutating the process environment; no unsafe anywhere in nr-cli.
+- [Phase 01]: 01-07: probe-sysfs-tuning.txt (named CLEAN throughout nr-capture's own tests) is the real rig's actual untuned capture, not a passing scenario — tuned_facts_text() derives a genuinely passing fixture from it by overriding only governor/systemd-target/no_turbo/thermal, rather than fabricating a synthetic fixture from nothing.
+- [Phase 01]: 01-07: FixtureFacts::parse's one-assignment-per-line format cannot represent /proc/cpuinfo or /etc/os-release (embedded newlines) — added extract_multiline_blocks, a small @begin/@end preprocessing extension entirely inside cmd/run.rs, so a fixture-driven run's D-14 snapshot is genuinely populated rather than rendering mostly empty. nr-capture's own fixture format is untouched.
+- [Phase 01]: 01-07: a non-Clean contamination verdict, including Uncalibrated (the shipped D-17 default), marks excluded_from_series = true — not explicitly specified by the plan's own text, chosen because an unknown contamination status is not a defensible headline figure either, matching the project's rig-discipline stance.
+- [Phase 01]: 01-07: the plan's own verification command 'cargo test -p nr-cli run_pipeline' selects zero tests (cargo's bare filter matches test function names, and none of task 3's own mandated exact names contain that substring) — the equivalent, correctly-targeted 'cargo test -p nr-cli --test run_pipeline' does select and pass all 6 tests; recorded so a future reader does not mistake the plan's literal command for a real check.
+- [Phase 01]: 01-07: the reference rig was network-unreachable (100% packet loss, no ARP entry, ssh TCP connect timeout) for the entire session, retried three times — the real-rig refusal verification this execution's success criteria require could not be performed; documented as PARTIAL with the exact command for a future session once the rig reconnects, rather than skipped silently or claimed as passing.
 
 ### Pending Todos
 
@@ -104,8 +112,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-31T15:26:05.708Z
-Stopped at: Completed 01-06-PLAN.md
+Last session: 2026-08-31T16:11:48.754Z
+Stopped at: Completed 01-07-PLAN.md
 Resume file: None
 
 Next: `/donny-plan-phase 1`
