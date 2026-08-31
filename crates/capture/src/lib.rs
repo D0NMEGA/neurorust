@@ -4,8 +4,5 @@
 //! environment snapshot readers (Linux-gated via procfs), and the D-15 interference diff
 //! and contamination verdict.
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn crate_builds() {}
-}
+pub mod preconditions;
+pub mod sources;
