@@ -48,9 +48,20 @@ Percentiles over binned samples only, ignoring overflows (this is what the publi
 Percentiles with the 888 overflows recorded at the 400 us lower bound, which is correct:
   p50 = 2, p95 = 4, p99 = 9, p99.9 = 10, p99.99 = 108, p99.999 = 400 (lower bound)
 
-Samples above the 30 us gate:
-  bins 31 to 399 only:            1201  (0.0067 percent of 17994956) - the published figure
-  including the 888 overflows:    2089  (0.0116 percent of 17994956) - the correct figure
+Samples not under the 30 us gate (>= 30 us), the figure to publish:
+  bins 30 to 399 plus the 888 overflows:  2093  (0.0116 percent of 17995844)
+
+Two other counts, retained only so the correction can be shown side by side. Neither may be
+published as the figure:
+  bins 31 to 399 only:            1201  (0.0067 percent of 17994956) - what the 2026-08-28
+                                        README published; strictly above 30 us, overflows
+                                        omitted, and a body-only denominator
+  bins 31 to 399 plus overflows:  2089  - strict boundary, superseded 2026-08-31
+
+Why 2093 and not 2089: PLAT-03 requires latency "brought under 30 us", so a sample landing
+exactly on 30 us has not met the gate. Bin 30 holds 4 samples. And 17994956 is the binned
+total, which excludes the 888 overflows; counting them in the numerator but not the
+denominator mixes populations. 17995844 is the true total.
 
 Distribution shape, for the D-23 correction:
   bins 31 to 99 hold 230 samples

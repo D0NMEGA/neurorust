@@ -43,19 +43,32 @@ fn overflow_counted() {
         vec![(0.50, 2), (0.95, 4), (0.99, 9), (0.999, 10), (0.9999, 108)]
     );
 
-    // The corrected D-23 figure: overflow samples are above the 30 us gate by definition, so
-    // they must be counted. Denominator matches the published README's 17,994,956 for an
-    // apples-to-apples comparison against the previously published (incorrect) percentage.
-    let above_gate_inclusive = run.samples_above(30);
-    assert_eq!(above_gate_inclusive, 2089);
-    let pct_inclusive = above_gate_inclusive as f64 / 17_994_956.0 * 100.0;
+    // The corrected D-23 figure, per the 2026-08-31 operator decision. Two corrections over
+    // the previously published number, and the figure must be self-consistent in both:
+    //
+    //   1. Boundary. PLAT-03 requires latency "brought under 30 us", so a sample landing
+    //      exactly on 30 us has NOT met the gate. Count at-or-above, not strictly above.
+    //      Bin 30 holds 4 samples, which is the whole 2,089 vs 2,093 difference.
+    //   2. Denominator. 17,994,956 is the histogram BODY total and excludes the 888
+    //      overflows. Counting overflows in the numerator but not the denominator mixes
+    //      populations, in a correction whose entire purpose is fixing a population error.
+    //      The true total is 17,995,844, which is what `total_samples` reports.
+    let above_gate_inclusive = run.samples_at_or_above(30);
+    assert_eq!(above_gate_inclusive, 2093);
+    let total_with_overflows = inclusive.total_samples;
+    assert_eq!(total_with_overflows, 17_995_844);
+    let pct_inclusive = above_gate_inclusive as f64 / total_with_overflows as f64 * 100.0;
     assert!(
         (pct_inclusive - 0.0116).abs() < 0.0001,
         "expected ~0.0116%, got {pct_inclusive}"
     );
 
+    // The strict-boundary count is retained but must not be used for a published figure.
+    assert_eq!(run.samples_above(30), 2089);
+
     // The figure the 2026-08-28 README actually published, reproduced here so the D-23
-    // correction can be checked side by side with the corrected figure above.
+    // correction can be checked side by side. Its own convention (strictly above 30 us,
+    // overflows omitted, body-only denominator) is stated wherever it is published.
     let above_gate_exclusive = run.samples_above_excluding_overflows(30);
     assert_eq!(above_gate_exclusive, 1201);
     let pct_exclusive = above_gate_exclusive as f64 / 17_994_956.0 * 100.0;

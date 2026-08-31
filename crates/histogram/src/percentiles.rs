@@ -63,15 +63,26 @@ impl CyclictestRun {
         self.compute_percentiles(quantiles, false)
     }
 
-    /// Count of samples strictly above `gate_us`, overflows included.
-    pub fn samples_above(&self, gate_us: u64) -> u64 {
-        self.count_samples_above(gate_us, true)
+    /// Count of samples at or above `gate_us`, overflows included. This is the form a
+    /// published gate figure must use: PLAT-03 requires worst-case latency "brought under
+    /// 30 us", so a sample landing exactly on the gate has not met it. Prefer this over
+    /// [`Self::samples_above`] for any new figure.
+    pub fn samples_at_or_above(&self, gate_us: u64) -> u64 {
+        self.count_samples(gate_us, true, true)
     }
 
-    /// Count of samples strictly above `gate_us`, overflows excluded. Same caveat as
+    /// Count of samples strictly above `gate_us`, overflows included. Retained because the
+    /// 2026-08-28 README used the strict boundary; see [`Self::samples_at_or_above`] for the
+    /// form a new figure should use.
+    pub fn samples_above(&self, gate_us: u64) -> u64 {
+        self.count_samples(gate_us, true, false)
+    }
+
+    /// Count of samples strictly above `gate_us`, overflows excluded. Reproduces the
+    /// previously published (incorrect) figure exactly; same caveat as
     /// [`Self::percentiles_excluding_overflows`].
     pub fn samples_above_excluding_overflows(&self, gate_us: u64) -> u64 {
-        self.count_samples_above(gate_us, false)
+        self.count_samples(gate_us, false, false)
     }
 
     /// Global maximum across per-thread footer maxima. Exact; never the overflow bound.
@@ -117,11 +128,17 @@ impl CyclictestRun {
         })
     }
 
-    fn count_samples_above(&self, gate_us: u64, include_overflows: bool) -> u64 {
+    fn count_samples(&self, gate_us: u64, include_overflows: bool, at_or_above: bool) -> u64 {
         let binned: u64 = self
             .bins
             .iter()
-            .filter(|&(&bin_us, _)| bin_us > gate_us)
+            .filter(|&(&bin_us, _)| {
+                if at_or_above {
+                    bin_us >= gate_us
+                } else {
+                    bin_us > gate_us
+                }
+            })
             .map(|(_, counts)| counts.iter().sum::<u64>())
             .sum();
         if include_overflows {

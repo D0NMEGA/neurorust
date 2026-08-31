@@ -282,3 +282,21 @@ All 7 key files (6 created, 1 modified) confirmed present on disk with `[ -f ]`.
 The plan's own `<verification>` block (fmt, clippy, `cargo test -p nr-histogram`,
 `overflow_counted -- --nocapture`, `json_and_hist_maxima_agree`) and the reviewer-runnable `awk`
 hand check (`binned: 17994956`, `overflows: 888`) were re-run and match exactly.
+
+---
+
+## Superseded 2026-08-31: the published over-gate figure
+
+This summary records 2,089 of 17,994,956 as the corrected D-23 figure, which is what plan 01-04
+was written against. The operator subsequently changed the published figure to
+**2,093 of 17,995,844 (>= 30 us)** for two reasons:
+
+- PLAT-03 requires latency "brought under 30 us", so a sample landing exactly on 30 us has not
+  met the gate. The count is at-or-above, not strictly above. Bin 30 holds 4 samples.
+- 17,994,956 is the binned total and excludes the 888 overflows. Counting overflows in the
+  numerator but not the denominator mixes populations, in a correction whose purpose is fixing
+  a population error.
+
+`Percentiles::samples_at_or_above` was added for this; `samples_above` keeps the strict boundary
+and still returns 2,089, which is how the superseded number stays reproducible. Nothing else in
+this summary is affected, and plan 01-04's acceptance criteria still hold as written.

@@ -91,7 +91,7 @@ the planner fills the Task ID and Plan columns when plans are written.
 | Worst-case latency under 30 us, or an attributed residual | PLAT-03 | Requires a clean rig run of the stated duration under the documented protocol | Run the headline protocol on the rig; read the verdict from the generated report; decompose against the firmware floor per D-22 |
 | A third party can reproduce from the protocol document | PLAT-02 | Requires a human following prose end to end | Have a reader work through `docs/measurement-protocol.md` against a clean rig without asking questions |
 | Firmware floor delta on RT vs stock kernel | D-18 | Requires the rig plus comparison against archived live-USB figures | Run hwlatdetect under the harness on the installed RT system; publish the delta and the interpretation note from RESEARCH.md |
-| README corrections are accurate | D-23 | Requires re-deriving figures from the raw histogram by hand | Verify the corrected over-gate count (2,089 of 17,994,956, 0.0116%) and the removal of the bimodality claim against the committed `.hist` |
+| README corrections are accurate | D-23 | Requires re-deriving figures from the raw histogram by hand | Verify the corrected over-gate count (2,093 of 17,995,844, 0.0116%, boundary >= 30 us) and the removal of the bimodality claim against the committed `.hist` |
 | Published manifest exposes no unintended host identifiers | security | Requires human judgement about what is acceptable to publish | Review the first generated manifest field by field before the first push |
 
 ---
