@@ -1,0 +1,81 @@
+# Captured 2026-08-31 via `sudo -n /usr/local/sbin/nr-recon` (read-only, fixed command list;
+# arbitrary `sudo cat`/`sudo ls` is not available on this rig, see plan deviation notes).
+#
+# Command executed by nr-recon: cat /sys/kernel/tracing/available_tracers
+
+=== available_tracers ===
+timerlat osnoise hwlat blk mmiotrace function_graph wakeup_dl wakeup_rt wakeup function nop
+
+# Directory listing of /sys/kernel/tracing/, captured by `sudo -n /usr/local/sbin/nr-probe`
+# (command: ls /sys/kernel/tracing/), reproduced here rather than in a separate file since it
+# answers the same plan Task 1 item ("sudo ls /sys/kernel/tracing/").
+
+=== ls /sys/kernel/tracing/ ===
+README
+available_events
+available_filter_functions
+available_filter_functions_addrs
+available_tracers
+buffer_percent
+buffer_size_kb
+buffer_subbuf_size_kb
+buffer_total_size_kb
+current_tracer
+dyn_ftrace_total_info
+dynamic_events
+enabled_functions
+error_log
+events
+free_buffer
+function_profile_enabled
+hwlat_detector
+instances
+kprobe_events
+kprobe_profile
+max_graph_depth
+options
+osnoise
+per_cpu
+printk_formats
+rv
+saved_cmdlines
+saved_cmdlines_size
+saved_tgids
+set_event
+set_event_notrace_pid
+set_event_pid
+set_ftrace_filter
+set_ftrace_notrace
+set_ftrace_notrace_pid
+set_ftrace_pid
+set_graph_function
+set_graph_notrace
+show_event_filters
+show_event_triggers
+snapshot
+stack_max_size
+stack_trace
+stack_trace_filter
+synthetic_events
+syscall_user_buf_size
+timestamp_mode
+touched_functions
+trace
+trace_clock
+trace_marker
+trace_marker_raw
+trace_options
+trace_pipe
+trace_stat
+tracing_cpumask
+tracing_max_latency
+tracing_on
+tracing_thresh
+uprobe_events
+uprobe_profile
+user_events_data
+user_events_status
+
+# Note: there is an "osnoise" directory but no separate "timerlat" directory. This is expected:
+# timerlat shares its configuration knobs with osnoise under /sys/kernel/tracing/osnoise/ rather
+# than owning a directory of its own. See FINDINGS.md, "Which tracers are available".

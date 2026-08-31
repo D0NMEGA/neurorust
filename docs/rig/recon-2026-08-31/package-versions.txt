@@ -1,0 +1,36 @@
+# Captured 2026-08-31 directly (no root needed).
+# Commands: dpkg -l rt-tests trace-cmd linux-tools-common ; cyclictest --version ;
+#           hwlatdetect --help | head -5 ; command -v rtla ;
+#           cyclictest --help | grep -E -- '--json|--histofall|--histogram|--histfile|--breaktrace|--tracemark'
+
+Desired=Unknown/Install/Remove/Purge/Hold
+| Status=Not/Inst/Conf-files/Unpacked/halF-conf/Half-inst/trig-aWait/Trig-pend
+|/ Err?=(none)/Reinst-required (Status,Err: uppercase=bad)
+||/ Name               Version        Architecture Description
++++-==================-==============-============-======================================================================
+ii  linux-tools-common 7.0.0-30.30    all          Linux kernel version specific tools for version 7.0.0
+ii  rt-tests           2.9-1ubuntu1   amd64        Test programs for rt kernels
+ii  trace-cmd          3.3.3-1ubuntu2 amd64        Utility for retrieving and analyzing function tracing in the kernel
+
+--- cyclictest ---
+cyclictest: unrecognized option '--version'
+cyclictest V 2.80
+(cyclictest has no --version flag; passing it prints the version banner above to stderr, then
+the same usage text --help would print, and exits non-zero. The version string is genuine.)
+
+--- hwlatdetect ---
+usage: hwlatdetect [-h] [--duration DURATION] [--threshold THRESHOLD]
+                   [--hardlimit HARDLIMIT] [--window WINDOW] [--width WIDTH]
+                   [--report REPORT] [--cpu-list CPULIST] [--debug] [--quiet]
+                   [--watch]
+
+--- rtla presence ---
+/usr/bin/rtla
+
+--- cyclictest flag support (--help, grepped) ---
+-b USEC  --breaktrace=USEC send break trace command when latency > USEC
+-h       --histogram=US    dump a latency histogram to stdout after the run
+-H       --histofall=US    same as -h except with an additional summary column
+	 --histfile=<path> dump the latency histogram to <path> instead of stdout
+         --json=FILENAME   write final results into FILENAME, JSON formatted
+         --tracemark       write a trace mark when -b latency is exceeded

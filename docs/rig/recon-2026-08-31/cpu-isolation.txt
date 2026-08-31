@@ -1,0 +1,11 @@
+# Captured 2026-08-31 directly (no root needed).
+#
+# The hostname token in the uname line below is replaced with [redacted]; this repository is
+# public and the machine hostname carries no reproduction value beyond what "Dell Precision
+# 3591" (already published in PROJECT.md/RIG.txt) states. Kernel release, build string and
+# architecture are verbatim.
+
+isolated: 6-11
+nohz_full: 6-11
+realtime: 1
+uname: Linux [redacted] 7.0.0-30-realtime #30.1-Ubuntu SMP PREEMPT_RT Fri Aug  7 13:54:26 UTC 2026 x86_64 GNU/Linux

@@ -1,0 +1,9 @@
+# Captured 2026-08-31 directly (no root needed; /boot/config-<release> is world-readable on this
+# system). Command: grep -E 'CONFIG_(TIMERLAT_TRACER|OSNOISE_TRACER|HWLAT_TRACER|FTRACE|TRACING|PREEMPT_RT)=' /boot/config-7.0.0-30-realtime
+
+CONFIG_PREEMPT_RT=y
+CONFIG_TRACING=y
+CONFIG_FTRACE=y
+CONFIG_HWLAT_TRACER=y
+CONFIG_OSNOISE_TRACER=y
+CONFIG_TIMERLAT_TRACER=y

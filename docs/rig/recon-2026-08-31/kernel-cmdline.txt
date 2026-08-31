@@ -1,0 +1,10 @@
+# Captured 2026-08-31: cat /proc/cmdline
+#
+# REDACTED: the root= value (a filesystem UUID) is replaced with the literal token [redacted],
+# applying the same transform as crates/manifest/src/fields.rs::KernelInfo::redact_cmdline
+# (root=/resume= values only; every other parameter is verbatim). This repository is public
+# under Apache-2.0 OR MIT and the human explicitly decided on 2026-08-30 that root=/resume=
+# values are never published, since they carry zero reproduction value. No resume= parameter
+# is present on this cmdline to redact.
+
+BOOT_IMAGE=/boot/vmlinuz-7.0.0-30-realtime root=[redacted] ro quiet splash isolcpus=6-11 nohz_full=6-11 rcu_nocbs=6-11 irqaffinity=0-5,12-21 intel_idle.max_cstate=1 processor.max_cstate=1 nosoftlockup nowatchdog nmi_watchdog=0 tsc=reliable skew_tick=1 crashkernel=2G-4G:320M,4G-32G:512M,32G-64G:1024M,64G-128G:2048M,128G-:4096M

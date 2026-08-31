@@ -1,0 +1,126 @@
+# Captured 2026-08-31.
+# Base capture (no root needed): systemctl show rt-tuning.service -p ActiveState -p SubState
+# -p UnitFileState -p FragmentPath -p ExecStart ; systemctl get-default ;
+# systemctl is-active gdm.service sddm.service lightdm.service
+
+=== rt-tuning.service ===
+ActiveState=active
+SubState=exited
+FragmentPath=/etc/systemd/system/rt-tuning.service
+UnitFileState=enabled
+ExecStart={ path=/usr/local/sbin/rt-tuning.sh ; argv[]=/usr/local/sbin/rt-tuning.sh ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }
+
+=== default target ===
+graphical.target
+
+=== display manager (gdm / sddm / lightdm) ===
+active
+inactive
+inactive
+
+# ---------------------------------------------------------------------------------------------
+# EXTENDED INVESTIGATION (not part of the plan's original task 1 command list): the human running
+# this recon flagged "rt-tuning.service reports active/enabled yet the governor reads powersave"
+# as the single most valuable thing to resolve in this plan. Everything below is additional,
+# read-only forensic evidence gathered to answer WHY, cross-referenced in FINDINGS.md under
+# "The rt-tuning.service contradiction". No rig state was changed to gather any of this.
+# ---------------------------------------------------------------------------------------------
+
+=== unit file (/etc/systemd/system/rt-tuning.service) ===
+[Unit]
+Description=neurorust real-time tuning (governor, turbo)
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/rt-tuning.sh
+
+[Install]
+WantedBy=multi-user.target
+
+=== /usr/local/sbin/rt-tuning.sh (the ExecStart script) ===
+#!/usr/bin/env bash
+for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+  echo performance > "$g" 2>/dev/null || true
+done
+echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || true
+
+=== journalctl -u rt-tuning.service -b (current boot, full) ===
+Aug 30 23:59:10 [redacted] systemd[1]: Starting rt-tuning.service - neurorust real-time tuning (governor, turbo)...
+Aug 30 23:59:10 [redacted] systemd[1]: Finished rt-tuning.service - neurorust real-time tuning (governor, turbo).
+
+=== boot time ===
+2026-08-30 23:58:51
+
+=== power-profiles-daemon.service: unit-file state, activation timing ===
+power-profiles-daemon.service                  disabled        enabled
+ActiveEnterTimestamp=Sun 2026-08-30 23:59:10 CDT
+ExecMainStartTimestamp=Sun 2026-08-30 23:59:10 CDT
+
+=== is-active: power-profiles-daemon / tuned / tlp ===
+active
+inactive
+inactive
+
+=== installed packages: power-profiles-daemon / tuned / tlp ===
+ii  power-profiles-daemon 0.30-2       amd64        D-Bus service for power profile handling
+un  tlp                   <none>       <none>       (no description available)
+(tuned: dpkg-query reports no packages found matching tuned - not installed)
+
+=== powerprofilesctl get ===
+performance
+
+=== cpufreq driver/governor/EPP detail (cpu0 and cpu6, representative of a housekeeping core and
+     an isolated core; all 22 CPUs read the same governor and EPP value) ===
+--- cpu0 ---
+scaling_driver: intel_pstate
+scaling_available_governors: performance powersave
+scaling_governor: powersave
+scaling_cur_freq: 2000000
+cpuinfo_max_freq: 2300000
+cpuinfo_min_freq: 400000
+scaling_max_freq: 2300000
+energy_performance_preference: performance
+energy_performance_available_preferences: default performance balance_performance balance_power power
+--- cpu6 ---
+scaling_driver: intel_pstate
+scaling_available_governors: performance powersave
+scaling_governor: powersave
+scaling_cur_freq: 400000
+cpuinfo_max_freq: 2300000
+cpuinfo_min_freq: 400000
+scaling_max_freq: 2300000
+energy_performance_preference: performance
+energy_performance_available_preferences: default performance balance_performance balance_power power
+
+=== /sys/devices/system/cpu/intel_pstate/ (the standard path; contents and no_turbo/status) ===
+total 0
+drwxr-xr-x  2 root root    0 Aug 30 23:58 .
+drwxr-xr-x 34 root root    0 Aug 30 23:58 ..
+-rw-r--r--  1 root root 4096 Aug 31 00:26 hwp_dynamic_boost
+-rw-r--r--  1 root root 4096 Aug 30 23:58 max_perf_pct
+-rw-r--r--  1 root root 4096 Aug 31 00:26 min_perf_pct
+-rw-r--r--  1 root root 4096 Aug 30 23:59 no_turbo
+-rw-r--r--  1 root root 4096 Aug 30 23:58 status
+no_turbo=1
+status=active
+
+=== /sys/devices/system/intel_pstate/ (the OTHER path; the one nr-recon/nr-probe query) ===
+ls: cannot access '/sys/devices/system/intel_pstate/': No such file or directory
+(does not exist on this kernel; explains why nr-recon and nr-probe both report
+intel_pstate.no_turbo=unavailable even though the real no_turbo file, at the path above, exists
+and reads 1)
+
+=== ACPI platform_profile ===
+platform_profile: performance
+platform_profile_choices: cool quiet balanced performance
+
+=== journalctl -b, boot-time sequence around gdm / gnome-session / power-profiles-daemon ===
+Aug 30 23:59:07 [redacted] systemd[1]: Starting gdm.service - GNOME Display Manager...
+Aug 30 23:59:07 [redacted] systemd[1]: Started gdm.service - GNOME Display Manager.
+Aug 30 23:59:07 [redacted] gdm-launch-environment][2426]: pam_unix(gdm-launch-environment:session): session opened for user gdm-greeter(uid=60578) by (uid=0)
+Aug 30 23:59:08 [redacted] gnome-shell[2664]: Registering session with GDM
+Aug 30 23:59:09 [redacted] dbus-daemon[1725]: [system] Activating via systemd: service name='org.freedesktop.UPower.PowerProfiles' unit='power-profiles-daemon.service' requested by ':1.50' (uid=60578 pid=2777 comm="/usr/libexec/gsd-power" label="unconfined")
+Aug 30 23:59:10 [redacted] gnome-shell[2664]: Registering display with GDM
+Aug 30 23:59:10 [redacted] systemd[1]: Starting power-profiles-daemon.service - Power Profiles daemon...
