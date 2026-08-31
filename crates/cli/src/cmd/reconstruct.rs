@@ -187,6 +187,18 @@ pub fn run(args: Args) -> anyhow::Result<i32> {
         "RIG.txt and the README describe the run in prose but do not record a machine-readable \
          tool invocation (argv, exit code) for the pre-harness capture",
     ));
+    absent.push(absent_field(
+        "utc_start",
+        "no pre-harness capture records a live run-start timestamp; --utc-start is the \
+         operator's best defensible reconstruction from artifact modification times and other \
+         evidence, not a value observed by the tool that ran",
+    ));
+    absent.push(absent_field(
+        "utc_end",
+        "no pre-harness capture records a live run-end timestamp; --utc-end is the operator's \
+         best defensible reconstruction from artifact modification times and other evidence, \
+         not a value observed by the tool that ran",
+    ));
 
     let empty_snapshot = InterferenceSnapshot {
         isolated_cpus: Vec::new(),
