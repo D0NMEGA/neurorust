@@ -84,22 +84,49 @@ space in use unchanged at 173.4 GB.
 | Percentile | Latency |
 |---|---|
 | p50 | 2 us |
+| p95 | 4 us |
 | p99 | 9 us |
 | p99.9 | 10 us |
-| p99.99 | 12 us |
-| max | ~3800 us |
+| p99.99 | 108 us |
+| max | 3806 us |
 
-Samples above the 30 us gate: 1,201 of 17,994,956 (0.0067%).
+Percentiles include the 888 histogram overflows, recorded at the 400 us histogram bound. That
+is a lower bound on their true value, so p99.99 and above are conservative. The maximum is
+taken from the cyclictest footer and is exact. The previously published p99.99 of 12 us was
+computed from the histogram bins alone and omitted the overflows.
+
+Samples not under the 30 us gate (>= 30 us): 2,093 of 17,995,844 (0.0116%). This counts the
+1,205 samples in bins 30 to 399 plus the 888 samples cyclictest reported separately as
+histogram overflows. The previously published figure of 1,201 of 17,994,956 (0.0067%) counted
+only samples strictly above 30 us, omitted the overflows entirely, and used a denominator that
+excluded them.
+
+Boundary and denominator per the 2026-08-31 operator decision: PLAT-03 requires latency
+"brought under 30 us", so a sample landing exactly on 30 us has not met the gate (bin 30 holds
+4 samples). And 17,994,956 is the binned total, which excludes the 888 overflows, so counting
+overflows in the numerator but not the denominator would mix populations in the very
+correction meant to fix a population error. The true total is 17,995,844.
 
 **Split verdict.** Jitter (p99 - p50) is 7 us against the 500 us target, passing by ~70x.
 `cyclictest max < 30 us` fails by ~127x. This is the project's own thesis in data: a 2 us
 median says nothing about a 3.8 ms stall.
 
-**Two structural clues.** The distribution is bimodal, with zero samples between 13 and 100 us
-and then a distinct 101-399 us population, which indicates a specific recurring event rather
-than gradual noise. The ~3.8 ms maximum appeared on all six threads at nearly identical values
-(3785, 3679, 3787, 3693, 3806, 3726), the signature of a global stall such as `stop_machine()`
-or a system-wide TLB shootdown rather than per-core interference.
+**Two structural clues.** The distribution has a continuous long tail rather than two modes.
+Bins 31 to 99 hold 230 samples and bins 100 to 399 hold 971. The largest run of empty bins
+anywhere above 13 us is 6 bins (278 to 283), which is consistent with sparse sampling at 2 to 8
+counts per bin rather than with a gap. The earlier claim of a gap between 13 us and 100 us, and
+the inference of a specific recurring event that rested on it, are withdrawn. The ~3.8 ms
+maximum appeared on all six threads at nearly identical values (3785, 3679, 3787, 3693, 3806,
+3726), the signature of a global stall such as `stop_machine()` or a system-wide TLB shootdown
+rather than per-core interference.
+
+**There are two phenomena, not one.** All six threads log roughly 140 overflows inside cycles
+1,820,584 to 1,826,674, which at a 200 us interval is about 1.2 seconds of wall time carrying a
+stall over 400 us roughly every 10 ms on every isolated core at once. Separately, a handful of
+isolated cross-thread events appear (cycles near 2,259,348, 2,349,428 and 2,709,344, each
+landing on two or three threads within about 30 cycles), and the roughly 3.8 ms maximum belongs
+to that second category. The sustained burst and the isolated global spikes are different
+phenomena and are investigated separately under PLAT-01.
 
 **CAVEAT - do not publish this figure.** The run was contaminated. SSH commands were executed
 against the machine during the measurement (`ps -L`, `tmux capture-pane`, `scp`), each creating
@@ -110,3 +137,9 @@ CPUs 6-11. A GNOME session was also active with a user typing into it.
 **Next measurement must**: run with no SSH activity, with the desktop idle or the system
 dropped to `multi-user.target`, and with `--tracemark` plus ftrace armed so the kernel records
 what it was executing at the moment of the worst spike instead of leaving us to speculate.
+
+**Corrected 2026-08-31 under Phase 1 (D-23).** Two claims in the original text did not survive
+re-derivation from the raw histogram: a claim of a gap in the distribution that is not in the
+data, and an over-gate count that omitted the histogram overflows. The percentile table was
+regenerated from the raw capture by the measurement harness. The raw captures themselves are
+unchanged and their checksums are recorded in manifest.json.
