@@ -168,6 +168,41 @@ fn verify_rejects_missing_required_field() {
     );
 }
 
+/// Distinct from `verify_rejects_checksum_mismatch`: here the artifact file the manifest names
+/// never existed at all, rather than existing with different content. Required by this
+/// execution's own success criteria alongside the plan's four named failure modes.
+#[test]
+fn verify_rejects_manifest_naming_a_nonexistent_file() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    let run_dir = measurements.join("2026-08-30-precision3591-recon-001");
+    fs::create_dir_all(&run_dir).expect("mkdir run dir");
+
+    let manifest: Value = serde_json::from_str(MINIMAL_MANIFEST).expect("fixture parses");
+    fs::write(
+        run_dir.join("manifest.json"),
+        serde_json::to_string_pretty(&manifest).expect("serialise manifest"),
+    )
+    .expect("write manifest.json");
+    // Deliberately no cyclictest-rt-isolated-idle-10m.hist: the manifest names a file that was
+    // never written.
+
+    let output = base_cmd(temp.path(), &measurements)
+        .output()
+        .expect("run verify");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("cyclictest-rt-isolated-idle-10m.hist"),
+        "stdout should name the missing artifact file: {stdout}"
+    );
+    assert!(
+        stdout.contains("does not exist"),
+        "stdout should say the named file does not exist: {stdout}"
+    );
+}
+
 #[test]
 fn verify_rejects_stray_capture_outside_measurements() {
     let temp = tempfile::tempdir().expect("tempdir");
