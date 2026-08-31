@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-08-31T06:20:47.628Z"
+stopped_at: Completed 01-05-PLAN.md
+last_updated: "2026-08-31T07:15:13.348Z"
 last_activity: 2026-08-31
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 15
-  completed_plans: 4
-  percent: 27
+  completed_plans: 5
+  percent: 33
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 01 (trustworthy-measurement) — EXECUTING
-Plan: 5 of 15
+Plan: 6 of 15
 Status: Ready to execute
 Last activity: 2026-08-31
 
-Progress: [███░░░░░░░] 27%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progress: [███░░░░░░░] 27%
 | Phase 01 P03 | 6min | 3 tasks | 12 files |
 | Phase 01 P02 | 25min | 3 tasks | 15 files |
 | Phase 01 P04 | 18min | 3 tasks | 7 files |
+| Phase 01 P05 | 50min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,11 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-04: Histogram thread count derived from "# Min Latencies:", not "# Max Latencies:" as the plan's own action text stated — FINDINGS.md's empirically measured "Column counts" section (real -h/-H probes from plan 01-02) shows "# Max Latencies:" and "# Histogram Overflows:" both gain the -H summary column (6 to 7 fields for 6 threads), while "# Min Latencies:" and "# Avg Latencies:" stay thread-count-only in both layouts. The plan's action text claimed Max Latencies is always exactly one value per thread; followed the real rig data instead, per this plan's own instruction to trust real captures over an assumed schema.
 - [Phase 01]: 01-04: Added parse_hist_file(&Path, Option<u64>) and parse_json_file(&Path) ahead of being required by this plan's own task acceptance criteria — The plan's <interfaces> block names these as what plan 01-07 (nr-cli) will call, framed as "the public surface right first time." Neither is in any task's action text or acceptance criteria, but they are thin wrappers (a few lines each) around parse_hist/serde_json::from_str, and building them now avoids a known future gap. HistError gained an Io variant to carry file-read failures.
 - [Phase 01]: 01-04: lib.rs module registration and a HistError enum extension in hist.rs were required outside Tasks 2/3's declared file lists — Task 2/3's <files> lists omit lib.rs, but without pub mod percentiles;/pub mod json; neither module compiles into the crate at all, so the plan's own mandated cargo test -p nr-histogram commands cannot pass. Task 3 also needed HistError::JsonDeserialize/SummaryDisagreement (defined in hist.rs) since reconcile() returns Result<(), HistError> by the plan's own design. Treated as Rule 3 (blocking): the minimum touch needed for each task's own tests to run.
+- [Phase 01]: 01-05: procfs 0.18.0 has no /proc/interrupts parser at all; hand-rolled a small parser shared between the live path and every test — Verified by downloading and grepping the published procfs-0.18.0 and procfs-core-0.18.0 crate sources directly: no interrupt-table parsing exists at this pinned version, contrary to RESEARCH.md's assumption. Rather than silently working around it, interference.rs documents the finding and parses the text format itself, used identically by the live path and every test.
+- [Phase 01]: 01-05: GovernorIsPerformanceOnAllCpus and TracersQuiescent correctly FAIL/refuse against the real rig's current state; not weakened — Every CPU governor currently reads powersave and GDM is active with a real Wayland session (confirmed live over SSH). The checks correctly refuse a headline-class run against this state, per FINDINGS.md's governor-race root cause. This is the D-06 assertion list doing its job.
+- [Phase 01]: 01-05: nr_manifest InterferenceSnapshot.context_switches populated from /proc/interrupts RES row, not /proc/stat ctxt — That field is typed Vec<CpuCounter>, one entry per isolated CPU, but /proc/stat's ctxt is a single machine-wide counter with no per-CPU breakdown and cannot fill it at all. RES (rescheduling interrupts) is the closest true per-CPU scheduling-interference signal available without a heavier tracer.
+- [Phase 01]: 01-05: D-15 contamination reason lives in a local VerdictOutcome wrapper, not a new nr_manifest field — nr_manifest::InterferenceSnapshotPair (plan 01-03's already-shipped, schema-generated type) has no reason field. Adding one would touch crates/manifest/, schemas/manifest.schema.json and the committed minimal-manifest.json fixture, none of which are in this plan's file list. interference::verdict returns a local wrapper instead.
+- [Phase 01]: 01-05: argv relativization implemented as a standalone module (argv.rs), closing plan 01-03's deferred-items.md carry-forward — None of this plan's three tasks shell out to a tool or build a ToolInvocation themselves (nr-cli, plan 01-07, does that per this plan's own interfaces block). relativize_argv is the standalone, tested utility nr-cli will call, so the rewrite nr_manifest's argv doc comment promises still lives in nr-capture.
 
 ### Pending Todos
 
@@ -94,8 +100,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-31T06:20:47.625Z
-Stopped at: Completed 01-04-PLAN.md
+Last session: 2026-08-31T07:15:13.346Z
+Stopped at: Completed 01-05-PLAN.md
 Resume file: None
 
 Next: `/donny-plan-phase 1`
