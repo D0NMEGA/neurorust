@@ -57,3 +57,30 @@ Distribution shape, for the D-23 correction:
   bins 100 to 399 hold 971 samples
   the largest run of empty bins anywhere above 13 us is 6 bins (278 to 283)
 There is no gap between 13 us and 100 us and there is no second mode.
+
+## probe-cyclictest-h-60s.hist, probe-cyclictest-histofall-60s.hist, probe-cyclictest-60s.json
+
+Rig-recon format probes from plan 01-02 (docs/rig/recon-2026-08-31/), captured on the installed
+system, 6 threads on isolcpus 6-11, 200 us interval, 60 seconds each. These are NOT measurements:
+the rig was untuned at capture time (scaling governor `powersave`, not `performance`; see
+docs/rig/recon-2026-08-31/FINDINGS.md, "The rt-tuning.service contradiction"). No number from
+these three files may ever be quoted or published as a latency result. Their only purpose is
+pinning down cyclictest's real output formats for this parser.
+
+`probe-cyclictest-h-60s.hist` is a `-h 400` capture (7 whitespace-separated fields per data line:
+1 bin index plus 6 thread columns). `probe-cyclictest-histofall-60s.hist` is the same run with
+`-H 400` (8 fields: the same 7 plus one summary column on the right), confirming the "+1 column"
+rule above. The rule does not hold uniformly across every footer line, though: measured directly
+on these two files, `# Min Latencies:` and `# Avg Latencies:` stay at 6 fields (per-thread only)
+in both captures, while `# Max Latencies:` and `# Histogram Overflows:` gain the extra field in
+the `-H` capture (6 to 7). A parser must not assume a constant `thread_count + 1` width applies to
+every footer line. Full detail: docs/rig/recon-2026-08-31/FINDINGS.md, "Column counts".
+
+`probe-cyclictest-60s.json` is the `--json` output from the same `-h` run. Per-thread `min`/`avg`/
+`max` and a `cycles` sample count are present directly; there is no overflow count anywhere in the
+JSON (this run did not overflow its 400 us cap), so overflow handling still requires the `.hist`
+file regardless of which format is otherwise preferred. Histogram bin keys are sparse strings
+(e.g. `"20"`), not a dense integer-keyed array. The real machine hostname originally present in
+`sysinfo.nodename` is replaced with the literal token `[redacted]`; every other field, including
+`sysinfo.release` and `.version`, is untouched. Full detail: FINDINGS.md, "What is in cyclictest
+--json" and "Redaction and host identifiers".
