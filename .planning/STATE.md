@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-07-PLAN.md
-last_updated: "2026-08-31T16:11:48.755Z"
+stopped_at: Completed 01-08-PLAN.md
+last_updated: "2026-08-31T16:45:32.472Z"
 last_activity: 2026-08-31
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 15
-  completed_plans: 7
-  percent: 47
+  completed_plans: 8
+  percent: 53
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 01 (trustworthy-measurement) — EXECUTING
-Plan: 8 of 15
+Plan: 9 of 15
 Status: Ready to execute
 Last activity: 2026-08-31
 
-Progress: [█████░░░░░] 47%
+Progress: [█████░░░░░] 53%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [█████░░░░░] 47%
 | Phase 01 P05 | 50min | 3 tasks | 12 files |
 | Phase 01 P06 | 11min | 3 tasks | 15 files |
 | Phase 01 P07 | 25min | 3 tasks | 15 files |
+| Phase 01 P08 | 10min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,11 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-07: a non-Clean contamination verdict, including Uncalibrated (the shipped D-17 default), marks excluded_from_series = true — not explicitly specified by the plan's own text, chosen because an unknown contamination status is not a defensible headline figure either, matching the project's rig-discipline stance.
 - [Phase 01]: 01-07: the plan's own verification command 'cargo test -p nr-cli run_pipeline' selects zero tests (cargo's bare filter matches test function names, and none of task 3's own mandated exact names contain that substring) — the equivalent, correctly-targeted 'cargo test -p nr-cli --test run_pipeline' does select and pass all 6 tests; recorded so a future reader does not mistake the plan's literal command for a real check.
 - [Phase 01]: 01-07: the reference rig was network-unreachable (100% packet loss, no ARP entry, ssh TCP connect timeout) for the entire session, retried three times — the real-rig refusal verification this execution's success criteria require could not be performed; documented as PARTIAL with the exact command for a future session once the rig reconnects, rather than skipped silently or claimed as passing.
+- [Phase 01]: 01-08: RIG.txt's system: line has no double-space separator (unlike bios:/kernel:, confirmed via cat -evt), so the literal 'split at the first space run' instruction degenerates to the first single space, giving system_vendor="Dell", system_model="Inc. Precision 3591" — a real, non-fabricated substring split, not a bug; flagged for plan 01-10 to override with a cleaner value if wanted when it reconstructs the real directory
+- [Phase 01]: 01-08: reconstruct's kernel.release/version_string/preempt_model come from RIG.txt's kernel: line (7.0.0-30-generic, PREEMPT_DYNAMIC, the live-USB screening kernel) while kernel.is_realtime comes from the README's separate statement about the later installed kernel (7.0.0-30-realtime) — the plan's own mapping table sources release from RIG.txt verbatim and carves out is_realtime as a README-sourced exception; the two fields describing different moments is RIG.txt's own staleness showing through honestly, not an error to reconcile
+- [Phase 01]: 01-08: added an 11th verify test (verify_rejects_manifest_naming_a_nonexistent_file) beyond the plan's 10 named tests — this execution's own success criteria required a distinct test for a manifest naming a file that does not exist (ArtifactMissing), separate from checksum mismatch; the plan's fixed test-name list did not cover it
+- [Phase 01]: 01-08: created .github/workflows/provenance.yml as a separate workflow file, not a job inside ci.yml — the plan's task 3 explicitly specifies a separate file so a future Kani/loom/criterion gate stays a small diff; this execution's own success-criteria shorthand said ci.yml, but the plan's explicit, reasoned instruction took precedence
+- [Phase 01]: 01-08: confirmed by actually running the release binary that the provenance gate fails today against the real tree, naming measurements/2026-08-28-precision3591 as lacking a manifest.json and measurements/INDEX.md as not yet generated, with no other false positives — this is the intended, documented sequence per D-13/D-16; plan 01-10 must run reconstruct against that directory and verify --write-index before the gate turns green, and no allowlist was added in its place
 
 ### Pending Todos
 
@@ -112,8 +118,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-31T16:11:48.754Z
-Stopped at: Completed 01-07-PLAN.md
+Last session: 2026-08-31T16:45:32.470Z
+Stopped at: Completed 01-08-PLAN.md
 Resume file: None
 
 Next: `/donny-plan-phase 1`
