@@ -294,6 +294,31 @@ pub enum PreconditionCheck {
     TracersQuiescent,
 }
 
+impl PreconditionCheck {
+    /// Every variant, in the same order [`crate::preconditions`] (via `nr_capture::
+    /// preconditions::run_all`) evaluates them in a real run. `docs/measurement-
+    /// protocol.md` is this list in prose; `crates/capture/tests/protocol_doc.rs`
+    /// uses this constant to fail the moment the two drift apart, in either
+    /// direction (a check added here without being documented, or a name in the
+    /// document that names no real check).
+    pub const ALL: &'static [PreconditionCheck] = &[
+        PreconditionCheck::NoActiveSshSessions,
+        PreconditionCheck::SystemdDefaultTargetIsMultiUser,
+        PreconditionCheck::DisplayManagerInactive,
+        PreconditionCheck::NoGraphicalSession,
+        PreconditionCheck::GovernorIsPerformanceOnAllCpus,
+        PreconditionCheck::NoTurboEnabled,
+        PreconditionCheck::DeepCstatesDisabled,
+        PreconditionCheck::IsolcpusCoversTargetCpus,
+        PreconditionCheck::KernelIsRealtime,
+        PreconditionCheck::RtTuningServiceActive,
+        PreconditionCheck::OnAcPower,
+        PreconditionCheck::ThermalHeadroomAtStart,
+        PreconditionCheck::NoPackageManagerActivity,
+        PreconditionCheck::TracersQuiescent,
+    ];
+}
+
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum PreconditionStatus {
@@ -468,5 +493,37 @@ mod tests {
     fn redact_cmdline_is_a_no_op_without_root_or_resume() {
         let raw = "BOOT_IMAGE=/vmlinuz ro quiet splash isolcpus=6-11";
         assert_eq!(KernelInfo::redact_cmdline(raw), raw);
+    }
+
+    /// `PreconditionCheck::ALL` is a hand-written list next to a hand-written enum;
+    /// nothing in the type system keeps the two in sync when a variant is added.
+    /// This is the only thing that would catch a forgotten entry before
+    /// `crates/capture/tests/protocol_doc.rs` (which trusts `ALL` as the ground
+    /// truth) silently stopped checking the new variant against the document.
+    #[test]
+    fn all_contains_every_variant_exactly_once() {
+        let all = [
+            PreconditionCheck::NoActiveSshSessions,
+            PreconditionCheck::SystemdDefaultTargetIsMultiUser,
+            PreconditionCheck::DisplayManagerInactive,
+            PreconditionCheck::NoGraphicalSession,
+            PreconditionCheck::GovernorIsPerformanceOnAllCpus,
+            PreconditionCheck::NoTurboEnabled,
+            PreconditionCheck::DeepCstatesDisabled,
+            PreconditionCheck::IsolcpusCoversTargetCpus,
+            PreconditionCheck::KernelIsRealtime,
+            PreconditionCheck::RtTuningServiceActive,
+            PreconditionCheck::OnAcPower,
+            PreconditionCheck::ThermalHeadroomAtStart,
+            PreconditionCheck::NoPackageManagerActivity,
+            PreconditionCheck::TracersQuiescent,
+        ];
+        assert_eq!(PreconditionCheck::ALL.len(), 14);
+        for variant in &all {
+            assert!(
+                PreconditionCheck::ALL.contains(variant),
+                "PreconditionCheck::ALL is missing {variant:?}"
+            );
+        }
     }
 }
