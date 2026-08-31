@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-08-30T22:11:44.174Z"
-last_activity: 2026-08-30
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-08-31T05:14:58.140Z"
+last_activity: 2026-08-31
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 15
-  completed_plans: 1
-  percent: 7
+  completed_plans: 2
+  percent: 13
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 01 (trustworthy-measurement) — EXECUTING
-Plan: 2 of 15
+Plan: 3 of 15
 Status: Ready to execute
-Last activity: 2026-08-30
+Last activity: 2026-08-31
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 13%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 01 P01 | 11min | 3 tasks | 20 files |
+| Phase 01 P03 | 6min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,8 @@ Recent decisions affecting current work:
 - PLAT-01/02/03 made an early gate: every later latency figure would otherwise inherit an unexplained 3.8 ms stall
 - [Phase 01]: 01-01: Symlinked /opt/homebrew/bin/cargo-fmt to the Homebrew rustup formula's own cargo-fmt binary (host-local fix, not a repo change) — cargo fmt --check failed with no such command: fmt even though rustfmt was an installed rustup component. Homebrew's rustup formula symlinks cargo, cargo-clippy, rustc, rustdoc, rustfmt, rustup into /opt/homebrew/bin but omits cargo-fmt. Does not affect CI, which installs Rust via the official rustup action.
 - [Phase 01]: 01-01: deny.toml bans section gets allow-wildcard-paths = true, and all five nr-* crates get publish = false — cargo-deny flagged every internal workspace path dependency as a wildcard dependency (bans FAILED). allow-wildcard-paths is cargo-deny's documented exemption for this pattern, but only applies to crates marked publish = false, which is also correct on its own since none of these crates publish to crates.io independently. Verified: cargo deny check advisories licenses bans sources exits 0.
+- [Phase 01]: 01-03: kernel.cmdline redacts root= and resume= values to the literal token [redacted]; every other parameter (BOOT_IMAGE, isolcpus, nohz_full, rcu_nocbs, irqaffinity, intel_pstate, etc.) stays verbatim — Human review (Task 3 checkpoint:human-verify) approved this after reading the generated schema and worked-example fixture. The root/swap filesystem UUIDs carry zero reproduction value and are the only machine-instance identifiers in the manifest; redaction is visible (the literal token appears) rather than a silent drop. Implemented as KernelInfo::redact_cmdline, unit tested against a realistic cmdline including a resume_offset near-miss. Does not touch D-12 (raw captures).
+- [Phase 01]: 01-03: tools[].argv documented as run-directory-relative rather than absolute home-directory paths; actual path rewrite deferred to nr-capture (plan 01-05) — Human review (Task 3 checkpoint:human-verify) approved this so a recorded argv is a command a third party can actually paste and run. nr-capture does not exist yet and owns the actual rewrite at capture time; nr-manifest only documents the convention in the doc comment on ToolInvocation.argv and carries it forward in deferred-items.md for plan 01-05 to implement.
 
 ### Pending Todos
 
@@ -80,8 +83,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-30T22:11:44.172Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-08-31T05:13:18.375Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None
 
 Next: `/donny-plan-phase 1`

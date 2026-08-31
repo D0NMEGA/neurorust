@@ -73,7 +73,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01-PLAN.md - Cargo workspace, dual licence, CI skeleton, histogram fixture
 - [ ] 01-02-PLAN.md - Rig recon: tracer availability, tool versions, schema probes (rig runbook)
-- [ ] 01-03-PLAN.md - Manifest schema: the D-14 field set, provenance tier, blake3 checksums
+- [x] 01-03-PLAN.md - Manifest schema: the D-14 field set, provenance tier, blake3 checksums
 - [ ] 01-04-PLAN.md - Histogram parser: bins, overflows, hdrhistogram percentiles
 - [ ] 01-05-PLAN.md - Capture crate: preconditions, environment snapshot, contamination verdict
 - [ ] 01-06-PLAN.md - Metrics crate: series, baseline comparison, coverage record, PLAT-03 decomposition
@@ -182,7 +182,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Trustworthy measurement | 0/15 | Planned | - |
+| 1. Trustworthy measurement | 2/15 | In Progress | - |
 | 2. Proven emergency_stop | 0/TBD | Not started | - |
 | 3. Deterministic substrate | 0/TBD | Not started | - |
 | 4. Lock-free transport | 0/TBD | Not started | - |
