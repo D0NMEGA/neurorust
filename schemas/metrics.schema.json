@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MetricsSeries",
+  "description": "The BENCH-08 series: a weekly committed JSON carrying p50, p95 and p99 for every stage\ninstrumented so far.",
+  "type": "object",
+  "properties": {
+    "entries": {
+      "description": "Append only, ordered by `utc_start`. See [`append`].",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/StageMetrics"
+      }
+    },
+    "schema_version": {
+      "description": "Must equal [`SCHEMA_VERSION`].",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "entries"
+  ],
+  "$defs": {
+    "ContaminationVerdict": {
+      "description": "D-15's automatic contamination call. A `Contaminated` run is still published per\nBENCH-06, but excluded from the headline series.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "clean",
+            "contaminated"
+          ]
+        },
+        {
+          "description": "No calibrated thresholds exist yet to render a verdict against (D-17).",
+          "type": "string",
+          "const": "uncalibrated"
+        }
+      ]
+    },
+    "InstrumentClass": {
+      "description": "RESEARCH.md pattern 2: an investigation run carries its own tracer overhead and\nmust never feed the headline series, independently of `RunClass`.",
+      "type": "string",
+      "enum": [
+        "headline-series",
+        "investigation"
+      ]
+    },
+    "RunClass": {
+      "description": "D-10 run cadence tag. Kept distinct so run classes are never averaged together.",
+      "type": "string",
+      "enum": [
+        "recon",
+        "screen",
+        "calibration-clean",
+        "calibration-contaminated",
+        "investigation",
+        "headline",
+        "weekly",
+        "soak"
+      ]
+    },
+    "StageMetrics": {
+      "description": "One run's measurement of one stage. `stage` is open by design (D-04):\n`\"cyclictest.wakeup_latency\"` and `\"hwlatdetect.firmware_gap\"` today,\n`\"emergency_stop.abort_latency\"` from Phase 2's STOP-07, and\n`\"sched_deadline.wakeup_latency\"` / `\"sched_fifo.wakeup_latency\"` from Phase 3's SUBS-06.",
+      "type": "object",
+      "properties": {
+        "contamination_verdict": {
+          "$ref": "#/$defs/ContaminationVerdict"
+        },
+        "excluded_from_series": {
+          "description": "BENCH-06: a contaminated or otherwise non-headline run is still recorded here, but\nexcluded from the regression series. See [`Self::exclusion_reason`].",
+          "type": "boolean"
+        },
+        "exclusion_reason": {
+          "description": "Required to be `Some` and non-empty when `excluded_from_series` is true.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "instrument_class": {
+          "$ref": "#/$defs/InstrumentClass"
+        },
+        "iso_week": {
+          "description": "The D-08 coverage key, e.g. `\"2026-W35\"`.",
+          "type": "string"
+        },
+        "manifest_blake3": {
+          "description": "blake3 of the manifest this entry's numbers were derived from, so a published figure can\nalways be traced back to the capture and environment snapshot behind it.",
+          "type": "string"
+        },
+        "max_us": {
+          "description": "Exact worst case, never the overflow bound.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "overflow_count": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "p50_us": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "p95_us": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "p999_us": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "p99_us": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "rig_slug": {
+          "type": "string"
+        },
+        "run_class": {
+          "$ref": "#/$defs/RunClass"
+        },
+        "run_id": {
+          "description": "Matches the manifest `run_id`, so the series points at its evidence.",
+          "type": "string"
+        },
+        "sample_count": {
+          "description": "Binned samples plus overflows.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "stage": {
+          "description": "e.g. `\"cyclictest.wakeup_latency\"`. Open by design (D-04); see the module doc comment.",
+          "type": "string"
+        },
+        "tool": {
+          "description": "e.g. `\"cyclictest\"`, `\"hwlatdetect\"`.",
+          "type": "string"
+        },
+        "utc_start": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "run_class",
+        "instrument_class",
+        "utc_start",
+        "iso_week",
+        "rig_slug",
+        "tool",
+        "stage",
+        "sample_count",
+        "overflow_count",
+        "p50_us",
+        "p95_us",
+        "p99_us",
+        "p999_us",
+        "max_us",
+        "contamination_verdict",
+        "excluded_from_series",
+        "manifest_blake3"
+      ]
+    }
+  }
+}
