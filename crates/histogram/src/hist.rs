@@ -1,8 +1,8 @@
 //! Parses cyclictest `.hist` output (the `-h`/`--histogram` and `-H`/`--histofall` layouts) into
 //! a typed [`CyclictestRun`], including the footer block where per-thread overflow counts live.
 //!
-//! This module only parses. It does not compute any derived statistics; that lives in
-//! `crate::percentiles`.
+//! This module only parses cyclictest output into typed values. It performs no statistical
+//! computation of any kind; that is a sibling module's job.
 //!
 //! Column-count rule, confirmed against real captures from this project's reference rig
 //! (`docs/rig/recon-2026-08-31/FINDINGS.md`, "Column counts"): `-h` writes one column per thread
