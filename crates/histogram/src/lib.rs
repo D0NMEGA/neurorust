@@ -5,3 +5,4 @@
 //! design so the macOS CI leg exercises it for real.
 
 pub mod hist;
+pub mod percentiles;
