@@ -24,3 +24,21 @@ kernel, rather than the real, populated path `/sys/devices/system/cpu/intel_psta
 value is kept verbatim because it is genuine tool output and the discrepancy itself is a recorded
 finding, not an error to silently correct; see FINDINGS.md for the full explanation and its
 consequence for how `nr-capture`'s own preconditions must query these paths.
+
+This probe never captured `cpuN.energy_performance_preference`, so `nr-capture`'s tests exercise
+that field, correctly, as absent against this fixture (see `epp-performance-sysfs-tuning.txt`
+below for the fixture that exercises it as present).
+
+## epp-performance-sysfs-tuning.txt
+
+A derived fixture, not a rig capture: every line was written by hand, not produced by a probe
+script. It reproduces the exact combination `docs/rig/recon-2026-08-31/FINDINGS.md`'s "The
+rt-tuning.service contradiction" section found on the reference rig on 2026-08-31 -
+`scaling_governor=powersave` and `energy_performance_preference=performance` on every CPU at the
+same moment, which is what power-profiles-daemon's own "performance" profile expresses on this
+Meteor Lake HWP backend. `probe-sysfs-tuning.txt`'s own probe script never captured
+`energy_performance_preference` (see above), so this file exists to exercise that real,
+FINDINGS.md-documented combination without editing the genuine capture or inventing a value it
+never measured: `GovernorIsPerformanceOnAllCpus` still correctly fails against it (EPP is recorded
+alongside the governor, never as a substitute for it), while the D-14 environment snapshot records
+both values, so a reader can tell the two operating points apart.

@@ -1,6 +1,7 @@
 //! Integration tests for the D-06 preconditions, driven entirely by fixture data so
 //! they run identically on macOS and Linux (RESEARCH.md pitfall 5).
 
+use nr_capture::environment;
 use nr_capture::preconditions::{PreconditionSpec, refuse_on_violation, run_all};
 use nr_capture::sources::FixtureFacts;
 use nr_manifest::{InstrumentClass, PreconditionCheck, PreconditionResult, PreconditionStatus};
@@ -13,6 +14,16 @@ use nr_manifest::{InstrumentClass, PreconditionCheck, PreconditionResult, Precon
 /// this fixture; that would delete the phase's most important finding.
 const RIG_AS_FOUND: &str = include_str!("fixtures/probe-sysfs-tuning.txt");
 const VIOLATED: &str = include_str!("fixtures/violated-sysfs-tuning.txt");
+
+/// Derived, NOT a rig capture (see fixtures/README.md): reproduces the exact
+/// combination `docs/rig/recon-2026-08-31/FINDINGS.md`'s "The rt-tuning.service
+/// contradiction" found on the reference rig on 2026-08-31 -
+/// `scaling_governor=powersave` and `energy_performance_preference=performance` on
+/// every CPU simultaneously, the state power-profiles-daemon's own "performance"
+/// profile puts this Meteor Lake HWP backend into. `probe-sysfs-tuning.txt`'s own
+/// probe script never captured the EPP value, which is why this fixture exists
+/// rather than editing that one.
+const EPP_PERFORMANCE: &str = include_str!("fixtures/epp-performance-sysfs-tuning.txt");
 
 const TARGET_CPUS: [u32; 6] = [6, 7, 8, 9, 10, 11];
 
@@ -161,6 +172,45 @@ fn observed_value_is_recorded() {
         "observed should name the offending governor: {}",
         governor_result.observed
     );
+}
+
+/// The whole point of recording `energy_performance_preference` alongside
+/// `governor` (docs/measurement-protocol.md, "The governor operating point"):
+/// power-profiles-daemon's "performance" profile on this HWP backend never writes
+/// the literal `scaling_governor=performance` value this protocol requires, so the
+/// precondition must still fail, while the D-14 snapshot records both values so a
+/// reader can tell this operating point apart from one where neither lever is set.
+#[test]
+fn epp_and_governor_are_recorded_as_distinct_operating_points() {
+    let facts = FixtureFacts::parse(EPP_PERFORMANCE);
+
+    let results = run_all(&facts, &headline_spec());
+    let governor_result = results
+        .iter()
+        .find(|r| r.check == PreconditionCheck::GovernorIsPerformanceOnAllCpus)
+        .expect("GovernorIsPerformanceOnAllCpus result present");
+    assert_eq!(
+        governor_result.status,
+        PreconditionStatus::Fail,
+        "energy_performance_preference must never substitute for the literal \
+         scaling_governor=performance value this check requires: {governor_result:#?}"
+    );
+
+    let snap = environment::snapshot(&facts, "test-rig").expect("snapshot succeeds");
+    assert!(!snap.tuning.per_cpu_governor.is_empty());
+    for cpu_governor in &snap.tuning.per_cpu_governor {
+        assert_eq!(
+            cpu_governor.governor, "powersave",
+            "cpu{}: {cpu_governor:?}",
+            cpu_governor.cpu
+        );
+        assert_eq!(
+            cpu_governor.energy_performance_preference.as_deref(),
+            Some("performance"),
+            "cpu{}: {cpu_governor:?}",
+            cpu_governor.cpu
+        );
+    }
 }
 
 #[test]

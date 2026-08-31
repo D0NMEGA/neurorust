@@ -310,6 +310,13 @@ impl FixtureFacts {
             return self.get_key(&format!("cpu{rest}.governor"), path);
         }
 
+        if let Some(rest) = path
+            .strip_prefix("/sys/devices/system/cpu/cpu")
+            .and_then(|r| r.strip_suffix("/cpufreq/energy_performance_preference"))
+        {
+            return self.get_key(&format!("cpu{rest}.energy_performance_preference"), path);
+        }
+
         if path == "/sys/devices/system/cpu/intel_pstate/no_turbo" {
             return self.get_key("intel_pstate.no_turbo", path);
         }
@@ -644,6 +651,23 @@ mod tests {
         assert!(
             facts
                 .read_text("/sys/devices/system/cpu/cpu4/cpufreq/scaling_governor")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn fixture_facts_translates_energy_performance_preference_path() {
+        let facts = FixtureFacts::parse("cpu3.energy_performance_preference=performance\n");
+        assert_eq!(
+            facts
+                .read_text("/sys/devices/system/cpu/cpu3/cpufreq/energy_performance_preference")
+                .unwrap(),
+            "performance"
+        );
+        // Absent on a CPU this fixture never mentions, not a guessed value.
+        assert!(
+            facts
+                .read_text("/sys/devices/system/cpu/cpu4/cpufreq/energy_performance_preference")
                 .is_err()
         );
     }

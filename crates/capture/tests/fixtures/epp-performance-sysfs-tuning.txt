@@ -1,0 +1,57 @@
+# DERIVED FIXTURE, NOT A RIG CAPTURE.
+#
+# Every line below was written by hand; this is not raw tool output the way
+# probe-sysfs-tuning.txt is. It reproduces, for testing, the exact combination
+# docs/rig/recon-2026-08-31/FINDINGS.md's "The rt-tuning.service contradiction"
+# section found on the reference rig on 2026-08-31: every CPU's scaling_governor
+# reading powersave AND its energy_performance_preference reading performance at the
+# same moment. That is power-profiles-daemon's own "performance" profile on this
+# Meteor Lake HWP backend; it never writes the literal scaling_governor=performance
+# value GovernorIsPerformanceOnAllCpus requires. probe-sysfs-tuning.txt's own probe
+# script never captured energy_performance_preference at all (see this directory's
+# README.md), which is why this file exists rather than editing that one. No number
+# here may ever be quoted as a measurement or treated as a fresh rig probe.
+cpu0.governor=powersave
+cpu1.governor=powersave
+cpu10.governor=powersave
+cpu11.governor=powersave
+cpu12.governor=powersave
+cpu13.governor=powersave
+cpu14.governor=powersave
+cpu15.governor=powersave
+cpu16.governor=powersave
+cpu17.governor=powersave
+cpu18.governor=powersave
+cpu19.governor=powersave
+cpu2.governor=powersave
+cpu20.governor=powersave
+cpu21.governor=powersave
+cpu3.governor=powersave
+cpu4.governor=powersave
+cpu5.governor=powersave
+cpu6.governor=powersave
+cpu7.governor=powersave
+cpu8.governor=powersave
+cpu9.governor=powersave
+cpu0.energy_performance_preference=performance
+cpu1.energy_performance_preference=performance
+cpu10.energy_performance_preference=performance
+cpu11.energy_performance_preference=performance
+cpu12.energy_performance_preference=performance
+cpu13.energy_performance_preference=performance
+cpu14.energy_performance_preference=performance
+cpu15.energy_performance_preference=performance
+cpu16.energy_performance_preference=performance
+cpu17.energy_performance_preference=performance
+cpu18.energy_performance_preference=performance
+cpu19.energy_performance_preference=performance
+cpu2.energy_performance_preference=performance
+cpu20.energy_performance_preference=performance
+cpu21.energy_performance_preference=performance
+cpu3.energy_performance_preference=performance
+cpu4.energy_performance_preference=performance
+cpu5.energy_performance_preference=performance
+cpu6.energy_performance_preference=performance
+cpu7.energy_performance_preference=performance
+cpu8.energy_performance_preference=performance
+cpu9.energy_performance_preference=performance

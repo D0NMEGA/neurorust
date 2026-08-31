@@ -190,11 +190,24 @@ pub struct OsInfo {
 }
 
 /// One CPU's scaling governor, as read per-core rather than assumed uniform.
+///
+/// `energy_performance_preference` is a second, independent tuning lever some HWP
+/// (hardware P-state) backends drive alongside `governor`: on this project's own
+/// Meteor Lake reference rig, `power-profiles-daemon`'s "performance" profile leaves
+/// `governor` at `powersave` and expresses itself as
+/// `energy_performance_preference=performance` instead
+/// (`docs/rig/recon-2026-08-31/FINDINGS.md`, "The rt-tuning.service contradiction").
+/// `None` means the hardware has no `energy_performance_preference` file at all
+/// (non-HWP, non-Intel), never a stand-in for a read that failed. `governor` alone no
+/// longer fully describes the tuning state on a machine like this one, which is why
+/// the two are recorded side by side rather than one substituting for the other.
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct CpuGovernor {
     pub cpu: u32,
     pub governor: String,
+    /// `/sys/devices/system/cpu/cpu{cpu}/cpufreq/energy_performance_preference`.
+    pub energy_performance_preference: Option<String>,
 }
 
 /// One CPU's C-state setting. `disabled` records whether that state is blocked, which
@@ -493,6 +506,40 @@ mod tests {
     fn redact_cmdline_is_a_no_op_without_root_or_resume() {
         let raw = "BOOT_IMAGE=/vmlinuz ro quiet splash isolcpus=6-11";
         assert_eq!(KernelInfo::redact_cmdline(raw), raw);
+    }
+
+    /// `energy_performance_preference` must round-trip when present, when
+    /// explicitly `None`, and when the key is omitted entirely from the input
+    /// (this crate's Option-field convention, D-16): a manifest predating this
+    /// field, or hardware without the sysfs knob, must still deserialize.
+    #[test]
+    fn cpu_governor_energy_performance_preference_round_trips() {
+        let with_epp = CpuGovernor {
+            cpu: 6,
+            governor: "powersave".to_string(),
+            energy_performance_preference: Some("performance".to_string()),
+        };
+        let json = serde_json::to_string(&with_epp).expect("CpuGovernor must serialize");
+        assert!(json.contains("\"energy_performance_preference\":\"performance\""));
+        let restored: CpuGovernor =
+            serde_json::from_str(&json).expect("CpuGovernor must deserialize");
+        assert_eq!(restored, with_epp);
+
+        let without_epp = CpuGovernor {
+            cpu: 6,
+            governor: "powersave".to_string(),
+            energy_performance_preference: None,
+        };
+        let json_absent =
+            serde_json::to_string(&without_epp).expect("CpuGovernor must serialize when absent");
+        let restored_absent: CpuGovernor =
+            serde_json::from_str(&json_absent).expect("CpuGovernor must deserialize when absent");
+        assert_eq!(restored_absent, without_epp);
+
+        let minimal_json = r#"{"cpu":6,"governor":"powersave"}"#;
+        let restored_from_minimal: CpuGovernor =
+            serde_json::from_str(minimal_json).expect("a missing optional key must not error");
+        assert_eq!(restored_from_minimal.energy_performance_preference, None);
     }
 
     /// `PreconditionCheck::ALL` is a hand-written list next to a hand-written enum;

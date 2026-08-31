@@ -531,7 +531,22 @@ fn build_tuning(facts: &dyn SystemFacts, absent: &mut Vec<AbsentField>) -> Tunin
                 .unwrap_or_default()
                 .trim()
                 .to_string();
-            CpuGovernor { cpu, governor }
+            // Optional (D-16): absent on non-HWP and non-Intel hardware, and on
+            // this crate's own RIG_AS_FOUND fixture, whose probe script never
+            // captured it (docs/rig/recon-2026-08-31/FINDINGS.md). A second,
+            // independent tuning lever alongside `governor`, never a substitute
+            // for a read that failed.
+            let energy_performance_preference = facts
+                .read_text(&format!(
+                    "/sys/devices/system/cpu/cpu{cpu}/cpufreq/energy_performance_preference"
+                ))
+                .ok()
+                .map(|text| text.trim().to_string());
+            CpuGovernor {
+                cpu,
+                governor,
+                energy_performance_preference,
+            }
         })
         .collect();
     if per_cpu_governor.is_empty() {
@@ -539,6 +554,15 @@ fn build_tuning(facts: &dyn SystemFacts, absent: &mut Vec<AbsentField>) -> Tunin
             absent,
             "tuning.per_cpu_governor",
             "no scaling_governor files found",
+        );
+    } else if per_cpu_governor
+        .iter()
+        .all(|c| c.energy_performance_preference.is_none())
+    {
+        note_absent(
+            absent,
+            "tuning.per_cpu_governor.energy_performance_preference",
+            "no energy_performance_preference files found",
         );
     }
 
@@ -826,6 +850,34 @@ microcode\t: 0x28\n";
                 .iter()
                 .any(|f| f.field_path == "tuning.no_turbo"),
             "expected an absent_fields entry for tuning.no_turbo, got {:?}",
+            snap.absent_fields
+        );
+    }
+
+    #[test]
+    fn epp_absent_from_rig_as_found_fixture_is_recorded_honestly() {
+        // probe-sysfs-tuning.txt has no energy_performance_preference lines at all;
+        // the probe script that produced it never captured the value (see this
+        // crate's tests/fixtures/README.md). Every CPU's EPP must come back None,
+        // not an empty string or a guessed value, and the absence must be recorded
+        // rather than silently dropped (D-16).
+        let facts = base_facts();
+        let snap = snapshot(&facts, "precision3591").expect("snapshot succeeds");
+
+        assert!(!snap.tuning.per_cpu_governor.is_empty());
+        assert!(
+            snap.tuning
+                .per_cpu_governor
+                .iter()
+                .all(|c| c.energy_performance_preference.is_none()),
+            "expected every CPU's EPP to read None from a fixture with no EPP lines, got {:?}",
+            snap.tuning.per_cpu_governor
+        );
+        assert!(
+            snap.absent_fields
+                .iter()
+                .any(|f| f.field_path == "tuning.per_cpu_governor.energy_performance_preference"),
+            "expected an absent_fields entry for missing EPP, got {:?}",
             snap.absent_fields
         );
     }

@@ -223,13 +223,20 @@
       ]
     },
     "CpuGovernor": {
-      "description": "One CPU's scaling governor, as read per-core rather than assumed uniform.",
+      "description": "One CPU's scaling governor, as read per-core rather than assumed uniform.\n\n`energy_performance_preference` is a second, independent tuning lever some HWP\n(hardware P-state) backends drive alongside `governor`: on this project's own\nMeteor Lake reference rig, `power-profiles-daemon`'s \"performance\" profile leaves\n`governor` at `powersave` and expresses itself as\n`energy_performance_preference=performance` instead\n(`docs/rig/recon-2026-08-31/FINDINGS.md`, \"The rt-tuning.service contradiction\").\n`None` means the hardware has no `energy_performance_preference` file at all\n(non-HWP, non-Intel), never a stand-in for a read that failed. `governor` alone no\nlonger fully describes the tuning state on a machine like this one, which is why\nthe two are recorded side by side rather than one substituting for the other.",
       "type": "object",
       "properties": {
         "cpu": {
           "type": "integer",
           "format": "uint32",
           "minimum": 0
+        },
+        "energy_performance_preference": {
+          "description": "`/sys/devices/system/cpu/cpu{cpu}/cpufreq/energy_performance_preference`.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "governor": {
           "type": "string"

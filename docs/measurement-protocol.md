@@ -113,13 +113,13 @@ sudo systemctl start power-profiles-daemon.service
 ```
 
 The manifest's `tuning.per_cpu_governor` field records the literal `scaling_governor`
-value this protocol requires. It does not currently also record
-`energy_performance_preference`, and this finding shows that value is a second,
-independent lever power-profiles-daemon drives on this HWP backend: on a machine like this
-one, the governor value alone does not fully describe the tuning state a figure was taken
-under. `energy_performance_preference` must be captured alongside `scaling_governor` in a
-future revision of the manifest schema for exactly that reason; until then, an operator who
-wants the full picture reads it directly:
+value this protocol requires, alongside `energy_performance_preference`, since this finding
+shows that value is a second, independent lever power-profiles-daemon drives on this HWP
+backend: on a machine like this one, the governor value alone does not fully describe the
+tuning state a figure was taken under. EPP is recorded next to the governor, never as a
+substitute for it; `GovernorIsPerformanceOnAllCpus` still requires the literal
+`scaling_governor=performance` value regardless of what EPP reads. An operator who wants to
+check the live value directly, without waiting for a manifest, still reads it by hand:
 
 ```
 cat /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference | sort -u
