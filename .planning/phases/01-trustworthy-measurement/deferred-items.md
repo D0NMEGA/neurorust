@@ -27,3 +27,35 @@ originating plan; noted here for a future plan or maintenance pass to pick up.
   `nr-manifest` only documents the convention on the `argv` field's doc
   comment (and therefore the generated schema description) for plan 01-05 to
   implement as a contract, not re-derive.
+
+## From 01-02 (rig recon: tracers, tooling, isolation, tuning state)
+
+- **The rig boots untuned: `rt-tuning.service` loses a race with
+  `power-profiles-daemon` on every boot.** `rt-tuning.service` runs and exits
+  successfully at boot, but GDM's own greeter session (independent of any real
+  login) D-Bus-activates `power-profiles-daemon` within the same second, and
+  that daemon's "performance" profile is expressed on this Meteor Lake/HWP
+  backend as `scaling_governor=powersave` plus `energy_performance_preference=
+  performance`, never as the legacy `scaling_governor=performance` override
+  `rt-tuning.sh` writes. Net effect: every CPU is left at `powersave`
+  regardless of which service ran last or how healthy either looks in
+  `systemctl status`. Full root-cause chain: `docs/rig/recon-2026-08-31/
+  FINDINGS.md`, "The rt-tuning.service contradiction". Not fixed here per
+  explicit instruction (recon records rig state, never mutates it). Whichever
+  plan owns the harness's tuning/precondition story should close this, for
+  example by masking `power-profiles-daemon.service`, having `rt-tuning.service`
+  run later (`After=graphical.target`) or re-assert on a timer, or accepting
+  the race and relying entirely on `nr-capture`'s D-06 `governor-is-performance`
+  precondition to refuse untuned runs rather than trusting the service's
+  `ActiveState`.
+- **`nr-recon`/`nr-probe` (the two passwordless-root scripts) query the wrong
+  `no_turbo` sysfs path.** Both read `/sys/devices/system/intel_pstate/no_turbo`
+  (no `cpu/` segment), which does not exist on this kernel, and so always
+  report `unavailable`. The real, populated path is
+  `/sys/devices/system/cpu/intel_pstate/no_turbo` (confirmed present,
+  world-readable, currently `1`). Editing either script requires rig access
+  this plan did not use for anything beyond read-only recon and the two
+  approved probes; whoever next touches these scripts' source (outside this
+  repo, on the rig) should fix the path. Meanwhile, any in-repo precondition
+  code (`nr-capture`, plan 01-05) must use the correct path directly rather
+  than copying the scripts' query.
