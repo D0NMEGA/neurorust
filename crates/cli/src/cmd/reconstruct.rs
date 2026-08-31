@@ -681,6 +681,14 @@ fn build_tuning(
         "tuning.per_cpu_governor",
         "RIG.txt records a single governor value, not a per-CPU list",
     ));
+    absent.push(absent_field(
+        "tuning.per_cpu_governor.energy_performance_preference",
+        "this field was added to the manifest schema on 2026-08-31 (commit d73cc27), after \
+         this capture was taken, and was never recorded for it; the 2026-08-28 runs were taken \
+         on a live-USB stock kernel, a different machine state from the installed PREEMPT_RT \
+         system this field now describes, so no value can be inferred from the rig's current \
+         state",
+    ));
 
     let no_turbo = match rig.get("no_turbo").map(String::as_str) {
         Some("1") => Some(true),

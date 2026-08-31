@@ -134,6 +134,12 @@ fn reconstruct_records_absent_fields() {
         absent_paths.contains(&"kernel.is_realtime"),
         "absent_fields: {absent_paths:?}"
     );
+    // energy_performance_preference postdates every pre-harness capture (added 2026-08-31,
+    // commit d73cc27) and must never be inferred from the rig's current state.
+    assert!(
+        absent_paths.contains(&"tuning.per_cpu_governor.energy_performance_preference"),
+        "absent_fields: {absent_paths:?}"
+    );
 }
 
 #[test]
