@@ -1,5 +1,5 @@
 ---
-status: PARTIAL
+status: PASS
 agent: donny-executor
 phase: 01-trustworthy-measurement
 plan: 07
@@ -430,7 +430,48 @@ output to authenticate against because the TCP handshake itself never
 completed. See "Real rig verification" below for what this means for this
 execution's stated success criteria.
 
-## Real rig verification (BLOCKED - network outage, not completed)
+## Real rig verification (COMPLETED 2026-08-31)
+
+Performed against the live rig once it was reachable again. The earlier outage was a network
+partition (the dev host was on a different wifi network), not a rig failure: the rig was powered
+on throughout, and its `~/neurorust-agent.log` ends at the last command sent before the split.
+
+Setup performed to make this possible, which plans 01-11 through 01-15 also require: the
+repository was rsynced to `~/neurorust` on the rig, rustup installed a minimal stable toolchain,
+and `build-essential` supplied the C linker rustup warned was missing. `cargo build -p nr-cli
+--release` then completes natively on the rig in about 21 seconds.
+
+Result of `nrmeasure run --rig-slug precision3591 --class weekly --cpus 6-11 --main-cpus 0,1
+--duration 5`:
+
+```
+run refused: 8 precondition(s) violated
+  NoActiveSshSessions: observed "1", expected "0" (Fail)
+  SystemdDefaultTargetIsMultiUser: observed "graphical.target", expected "multi-user.target" (Fail)
+  DisplayManagerInactive: observed "gdm.service=active, ...", expected "inactive" (Fail)
+  NoGraphicalSession: observed "1", expected "0" (Fail)
+  GovernorIsPerformanceOnAllCpus: observed "cpu0=powersave", expected "performance on all CPUs" (Fail)
+  ThermalHeadroomAtStart: observed "63.0 C", expected "package temp <= 60 C" (Fail)
+  NoPackageManagerActivity: observed "snapd", expected "no apt, dpkg, unattended-upgrade or snapd process" (Fail)
+  TracersQuiescent: observed "current_tracer not available", expected "nop" (Unavailable)
+
+EXIT=2
+```
+
+Exit code 2, every offending check named with observed and expected values, and no run directory
+written (`measurements/` on the rig still contains only the 2026-08-28 set and INDEX.md).
+
+Three things worth recording beyond the stated criterion. The harness detected the SSH session
+being used to invoke it, which is precisely the contamination that invalidated the 2026-08-28
+baseline, so the check is not merely present but effective against the real failure mode. It
+reported all eight violations rather than bailing at the first. And it surfaced four conditions
+neither the fixture nor the recon had exercised: the graphical target and active GDM session,
+package-manager activity from snapd, and a thermal reading above the gate. The rig is further
+from a publishable state than the governor finding alone suggested, which is information plan
+01-11 needs before its calibration pair.
+
+## Superseded: original blocked note
+
 
 This execution's own success criteria require: "`nrmeasure run` against the
 REAL rig refuses, names the failing governor precondition, and records all
