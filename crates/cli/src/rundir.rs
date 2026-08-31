@@ -4,14 +4,6 @@
 //! Directory name: `<YYYY-MM-DD>-<rig-slug>-<run-class>[-NN]`. The date is the UTC
 //! date of the run start. `-NN` is a two-digit sequence appended only from the
 //! second run of the same date, rig and class onward, starting at `-02`.
-//!
-//! Task 1 of this plan builds this module ahead of `cmd::run` (task 2) calling into
-//! it. `nr-cli` is a binary-only crate (no `[lib]` target), so unlike the library
-//! crates the rest of the workspace is built from, a `pub` item here has no
-//! external consumer to make it exempt from dead-code analysis until something in
-//! this crate actually calls it. The allow below is removed in task 2's commit,
-//! once `cmd::run` does.
-#![allow(dead_code)]
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
