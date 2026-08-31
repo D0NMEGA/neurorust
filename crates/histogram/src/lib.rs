@@ -4,8 +4,4 @@
 //! percentile computation, and overflow accounting (BENCH-05). Platform independent by
 //! design so the macOS CI leg exercises it for real.
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn crate_builds() {}
-}
+pub mod hist;
