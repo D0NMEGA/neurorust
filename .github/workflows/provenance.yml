@@ -1,0 +1,25 @@
+name: provenance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provenance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the harness
+        run: cargo build -p nr-cli --release
+      - name: Every capture has a valid manifest and the index is current
+        run: ./target/release/nrmeasure verify --strict --check-index
