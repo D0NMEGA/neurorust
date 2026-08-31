@@ -1,0 +1,252 @@
+{
+  "schema_version": 1,
+  "provenance_tier": "reconstructed",
+  "run_id": "2026-08-28-precision3591",
+  "run_class": "screen",
+  "instrument_class": "headline-series",
+  "utc_start": "2026-08-28T15:36:00Z",
+  "utc_end": "2026-08-28T21:05:00Z",
+  "harness": {
+    "version": "0.1.0",
+    "git_sha": "09bbdc5bd1c84a8f82cfad491ad41ee1afafaee1",
+    "git_dirty": true
+  },
+  "host": {
+    "rig_slug": "precision3591",
+    "system_vendor": "Dell",
+    "system_model": "Inc. Precision 3591",
+    "bios_version": "1.23.0",
+    "bios_release_date": "04/24/2026",
+    "cpu_model": "Intel(R) Core(TM) Ultra 9 185H",
+    "microcode": "0x28",
+    "logical_cpus": 22,
+    "physical_cores": 16,
+    "sockets": 1,
+    "p_cores": "0-11",
+    "e_cores": "12-21",
+    "memory_gb": 30
+  },
+  "kernel": {
+    "release": "7.0.0-30-generic",
+    "version_string": "#30-Ubuntu SMP PREEMPT_DYNAMIC Fri Jul 31 18:22:54 UTC 2026",
+    "is_realtime": true,
+    "preempt_model": "PREEMPT_DYNAMIC",
+    "cmdline": "BOOT_IMAGE=/casper/vmlinuz --- quiet splash",
+    "isolcpus": null,
+    "nohz_full": null,
+    "rcu_nocbs": null,
+    "irqaffinity": null
+  },
+  "os": {
+    "distro": "Ubuntu",
+    "version": "26.04.1 LTS",
+    "session_kind": "live-usb",
+    "systemd_default_target": "",
+    "display_manager_active": false
+  },
+  "tuning": {
+    "per_cpu_governor": [],
+    "no_turbo": true,
+    "cstates": [
+      {
+        "cpu": 0,
+        "name": "POLL",
+        "disabled": false
+      },
+      {
+        "cpu": 0,
+        "name": "C1E",
+        "disabled": false
+      },
+      {
+        "cpu": 0,
+        "name": "C6",
+        "disabled": true
+      },
+      {
+        "cpu": 0,
+        "name": "C10",
+        "disabled": true
+      }
+    ],
+    "rt_tuning_service": {
+      "unit": "rt-tuning.service",
+      "active_state": "",
+      "sub_state": "",
+      "unit_file_state": ""
+    }
+  },
+  "power": {
+    "ac_online": true,
+    "battery_status": "Charging",
+    "battery_percent": 85,
+    "thermal_zones": [],
+    "package_temp_c_max": null
+  },
+  "network": {
+    "wired_iface": "enp0s31f6",
+    "wired_driver": "e1000e",
+    "wired_state": "down",
+    "ptp_capabilities": "hardware-raw-clock",
+    "wifi_iface": "wlp0s20f3",
+    "wifi_driver": "iwlwifi",
+    "wifi_state": null
+  },
+  "preconditions": [],
+  "interference": {
+    "before": {
+      "isolated_cpus": [],
+      "cal_ipis": [],
+      "tlb_ipis": [],
+      "context_switches": [],
+      "irqs": []
+    },
+    "after": {
+      "isolated_cpus": [],
+      "cal_ipis": [],
+      "tlb_ipis": [],
+      "context_switches": [],
+      "irqs": []
+    },
+    "delta": {
+      "cal_ipis": [],
+      "tlb_ipis": [],
+      "context_switches": [],
+      "irqs": []
+    },
+    "verdict": "contaminated"
+  },
+  "tools": [],
+  "artifacts": [
+    {
+      "path": "cyclictest-rt-isolated-idle-10m.hist",
+      "bytes": 23399,
+      "blake3": "495c45891c866a627334e74d810a5377be684beb6d8e8a17b7853f8c4cb9c88f",
+      "kind": "cyclictest-hist",
+      "stored": "in-repo"
+    },
+    {
+      "path": "hwlatdetect-pcore-underload-10m.txt",
+      "bytes": 1044,
+      "blake3": "b950a8f0ed407a621ddb52008f64476962d42c5ae5b285024e9833dd89f98efc",
+      "kind": "hwlatdetect-text",
+      "stored": "in-repo"
+    },
+    {
+      "path": "hwlatdetect-stock-15m.txt",
+      "bytes": 15250,
+      "blake3": "35b4a7a11ea90e7e336635f4f1e3427fc0f539add38d66643286310932534af2",
+      "kind": "hwlatdetect-text",
+      "stored": "in-repo"
+    },
+    {
+      "path": "hwlatdetect-tuned-15m.txt",
+      "bytes": 390,
+      "blake3": "ae3e8c0c48723300f769934f46bf4cf56d7a1a927ab985a4c61f91b1a6e8291f",
+      "kind": "hwlatdetect-text",
+      "stored": "in-repo"
+    },
+    {
+      "path": "hwlatdetect-tuned-underload-15m.txt",
+      "bytes": 1733,
+      "blake3": "e237e74c728cf1a8f99d9cec4dfe98e0730a5f472b8bf993a4146c203e604c96",
+      "kind": "hwlatdetect-text",
+      "stored": "in-repo"
+    },
+    {
+      "path": "partition-table-AFTER-resize.txt",
+      "bytes": 869,
+      "blake3": "3d97d5223ece8e08f253581423da5a939085666bc6202ae90793786e8e6f38af",
+      "kind": "other",
+      "stored": "in-repo"
+    },
+    {
+      "path": "partition-table-BEFORE-resize.txt",
+      "bytes": 869,
+      "blake3": "323d51a6ce9b78ed83a3dc0ea00b934f69c3593b6f0db56b14b58d42a96b333e",
+      "kind": "other",
+      "stored": "in-repo"
+    }
+  ],
+  "absent_fields": [
+    {
+      "field_path": "kernel.isolcpus",
+      "reason": "isolcpus not present on RIG.txt's cmdline: value"
+    },
+    {
+      "field_path": "kernel.nohz_full",
+      "reason": "nohz_full not present on RIG.txt's cmdline: value"
+    },
+    {
+      "field_path": "kernel.rcu_nocbs",
+      "reason": "rcu_nocbs not present on RIG.txt's cmdline: value"
+    },
+    {
+      "field_path": "kernel.irqaffinity",
+      "reason": "irqaffinity not present on RIG.txt's cmdline: value"
+    },
+    {
+      "field_path": "os.systemd_default_target",
+      "reason": "neither RIG.txt nor the README records the systemd default target"
+    },
+    {
+      "field_path": "os.display_manager_active",
+      "reason": "neither RIG.txt nor the README records display manager state"
+    },
+    {
+      "field_path": "tuning.per_cpu_governor",
+      "reason": "RIG.txt records a single governor value, not a per-CPU list"
+    },
+    {
+      "field_path": "tuning.per_cpu_governor.energy_performance_preference",
+      "reason": "this field was added to the manifest schema on 2026-08-31 (commit d73cc27), after this capture was taken, and was never recorded for it; the 2026-08-28 runs were taken on a live-USB stock kernel, a different machine state from the installed PREEMPT_RT system this field now describes, so no value can be inferred from the rig's current state"
+    },
+    {
+      "field_path": "tuning.rt_tuning_service",
+      "reason": "RIG.txt predates rt-tuning.service; the README does not record its state either"
+    },
+    {
+      "field_path": "power.thermal_zones",
+      "reason": "RIG.txt's power: line carries AC/battery state only, no thermal readings"
+    },
+    {
+      "field_path": "power.package_temp_c_max",
+      "reason": "RIG.txt's power: line carries AC/battery state only, no thermal readings"
+    },
+    {
+      "field_path": "network.wifi_state",
+      "reason": "RIG.txt's nic_wifi: line carries no state= key"
+    },
+    {
+      "field_path": "preconditions",
+      "reason": "the harness did not exist when this capture was taken"
+    },
+    {
+      "field_path": "interference.before",
+      "reason": "no /proc/interrupts snapshot exists for a pre-harness capture"
+    },
+    {
+      "field_path": "interference.after",
+      "reason": "no /proc/interrupts snapshot exists for a pre-harness capture"
+    },
+    {
+      "field_path": "interference.delta",
+      "reason": "no /proc/interrupts snapshot exists for a pre-harness capture"
+    },
+    {
+      "field_path": "tools",
+      "reason": "RIG.txt and the README describe the run in prose but do not record a machine-readable tool invocation (argv, exit code) for the pre-harness capture"
+    },
+    {
+      "field_path": "utc_start",
+      "reason": "no pre-harness capture records a live run-start timestamp; --utc-start is the operator's best defensible reconstruction from artifact modification times and other evidence, not a value observed by the tool that ran"
+    },
+    {
+      "field_path": "utc_end",
+      "reason": "no pre-harness capture records a live run-end timestamp; --utc-end is the operator's best defensible reconstruction from artifact modification times and other evidence, not a value observed by the tool that ran"
+    }
+  ],
+  "excluded_from_series": true,
+  "exclusion_reason": "SSH commands were executed against the machine during the cyclictest run (ps -L, tmux capture-pane, scp) and a GNOME session was active with a user typing into it; /proc/interrupts showed CAL counts of roughly 137,000 on CPUs 6 to 11",
+  "notes": "Firmware screen (four hwlatdetect runs on a live USB stock kernel) plus the first PREEMPT_RT cyclictest run on the installed system. The hwlatdetect runs and the cyclictest run were taken under different kernels and different session kinds; see README.md.\n\nRIG.txt recorded a single scaling governor value: performance"
+}
