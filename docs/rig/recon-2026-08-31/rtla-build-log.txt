@@ -1,0 +1,87 @@
+OUTCOME: rtla-available
+
+# Captured 2026-08-31. RESEARCH.md's environment-availability table assumed rtla would need to
+# be built from the kernel source tree (tools/tracing/rtla), because it has no standalone Ubuntu
+# package. That half of the assumption is confirmed below (apt-cache policy rtla is empty). What
+# has changed since RESEARCH.md was written: on this rig's Ubuntu 26.04.1 RT kernel line, rtla
+# ships as a file inside the already-installed linux-tools-common package, tied to the kernel's
+# own tools tree rather than to rt-tests. No clone, no build, and no build dependencies were
+# needed or installed. Budget note: this took under two minutes of read-only commands, well
+# inside the plan's 90 minute build budget, because no build was required.
+
+=== apt-cache policy rtla ===
+(empty output: no standalone "rtla" package exists in the Ubuntu archive, confirming
+RESEARCH.md's finding that rtla is not packaged on its own)
+
+=== dpkg -S "$(command -v rtla)" ===
+linux-tools-common: /usr/bin/rtla
+
+=== dpkg -l rt-tests (for contrast: rtla is NOT part of this package) ===
+ii  rt-tests       2.9-1ubuntu1 amd64        Test programs for rt kernels
+
+=== dpkg -l linux-tools-common (the package that actually owns /usr/bin/rtla) ===
+ii  linux-tools-common 7.0.0-30.30    all          Linux kernel version specific tools for version 7.0.0
+
+=== rtla --version ===
+(exit code 1: "--version" is not a valid top-level flag; rtla's only top-level arguments are the
+osnoise/hwnoise/timerlat subcommands. Every invocation, valid or not, prints a version banner
+first. Combined stdout+stderr of `rtla --version`:)
+
+rtla version 7.0.12
+
+  usage: rtla COMMAND ...
+
+  commands:
+     osnoise  - gives information about the operating system noise (osnoise)
+     hwnoise  - gives information about hardware-related noise
+     timerlat - measures the timer irq and thread latency
+
+(the same banner, "rtla version 7.0.12", appears for bare `rtla` and `rtla --help` too; this is
+the correct way to read the version, not a dedicated --version flag)
+
+=== rtla timerlat top --help ===
+rtla timerlat top: a per-cpu summary of the timer latency (version 7.0.12)
+
+  usage: [rtla] timerlat [top] [-h] [-q] [-a us] [-d s] [-D] [-n] [-p us] [-i us] [-T us] [-s us] \
+	  [[-t [file]] [-e sys[:event]] [--filter <filter>] [--trigger <trigger>] [-c cpu-list] [-H cpu-list]\
+	  [-P priority] [--dma-latency us] [--aa-only us] [-C [cgroup_name]] [-u|-k] [--warm-up s] [--deepest-idle-state n]
+
+	  -h/--help: print this menu
+	  -a/--auto: set automatic trace mode, stopping the session if argument in us latency is hit
+	     --aa-only us: stop if <us> latency is hit, only printing the auto analysis (reduces CPU usage)
+	  -p/--period us: timerlat period in us
+	  -i/--irq us: stop trace if the irq latency is higher than the argument in us
+	  -T/--thread us: stop trace if the thread latency is higher than the argument in us
+	  -s/--stack us: save the stack trace at the IRQ if a thread latency is higher than the argument in us
+	  -c/--cpus cpus: run the tracer only on the given cpus
+	  -H/--house-keeping cpus: run rtla control threads only on the given cpus
+	  -C/--cgroup [cgroup_name]: set cgroup, if no cgroup_name is passed, the rtla's cgroup will be inherited
+	  -d/--duration time[s|m|h|d]: duration of the session
+	  -D/--debug: print debug info
+	     --dump-tasks: prints the task running on all CPUs if stop conditions are met (depends on !--no-aa)
+	  -t/--trace [file]: save the stopped trace to [file|timerlat_trace.txt]
+	  -e/--event <sys:event>: enable the <sys:event> in the trace instance, multiple -e are allowed
+	     --filter <command>: enable a trace event filter to the previous -e event
+	     --trigger <command>: enable a trace event trigger to the previous -e event
+	  -n/--nano: display data in nanoseconds
+	     --no-aa: disable auto-analysis, reducing rtla timerlat cpu usage
+	  -q/--quiet print only a summary at the end
+	     --dma-latency us: set /dev/cpu_dma_latency latency <us> to reduce exit from idle latency
+	  -P/--priority o:prio|r:prio|f:prio|d:runtime:period : set scheduling parameters
+		o:prio - use SCHED_OTHER with prio
+		r:prio - use SCHED_RR with prio
+		f:prio - use SCHED_FIFO with prio
+		d:runtime[us|ms|s]:period[us|ms|s] - use SCHED_DEADLINE with runtime and period
+						       in nanoseconds
+	  -u/--user-threads: use rtla user-space threads instead of kernel-space timerlat threads
+	  -k/--kernel-threads: use timerlat kernel-space threads instead of rtla user-space threads
+	  -U/--user-load: enable timerlat for user-defined user-space workload
+	     --warm-up s: let the workload run for s seconds before collecting data
+	     --trace-buffer-size kB: set the per-cpu trace buffer size in kB
+	     --deepest-idle-state n: only go down to idle state n on cpus used by timerlat to reduce exit from idle latency
+	     --on-threshold <action>: define action to be executed at latency threshold, multiple are allowed
+
+Plan 01-12 uses `rtla timerlat top --cpus 6-11 --auto <us>` as the attribution instrument for the
+PLAT-01 investigation runs, per RESEARCH.md's primary recommendation. `cyclictest --breaktrace
+--tracemark` remains the separate, literal capture the roadmap success criterion names; both are
+produced, neither substitutes for the other (RESEARCH.md open question 1).
