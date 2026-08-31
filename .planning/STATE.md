@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-08-31T07:15:13.348Z"
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-08-31T15:26:05.710Z"
 last_activity: 2026-08-31
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 15
-  completed_plans: 5
-  percent: 33
+  completed_plans: 6
+  percent: 40
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 01 (trustworthy-measurement) — EXECUTING
-Plan: 6 of 15
+Plan: 7 of 15
 Status: Ready to execute
 Last activity: 2026-08-31
 
-Progress: [███░░░░░░░] 33%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
@@ -57,6 +57,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 01 P02 | 25min | 3 tasks | 15 files |
 | Phase 01 P04 | 18min | 3 tasks | 7 files |
 | Phase 01 P05 | 50min | 3 tasks | 12 files |
+| Phase 01 P06 | 11min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,9 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-05: nr_manifest InterferenceSnapshot.context_switches populated from /proc/interrupts RES row, not /proc/stat ctxt — That field is typed Vec<CpuCounter>, one entry per isolated CPU, but /proc/stat's ctxt is a single machine-wide counter with no per-CPU breakdown and cannot fill it at all. RES (rescheduling interrupts) is the closest true per-CPU scheduling-interference signal available without a heavier tracer.
 - [Phase 01]: 01-05: D-15 contamination reason lives in a local VerdictOutcome wrapper, not a new nr_manifest field — nr_manifest::InterferenceSnapshotPair (plan 01-03's already-shipped, schema-generated type) has no reason field. Adding one would touch crates/manifest/, schemas/manifest.schema.json and the committed minimal-manifest.json fixture, none of which are in this plan's file list. interference::verdict returns a local wrapper instead.
 - [Phase 01]: 01-05: argv relativization implemented as a standalone module (argv.rs), closing plan 01-03's deferred-items.md carry-forward — None of this plan's three tasks shell out to a tool or build a ToolInvocation themselves (nr-cli, plan 01-07, does that per this plan's own interfaces block). relativize_argv is the standalone, tested utility nr-cli will call, so the rewrite nr_manifest's argv doc comment promises still lives in nr-capture.
+- [Phase 01]: 01-06: record_gap added as a generic single-week gap writer alongside the plan's named record_gaps, so GapReason::RefusedOnPrecondition and RunFailed have a real producer — D-08 requires a refused run to produce the same recorded gap a missed week does, and the refused_run_records_gap test (owned by this plan per 01-VALIDATION.md) had no function to call otherwise.
+- [Phase 01]: 01-06: blake3 added as a direct nr-metrics dependency so render_run_report can name the manifest blake3 it was generated from — nr_manifest's public API exposes only a file-path hasher (blake3_file), not a bytes hasher, and render_run_report receives an in-memory RunManifest, not a path; adding a bytes-hasher to nr_manifest would have touched a crate outside this plan's file list.
+- [Phase 01]: 01-06: no over-gate sample count (samples_above/samples_at_or_above) appears anywhere in this plan's code — PLAT-03's decomposition compares two scalars (observed max vs the 30us gate, and vs the firmware floor), not a population count, so the 2026-08-31 convention change to samples_at_or_above had no code surface to apply to in nr-metrics. Confirmed by grep after implementation.
 
 ### Pending Todos
 
@@ -100,8 +104,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-31T07:15:13.346Z
-Stopped at: Completed 01-05-PLAN.md
+Last session: 2026-08-31T15:26:05.708Z
+Stopped at: Completed 01-06-PLAN.md
 Resume file: None
 
 Next: `/donny-plan-phase 1`
