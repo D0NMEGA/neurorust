@@ -507,9 +507,44 @@ fn build_facts(fixture_path: Option<&Path>) -> Result<Box<dyn SystemFacts>> {
     if let Some(path) = fixture_path {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("failed to read {FACTS_FIXTURE_ENV} at {}", path.display()))?;
-        return Ok(Box::new(FixtureFacts::parse(&text)));
+        let (simple_text, blocks) = extract_multiline_blocks(&text);
+        let mut facts = FixtureFacts::parse(&simple_text);
+        for (key, value) in blocks {
+            facts = facts.with(&key, &value);
+        }
+        return Ok(Box::new(facts));
     }
     live_facts()
+}
+
+/// `FixtureFacts::parse`'s format is one assignment per line, which has no way to
+/// represent a value with embedded newlines, e.g. the real, multi-line content of
+/// `/proc/cpuinfo` or `/etc/os-release` the D-14 environment snapshot reads.
+/// Extends the format, in this crate only, with an `@begin <key>` / `@end` block
+/// whose body (joined with real newlines) is applied afterward via
+/// `FixtureFacts::with`, which takes a plain string and has no line-splitting
+/// concern of its own. `nr_capture`'s fixture format itself is untouched; this is
+/// a preprocessing step entirely on this crate's side of the seam.
+fn extract_multiline_blocks(text: &str) -> (String, Vec<(String, String)>) {
+    let mut simple_lines = Vec::new();
+    let mut blocks: Vec<(String, String)> = Vec::new();
+    let mut current: Option<(String, Vec<&str>)> = None;
+
+    for line in text.lines() {
+        if let Some(key) = line.strip_prefix("@begin ") {
+            current = Some((key.trim().to_string(), Vec::new()));
+        } else if line.trim() == "@end" {
+            if let Some((key, body)) = current.take() {
+                blocks.push((key, body.join("\n")));
+            }
+        } else if let Some((_, body)) = current.as_mut() {
+            body.push(line);
+        } else {
+            simple_lines.push(line);
+        }
+    }
+
+    (simple_lines.join("\n"), blocks)
 }
 
 #[cfg(target_os = "linux")]
@@ -690,6 +725,38 @@ mod tests {
     const INTERRUPTS: &str =
         include_str!("../../../capture/tests/fixtures/probe-proc-interrupts.txt");
 
+    /// `probe-sysfs-tuning.txt` carries only the sysfs tuning probe; it has no
+    /// `/proc/cpuinfo`, `/proc/meminfo`, `/proc/cmdline`, or `/etc/os-release`
+    /// data at all. Appended to a fixture (via `tuned_facts_text`) so the D-14
+    /// host/kernel/os fields are genuinely populated rather than empty, using the
+    /// `@begin`/`@end` extension `extract_multiline_blocks` understands for the
+    /// two values that do not fit on one line.
+    const D14_ENVIRONMENT_FIXTURE: &str = "\
+/proc/meminfo=MemTotal:       31457280 kB
+/proc/cmdline=BOOT_IMAGE=/vmlinuz-7.0.0-30-realtime root=UUID=1111-2222 ro quiet splash isolcpus=6-11 nohz_full=6-11 rcu_nocbs=6-11 irqaffinity=0-5,12-21
+/proc/sys/kernel/osrelease=7.0.0-30-realtime
+/proc/sys/kernel/version=#30-Ubuntu SMP PREEMPT_RT Fri Jul 31 18:22:54 UTC 2026
+@begin /proc/cpuinfo
+processor\t: 0
+vendor_id\t: GenuineIntel
+model name\t: Intel(R) Core(TM) Ultra 9 185H
+physical id\t: 0
+core id\t\t: 0
+microcode\t: 0x28
+
+processor\t: 1
+vendor_id\t: GenuineIntel
+model name\t: Intel(R) Core(TM) Ultra 9 185H
+physical id\t: 0
+core id\t\t: 1
+microcode\t: 0x28
+@end
+@begin /etc/os-release
+NAME=\"Ubuntu\"
+VERSION=\"26.04.1 LTS\"
+@end
+";
+
     const FAKE_HIST: &str = "# Histogram\n\
 000001 000005\n\
 000002 000003\n\
@@ -752,13 +819,15 @@ mod tests {
                 "intel_pstate.no_turbo=unavailable",
                 "intel_pstate.no_turbo=1",
             );
-        text.lines()
+        let simple: String = text
+            .lines()
             .map(|line| match line.split_once('=') {
                 Some((key, _)) if key.starts_with("thermal.") => format!("{key}=40000"),
                 _ => line.to_string(),
             })
             .collect::<Vec<_>>()
-            .join("\n")
+            .join("\n");
+        format!("{simple}\n{D14_ENVIRONMENT_FIXTURE}")
     }
 
     fn write_fake_cyclictest(dir: &Path) -> PathBuf {

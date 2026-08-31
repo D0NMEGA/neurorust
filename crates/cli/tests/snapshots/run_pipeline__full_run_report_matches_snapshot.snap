@@ -1,0 +1,429 @@
+---
+source: crates/cli/tests/run_pipeline.rs
+expression: redact_report(&report)
+---
+# Run report
+
+run id: 2026-08-31-precision3591-recon
+run class: recon
+instrument class: headline-series
+provenance tier: harness-generated
+utc start: [redacted]
+utc end: [redacted]
+manifest blake3: [redacted]
+
+## Rig and tuning
+
+```
+system:        
+bios:          released 
+cpu:          Intel(R) Core(TM) Ultra 9 185H
+topology:     2 logical / 2 cores / 1 socket
+p_cores:      
+e_cores:      
+microcode:    0x28
+kernel:       7.0.0-30-realtime (#30-Ubuntu SMP PREEMPT_RT Fri Jul 31 18:22:54 UTC 2026)
+os:           Ubuntu 26.04.1 LTS
+session:      installed display_manager_active=false
+memory_gb:    30
+cmdline:      BOOT_IMAGE=/vmlinuz-7.0.0-30-realtime root=[redacted] ro quiet splash isolcpus=6-11 nohz_full=6-11 rcu_nocbs=6-11 irqaffinity=0-5,12-21
+governor:     cpu0=performance cpu1=performance cpu2=performance cpu3=performance cpu4=performance cpu5=performance cpu6=performance cpu7=performance cpu8=performance cpu9=performance cpu10=performance cpu11=performance cpu12=performance cpu13=performance cpu14=performance cpu15=performance cpu16=performance cpu17=performance cpu18=performance cpu19=performance cpu20=performance cpu21=performance
+no_turbo:     1
+cstates:      cpu0.POLL=on cpu0.C1E=on
+power:        AC=1 battery=Charging
+nic_wired:    absent driver=absent state=absent
+nic_ptp:      absent
+nic_wifi:     absent driver=absent
+```
+
+## Preconditions
+
+| check | status | observed | expected |
+|-------|--------|----------|----------|
+| no-active-ssh-sessions | pass | 0 | 0 |
+| systemd-default-target-is-multi-user | pass | multi-user.target | multi-user.target |
+| display-manager-inactive | pass | gdm.service=inactive | inactive |
+| no-graphical-session | pass | 0 | 0 |
+| governor-is-performance-on-all-cpus | pass | performance on 22 CPUs | performance on all CPUs |
+| no-turbo-enabled | pass | 1 | 1 |
+| deep-cstates-disabled | pass | C6 not present, C10 not present | C6 disabled, C10 disabled |
+| isolcpus-covers-target-cpus | pass | 6-11 | 6-11 |
+| kernel-is-realtime | pass | 1 | 1 |
+| rt-tuning-service-active | pass | active | active |
+| on-ac-power | pass | AC=1 | AC=1 |
+| thermal-headroom-at-start | pass | 40.0 C | package temp <= 60 C |
+| no-package-manager-activity | pass | none | no apt, dpkg, unattended-upgrade or snapd process |
+| tracers-quiescent | pass | nop | nop |
+
+## Contamination verdict
+
+verdict: uncalibrated
+reason: no calibrated contamination thresholds exist yet (D-17)
+
+counter deltas per isolated cpu:
+
+| cpu | cal ipis | tlb ipis | context switches | irqs |
+|-----|----------|----------|-------------------|------|
+| 6 | 0 | 0 | 0 | 0 |
+| 7 | 0 | 0 | 0 | 0 |
+| 8 | 0 | 0 | 0 | 0 |
+| 9 | 0 | 0 | 0 | 0 |
+| 10 | 0 | 0 | 0 | 0 |
+| 11 | 0 | 0 | 0 | 0 |
+
+## Results
+
+| percentile | latency (us) |
+|------------|---------------|
+| p50 | 2 |
+| p95 | 4 |
+| p99 | 9 |
+| p99.9 | 10 |
+
+sample count: 17995844
+overflow count: 888
+maximum: 3806 us
+
+## Distribution
+
+ASCII histogram, bins 1 to 399 us, count axis on a log2 scale, one row per non-empty bin.
+
+```
+     1 us | ###### 13
+     2 us | ######################################## 11762815
+     3 us | ##################################### 3906303
+     4 us | ################################### 1681822
+     5 us | ############################# 153475
+     6 us | #################### 4094
+     7 us | ######################## 21287
+     8 us | ############################## 187127
+     9 us | ############################## 197749
+    10 us | ########################### 65850
+    11 us | ####################### 11239
+    12 us | ################## 1529
+    13 us | ############## 272
+    14 us | ########### 79
+    15 us | ######### 37
+    16 us | ######## 23
+    17 us | ###### 9
+    18 us | ##### 8
+    19 us | ### 2
+    20 us | #### 4
+    21 us | ### 2
+    22 us | ## 1
+    23 us | ## 1
+    24 us | ## 1
+    25 us | ### 3
+    27 us | ## 1
+    28 us | ## 1
+    29 us | #### 4
+    30 us | #### 4
+    31 us | ##### 6
+    32 us | ##### 7
+    33 us | #### 4
+    34 us | ### 2
+    35 us | #### 4
+    36 us | ##### 7
+    37 us | ### 3
+    39 us | ## 1
+    41 us | ## 1
+    43 us | #### 4
+    44 us | ## 1
+    45 us | ### 2
+    46 us | ## 1
+    47 us | ### 2
+    48 us | ## 1
+    51 us | #### 5
+    52 us | ### 2
+    53 us | ## 1
+    54 us | ### 2
+    55 us | ### 2
+    56 us | ## 1
+    57 us | ### 3
+    58 us | ### 2
+    59 us | ### 2
+    60 us | ### 2
+    61 us | ## 1
+    62 us | ##### 7
+    63 us | ## 1
+    64 us | ### 3
+    65 us | #### 4
+    66 us | ### 2
+    67 us | ### 2
+    68 us | ### 2
+    69 us | ##### 8
+    70 us | ### 2
+    71 us | ### 3
+    72 us | ### 2
+    73 us | ##### 7
+    74 us | ##### 7
+    75 us | ### 2
+    76 us | ### 2
+    77 us | ##### 6
+    78 us | #### 5
+    79 us | ### 3
+    80 us | #### 5
+    81 us | ##### 6
+    82 us | ##### 7
+    83 us | ### 3
+    84 us | #### 5
+    85 us | ### 2
+    86 us | ##### 7
+    87 us | ### 3
+    88 us | ###### 9
+    89 us | #### 5
+    90 us | ### 3
+    91 us | ##### 6
+    92 us | ### 2
+    93 us | ### 2
+    94 us | ### 3
+    95 us | ### 3
+    96 us | ### 3
+    97 us | ##### 6
+    98 us | ##### 7
+    99 us | ##### 6
+   100 us | ##### 7
+   101 us | ###### 9
+   102 us | ##### 7
+   103 us | ##### 6
+   104 us | ##### 7
+   105 us | ##### 8
+   106 us | #### 5
+   107 us | ###### 10
+   108 us | ##### 8
+   109 us | ##### 7
+   110 us | #### 4
+   111 us | #### 5
+   112 us | #### 5
+   113 us | #### 5
+   114 us | #### 5
+   115 us | #### 5
+   116 us | ##### 8
+   117 us | #### 4
+   118 us | #### 4
+   119 us | ##### 8
+   120 us | ##### 7
+   121 us | ##### 6
+   122 us | #### 5
+   123 us | #### 5
+   124 us | ### 2
+   125 us | #### 5
+   126 us | #### 5
+   127 us | ##### 7
+   128 us | ##### 7
+   129 us | ##### 7
+   130 us | #### 4
+   131 us | ###### 9
+   132 us | #### 5
+   133 us | ### 2
+   134 us | ###### 10
+   135 us | ##### 6
+   136 us | ##### 8
+   137 us | #### 5
+   139 us | ##### 7
+   140 us | #### 5
+   141 us | #### 4
+   142 us | #### 5
+   143 us | ####### 16
+   144 us | ##### 7
+   145 us | ##### 8
+   146 us | ### 2
+   147 us | ### 3
+   148 us | #### 4
+   149 us | ## 1
+   150 us | #### 5
+   151 us | ### 2
+   152 us | #### 4
+   153 us | ##### 7
+   154 us | #### 5
+   155 us | ### 3
+   156 us | ### 2
+   157 us | ##### 6
+   158 us | ### 3
+   159 us | #### 4
+   160 us | ##### 7
+   161 us | ###### 9
+   162 us | ###### 9
+   163 us | ### 2
+   164 us | ##### 8
+   165 us | #### 4
+   166 us | #### 5
+   167 us | ##### 7
+   168 us | #### 5
+   169 us | ##### 7
+   170 us | ### 3
+   171 us | ### 2
+   172 us | #### 4
+   173 us | ### 3
+   174 us | #### 5
+   175 us | #### 5
+   176 us | #### 5
+   177 us | ### 2
+   178 us | #### 4
+   179 us | ### 3
+   180 us | ##### 6
+   181 us | ##### 7
+   182 us | ### 2
+   183 us | #### 4
+   184 us | ##### 7
+   185 us | ##### 6
+   186 us | ##### 6
+   187 us | ##### 6
+   188 us | #### 5
+   189 us | ##### 6
+   190 us | ##### 7
+   191 us | ### 3
+   192 us | ### 2
+   193 us | ##### 8
+   194 us | ### 3
+   195 us | ##### 7
+   196 us | ##### 8
+   197 us | ##### 7
+   198 us | ##### 7
+   199 us | #### 4
+   200 us | ### 2
+   201 us | ##### 8
+   202 us | ##### 6
+   203 us | #### 4
+   204 us | ##### 7
+   205 us | ##### 6
+   206 us | ##### 8
+   207 us | #### 4
+   208 us | ##### 7
+   209 us | ### 2
+   210 us | ##### 6
+   211 us | ### 3
+   212 us | ##### 7
+   213 us | #### 4
+   214 us | #### 4
+   215 us | ##### 7
+   216 us | ##### 6
+   217 us | #### 5
+   218 us | #### 5
+   219 us | #### 5
+   220 us | #### 5
+   221 us | ##### 6
+   222 us | ### 3
+   223 us | ##### 8
+   224 us | #### 5
+   225 us | ###### 9
+   226 us | #### 5
+   227 us | #### 4
+   228 us | ##### 7
+   229 us | #### 4
+   230 us | #### 5
+   231 us | ### 2
+   232 us | ###### 9
+   233 us | ### 2
+   234 us | ##### 6
+   235 us | #### 5
+   236 us | ###### 9
+   237 us | ### 2
+   238 us | #### 5
+   239 us | #### 4
+   240 us | ### 3
+   241 us | ##### 8
+   242 us | #### 5
+   243 us | ##### 7
+   244 us | ##### 6
+   245 us | #### 5
+   246 us | ### 3
+   247 us | ##### 6
+   248 us | ##### 8
+   249 us | #### 5
+   250 us | ##### 6
+   251 us | ### 2
+   252 us | #### 4
+   253 us | ## 1
+   254 us | #### 4
+   255 us | ##### 6
+   256 us | #### 4
+   257 us | ### 3
+   258 us | ### 3
+   259 us | ### 2
+   260 us | ### 3
+   261 us | #### 5
+   262 us | ##### 7
+   263 us | #### 4
+   264 us | ### 3
+   265 us | ### 2
+   266 us | ### 2
+   267 us | #### 4
+   269 us | ## 1
+   270 us | #### 4
+   271 us | ## 1
+   272 us | ## 1
+   273 us | ### 3
+   274 us | ## 1
+   275 us | ## 1
+   277 us | ## 1
+   284 us | ## 1
+   286 us | ## 1
+   288 us | ## 1
+   292 us | ## 1
+   293 us | ## 1
+   297 us | ## 1
+   298 us | ## 1
+   301 us | ## 1
+   304 us | ### 2
+   305 us | ## 1
+   308 us | ### 2
+   312 us | ### 2
+   316 us | ### 3
+   317 us | ## 1
+   318 us | ## 1
+   321 us | ## 1
+   322 us | ### 3
+   325 us | #### 4
+   326 us | ## 1
+   327 us | ## 1
+   329 us | ## 1
+   330 us | ## 1
+   334 us | ## 1
+   339 us | ### 2
+   340 us | ## 1
+   341 us | ### 2
+   346 us | ## 1
+   348 us | ### 3
+   351 us | ## 1
+   352 us | ## 1
+   353 us | ## 1
+   354 us | ## 1
+   355 us | ### 2
+   356 us | ## 1
+   358 us | ## 1
+   359 us | ## 1
+   361 us | ### 2
+   362 us | ### 2
+   363 us | ## 1
+   365 us | ## 1
+   369 us | ## 1
+   370 us | ### 3
+   374 us | ## 1
+   376 us | ## 1
+   377 us | ## 1
+   378 us | ## 1
+   380 us | ### 3
+   382 us | ## 1
+   384 us | ## 1
+   385 us | ## 1
+   390 us | ### 2
+   392 us | ## 1
+   393 us | ## 1
+   394 us | ## 1
+   395 us | ## 1
+   396 us | ## 1
+   398 us | ## 1
+   399 us | ### 2
+```
+
+## Overflow convention
+
+Overflow samples are recorded at the histogram bound, which is a lower bound on their true value. Percentiles at or above the overflow fraction are therefore conservative: the reported value is no larger than the truth.
+
+## Artifacts
+
+| path | bytes | blake3 |
+|------|-------|--------|
+| cyclictest.hist | 23399 | 495c45891c866a627334e74d810a5377be684beb6d8e8a17b7853f8c4cb9c88f |
+| cyclictest.json | 1363 | aeda0e90549814d3db67ef0c052c4599b5d38e7462c5554aa379861ea65028c7 |
