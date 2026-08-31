@@ -33,8 +33,11 @@ fn base_reconstruct_cmd(run_dir: &Path) -> Command {
 }
 
 /// Copies every file from the real `measurements/2026-08-28-precision3591/` into a fresh temp
-/// directory. Returns the `TempDir` guard (keep it alive for the duration of the test) and the
-/// path to the copy.
+/// directory, except its own `manifest.json` (plan 01-10 gave the real directory one; these
+/// tests exercise reconstruction starting from a pre-harness directory that has none yet, so the
+/// fixture copy excludes it rather than tripping the refuse-to-overwrite behavior on every run).
+/// Returns the `TempDir` guard (keep it alive for the duration of the test) and the path to the
+/// copy.
 fn copy_measurement_dir() -> (tempfile::TempDir, PathBuf) {
     let temp = tempfile::tempdir().expect("tempdir");
     let src = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -46,6 +49,9 @@ fn copy_measurement_dir() -> (tempfile::TempDir, PathBuf) {
         let path = entry.path();
         if path.is_file() {
             let name = path.file_name().expect("file has a name");
+            if name == "manifest.json" {
+                continue;
+            }
             fs::copy(&path, dst.join(name)).expect("copy file");
         }
     }
