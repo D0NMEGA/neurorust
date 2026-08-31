@@ -72,6 +72,13 @@ fn known_check_names() -> Vec<String> {
         .collect()
 }
 
+/// External identifiers the document legitimately names that happen to share the
+/// PascalCase, multi-hump shape a `PreconditionCheck` variant has, but are not one:
+/// systemd's own property names (`systemctl show --property=...`), not this
+/// project's. Kept short and explicit rather than loosening the shape heuristic, so
+/// a genuine typo of a real check name is still caught.
+const KNOWN_NON_CHECK_IDENTIFIERS: &[&str] = &["ActiveState"];
+
 /// For every `PreconditionCheck` variant, `docs/measurement-protocol.md` contains a
 /// heading or table row naming that check by its exact (PascalCase, `Debug`-
 /// formatted) variant name, so the consistency test can match on it.
@@ -94,7 +101,7 @@ fn protocol_documents_every_precondition() {
 fn protocol_documents_no_phantom_check() {
     let known = known_check_names();
     for word in words(PROTOCOL_DOC) {
-        if looks_like_check_name(word) {
+        if looks_like_check_name(word) && !KNOWN_NON_CHECK_IDENTIFIERS.contains(&word) {
             assert!(
                 known.iter().any(|name| name == word),
                 "docs/measurement-protocol.md names {word:?}, which looks like a \
