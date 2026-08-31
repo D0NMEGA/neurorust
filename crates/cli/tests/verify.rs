@@ -1,0 +1,328 @@
+//! Integration coverage for `nrmeasure verify` (the D-13 blocking provenance gate), driven
+//! against the real compiled binary via `assert_cmd` so exit codes and stdout text are
+//! exercised exactly as CI observes them.
+//!
+//! Every test builds its own temporary tree (never touching the real `measurements/`), so
+//! `git -C <tempdir> ls-files` always fails (the temp directory is outside any git repository)
+//! and `nrmeasure verify`'s check 2 exercises its documented fallback: a plain recursive walk
+//! skipping only `.git` and `target`.
+
+use std::fs;
+use std::path::Path;
+
+use assert_cmd::Command;
+use serde_json::Value;
+
+/// A complete, valid, harness-generated manifest (plan 01-03's human-reviewed worked example),
+/// whose one artifact record's blake3 is the real committed histogram capture's own digest.
+const MINIMAL_MANIFEST: &str = include_str!("../../manifest/tests/fixtures/minimal-manifest.json");
+
+/// Byte-identical to `measurements/2026-08-28-precision3591/cyclictest-rt-isolated-idle-10m.hist`
+/// (confirmed via `diff`); this copy lives under a `tests/fixtures/` exempt tree already.
+const HIST_BYTES: &[u8] =
+    include_bytes!("../../histogram/tests/fixtures/cyclictest-rt-isolated-idle-10m.hist");
+
+fn nrmeasure() -> Command {
+    Command::cargo_bin("nrmeasure").expect("nrmeasure binary is built")
+}
+
+fn base_cmd(root: &Path, measurements: &Path) -> Command {
+    let mut cmd = nrmeasure();
+    cmd.arg("verify")
+        .arg("--root")
+        .arg(root)
+        .arg("--measurements")
+        .arg(measurements);
+    cmd
+}
+
+/// Writes a complete, valid run directory named `run_id` under `measurements_root`: a manifest
+/// derived from [`MINIMAL_MANIFEST`] (with `run_id` overridden to match the directory) plus its
+/// one real, checksum-matching capture file.
+fn write_valid_run(measurements_root: &Path, run_id: &str) {
+    let run_dir = measurements_root.join(run_id);
+    fs::create_dir_all(&run_dir).expect("mkdir run dir");
+
+    let mut manifest: Value = serde_json::from_str(MINIMAL_MANIFEST).expect("fixture parses");
+    manifest["run_id"] = Value::String(run_id.to_string());
+    fs::write(
+        run_dir.join("manifest.json"),
+        serde_json::to_string_pretty(&manifest).expect("serialise manifest"),
+    )
+    .expect("write manifest.json");
+
+    fs::write(
+        run_dir.join("cyclictest-rt-isolated-idle-10m.hist"),
+        HIST_BYTES,
+    )
+    .expect("write capture");
+}
+
+fn manifest_missing_key(key: &str) -> String {
+    let mut manifest: Value = serde_json::from_str(MINIMAL_MANIFEST).expect("fixture parses");
+    manifest
+        .as_object_mut()
+        .expect("manifest is a JSON object")
+        .remove(key);
+    serde_json::to_string_pretty(&manifest).expect("serialise manifest")
+}
+
+#[test]
+fn verify_accepts_valid_run() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    write_valid_run(&measurements, "2026-08-30-precision3591-recon-001");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .output()
+        .expect("run verify");
+
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn verify_rejects_orphan_capture() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    let orphan_dir = measurements.join("2026-08-30-precision3591-orphan");
+    fs::create_dir_all(&orphan_dir).expect("mkdir orphan dir");
+    fs::write(orphan_dir.join("cyclictest.hist"), HIST_BYTES).expect("write orphan capture");
+    // Deliberately no manifest.json: this is the orphan capture D-13 must catch.
+
+    let output = base_cmd(temp.path(), &measurements)
+        .output()
+        .expect("run verify");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("2026-08-30-precision3591-orphan"),
+        "stdout should name the orphan directory: {stdout}"
+    );
+}
+
+#[test]
+fn verify_rejects_checksum_mismatch() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    write_valid_run(&measurements, "2026-08-30-precision3591-recon-001");
+
+    let hist_path = measurements
+        .join("2026-08-30-precision3591-recon-001")
+        .join("cyclictest-rt-isolated-idle-10m.hist");
+    let mut tampered = fs::read(&hist_path).expect("read capture");
+    tampered.push(b'\n');
+    fs::write(&hist_path, tampered).expect("tamper capture");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .output()
+        .expect("run verify");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("checksum mismatch"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("cyclictest-rt-isolated-idle-10m.hist"),
+        "stdout should name the file: {stdout}"
+    );
+    assert!(
+        stdout.contains("recorded"),
+        "stdout should name the recorded hash: {stdout}"
+    );
+    assert!(
+        stdout.contains("computed"),
+        "stdout should name the computed hash: {stdout}"
+    );
+}
+
+#[test]
+fn verify_rejects_missing_required_field() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    let run_dir = measurements.join("2026-08-30-precision3591-recon-001");
+    fs::create_dir_all(&run_dir).expect("mkdir run dir");
+    fs::write(run_dir.join("manifest.json"), manifest_missing_key("host"))
+        .expect("write manifest.json");
+    fs::write(
+        run_dir.join("cyclictest-rt-isolated-idle-10m.hist"),
+        HIST_BYTES,
+    )
+    .expect("write capture");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .output()
+        .expect("run verify");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("host"),
+        "stdout should name the missing field: {stdout}"
+    );
+}
+
+#[test]
+fn verify_rejects_stray_capture_outside_measurements() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    fs::write(temp.path().join("stray.hist"), b"not a real capture").expect("write stray file");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .output()
+        .expect("run verify");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("stray.hist"), "stdout: {stdout}");
+}
+
+#[test]
+fn verify_allows_exempt_trees() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+
+    let fixtures_dir = temp.path().join("crates/histogram/tests/fixtures");
+    fs::create_dir_all(&fixtures_dir).expect("mkdir fixtures dir");
+    fs::write(fixtures_dir.join("sample.hist"), b"fixture data").expect("write fixture");
+
+    let recon_dir = temp.path().join("docs/rig/recon-2026-09-01");
+    fs::create_dir_all(&recon_dir).expect("mkdir recon dir");
+    fs::write(recon_dir.join("probe-foo.hist"), b"probe data").expect("write probe");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .output()
+        .expect("run verify");
+
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn verify_rejects_unprefixed_file_in_exempt_tree() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+
+    let recon_dir = temp.path().join("docs/rig/recon-2026-09-01");
+    fs::create_dir_all(&recon_dir).expect("mkdir recon dir");
+    fs::write(recon_dir.join("results.hist"), b"not prefixed").expect("write file");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .output()
+        .expect("run verify");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("results.hist"), "stdout: {stdout}");
+}
+
+#[test]
+fn verify_reports_all_failures() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+
+    // Problem 1: an orphan capture (no manifest.json).
+    let orphan_dir = measurements.join("2026-08-30-precision3591-orphan");
+    fs::create_dir_all(&orphan_dir).expect("mkdir orphan dir");
+    fs::write(orphan_dir.join("cyclictest.hist"), HIST_BYTES).expect("write orphan capture");
+
+    // Problem 2: a stray capture outside measurements/ and outside the exempt trees.
+    fs::write(temp.path().join("stray.hist"), b"stray").expect("write stray file");
+
+    // Problem 3: a manifest missing a required field.
+    let broken_dir = measurements.join("2026-08-30-precision3591-broken");
+    fs::create_dir_all(&broken_dir).expect("mkdir broken dir");
+    fs::write(
+        broken_dir.join("manifest.json"),
+        manifest_missing_key("kernel"),
+    )
+    .expect("write manifest.json");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .output()
+        .expect("run verify");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("precision3591-orphan"),
+        "missing orphan problem: {stdout}"
+    );
+    assert!(
+        stdout.contains("stray.hist"),
+        "missing stray problem: {stdout}"
+    );
+    assert!(
+        stdout.contains("kernel"),
+        "missing missing-field problem: {stdout}"
+    );
+}
+
+#[test]
+fn verify_write_index_is_idempotent() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    write_valid_run(&measurements, "2026-08-30-precision3591-recon-001");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--write-index")
+        .output()
+        .expect("run verify --write-index");
+    assert!(output.status.success());
+    let first = fs::read_to_string(measurements.join("INDEX.md")).expect("read INDEX.md");
+
+    let output2 = base_cmd(temp.path(), &measurements)
+        .arg("--write-index")
+        .output()
+        .expect("run verify --write-index again");
+    assert!(output2.status.success());
+    let second = fs::read_to_string(measurements.join("INDEX.md")).expect("read INDEX.md again");
+
+    assert_eq!(
+        first, second,
+        "a second --write-index run must produce no diff"
+    );
+}
+
+#[test]
+fn verify_check_index_detects_drift() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    write_valid_run(&measurements, "2026-08-30-precision3591-recon-001");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--write-index")
+        .output()
+        .expect("run verify --write-index");
+    assert!(output.status.success());
+
+    let index_path = measurements.join("INDEX.md");
+    let mut tampered = fs::read_to_string(&index_path).expect("read INDEX.md");
+    tampered.push_str("\n| hand-edited row that should never appear |\n");
+    fs::write(&index_path, tampered).expect("tamper INDEX.md");
+
+    let output2 = base_cmd(temp.path(), &measurements)
+        .arg("--check-index")
+        .output()
+        .expect("run verify --check-index");
+
+    assert!(!output2.status.success());
+    let stdout = String::from_utf8_lossy(&output2.stdout);
+    assert!(stdout.contains("INDEX.md"), "stdout: {stdout}");
+}
