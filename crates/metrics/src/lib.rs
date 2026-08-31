@@ -5,5 +5,18 @@
 
 pub mod baseline;
 pub mod coverage;
+pub mod index;
+pub mod report;
 pub mod schema;
 pub mod series;
+
+/// Renders any `#[serde(rename_all = "kebab-case")]` enum value as the same kebab-case string
+/// its JSON form uses, e.g. `ContaminationVerdict::Contaminated` -> `"contaminated"`. Shared by
+/// [`report`] and [`index`], so a published report and the index it feeds always agree with the
+/// manifest's own on-disk vocabulary.
+pub(crate) fn kebab<T: serde::Serialize>(value: &T) -> String {
+    match serde_json::to_value(value) {
+        Ok(serde_json::Value::String(s)) => s,
+        other => format!("{other:?}"),
+    }
+}
