@@ -130,10 +130,18 @@ Each task was committed atomically:
 - **Verification:** `cargo test -p nr-manifest` (all 17 tests, including `fixture_parses_as_valid_manifest`) still passes; `grep` confirms no UUID pattern remains in the fixture.
 - **Committed in:** `fbfdb05` (Task 3 commit)
 
+**2. [Rule 1 - Bug] Found and corrected a pre-existing donny-tools `state update-progress` bug while updating STATE.md**
+- **Found during:** State/roadmap updates after the Task 3 commits
+- **Issue:** `node donny-tools.cjs state update-progress` reported `"updated": true` with the correct percent (13) each time, and `.planning/STATE.md`'s YAML frontmatter (`progress.percent`, `progress.completed_plans`) was correctly resynced by a separate mechanism on every write. But the body's `## Current Position` `Progress: [bar] X%` line stayed stuck at `0%`. Root cause (confirmed with a direct `node -e` repro against the live file): the command's fallback regex, `/^(Progress:\s*).*/im`, is case-insensitive with no frontmatter exclusion, so it matches the YAML frontmatter's lowercase `progress:` key (which appears first in the file, before the body's capitalized `Progress:` line) instead of the intended body line; the non-global `.replace()` then edits that first match, which frontmatter resync immediately overwrites back to a correct value, masking the bug while the real body line is never touched. This is a bug in the shared, cross-project `~/.claude/donny/bin/lib/state.cjs` CLI, not in anything specific to this plan.
+- **Fix:** This plan's scope is the neurorust `nr-manifest` crate, not the global donny-tools CLI, so the shared script was not patched here. Directly corrected the single stale line in `.planning/STATE.md` (`Progress: [░░░░░░░░░░] 0%` -> `Progress: [█░░░░░░░░░] 13%`) to match the now-correct frontmatter, so the artifact this plan is responsible for updating is accurate. Also fixed a related cosmetic byproduct in the same update pass: `roadmap update-plan-progress`'s `status.padEnd(11)` leaves no trailing space when the status string (`"In Progress"`) is already exactly 11 characters, producing `| In Progress|  |` in `.planning/ROADMAP.md`'s progress table; corrected to `| In Progress | - |` to match the table's own convention for not-yet-complete rows.
+- **Files modified:** `.planning/STATE.md`, `.planning/ROADMAP.md`
+- **Verification:** `grep -n "Progress:" .planning/STATE.md` shows `13%`; frontmatter and body now agree. Table row renders consistently with the other 7 rows.
+- **Committed in:** `22fc762` (final metadata commit)
+
 ---
 
-**Total deviations:** 1 auto-fixed (1 missing critical / consistency)
-**Impact on plan:** Necessary to keep the worked example truthful to the newly-documented field contract. No scope creep beyond what Decision A itself required.
+**Total deviations:** 2 auto-fixed (1 missing critical / consistency, 1 bug)
+**Impact on plan:** Necessary to keep the worked example and the planning artifacts (STATE.md, ROADMAP.md) truthful. No scope creep: the underlying donny-tools bug was documented here for visibility rather than patched, since patching shared, cross-project tooling is outside this plan's boundary.
 
 ## Issues Encountered
 
