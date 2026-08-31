@@ -4,5 +4,6 @@
 //! environment snapshot readers (Linux-gated via procfs), and the D-15 interference diff
 //! and contamination verdict.
 
+pub mod environment;
 pub mod preconditions;
 pub mod sources;
