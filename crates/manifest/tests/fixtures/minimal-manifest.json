@@ -31,7 +31,7 @@
     "version_string": "#30-Ubuntu SMP PREEMPT_RT Fri Jul 31 18:22:54 UTC 2026",
     "is_realtime": true,
     "preempt_model": "PREEMPT_RT",
-    "cmdline": "BOOT_IMAGE=/vmlinuz root=UUID=00000000-0000-0000-0000-000000000000 ro quiet splash isolcpus=6-11 nohz_full=6-11 rcu_nocbs=6-11",
+    "cmdline": "BOOT_IMAGE=/vmlinuz root=[redacted] ro quiet splash isolcpus=6-11 nohz_full=6-11 rcu_nocbs=6-11 resume=[redacted]",
     "isolcpus": "6-11",
     "nohz_full": "6-11",
     "rcu_nocbs": "6-11",

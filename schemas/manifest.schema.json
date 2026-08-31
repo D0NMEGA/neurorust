@@ -481,7 +481,7 @@
       "type": "object",
       "properties": {
         "cmdline": {
-          "description": "Verbatim `/proc/cmdline`.",
+          "description": "`/proc/cmdline` with the `root=` and `resume=` values replaced by the\nliteral token `[redacted]` (see [`KernelInfo::redact_cmdline`]); every\nother parameter, including `BOOT_IMAGE`, `isolcpus`, `nohz_full`,\n`rcu_nocbs` and `irqaffinity`, is verbatim. The root and swap\nfilesystem UUIDs carry no reproduction value and are the only\nmachine-instance identifiers on the command line (T-1-06); redaction\nis visible by design, never a silent drop, so a reader can tell a\nredacted field from one that was never recorded.",
           "type": "string"
         },
         "irqaffinity": {
@@ -838,7 +838,7 @@
       "type": "object",
       "properties": {
         "argv": {
-          "description": "The exact argument vector, for reproduction.",
+          "description": "The exact argument vector, for reproduction. Any output-file path in\n`argv` is recorded relative to the run directory, not as an absolute\npath, so the command a third party pastes actually runs (the rewrite\nhappens where argv is captured, in `nr-capture`, plan 01-05).\nEverything else in `argv` is verbatim.",
           "type": "array",
           "items": {
             "type": "string"

@@ -133,13 +133,41 @@ pub struct KernelInfo {
     pub is_realtime: bool,
     /// e.g. `"PREEMPT_RT"` or `"PREEMPT_DYNAMIC"`.
     pub preempt_model: String,
-    /// Verbatim `/proc/cmdline`.
+    /// `/proc/cmdline` with the `root=` and `resume=` values replaced by the
+    /// literal token `[redacted]` (see [`KernelInfo::redact_cmdline`]); every
+    /// other parameter, including `BOOT_IMAGE`, `isolcpus`, `nohz_full`,
+    /// `rcu_nocbs` and `irqaffinity`, is verbatim. The root and swap
+    /// filesystem UUIDs carry no reproduction value and are the only
+    /// machine-instance identifiers on the command line (T-1-06); redaction
+    /// is visible by design, never a silent drop, so a reader can tell a
+    /// redacted field from one that was never recorded.
     pub cmdline: String,
     /// Parsed out of `cmdline`. `None` means the parameter was absent, not unread.
     pub isolcpus: Option<String>,
     pub nohz_full: Option<String>,
     pub rcu_nocbs: Option<String>,
     pub irqaffinity: Option<String>,
+}
+
+impl KernelInfo {
+    /// Redacts the `root=` and `resume=` parameters in a raw `/proc/cmdline`
+    /// string, replacing each one's value with the literal token
+    /// `[redacted]`. Every other parameter is preserved verbatim, because
+    /// those are what a third party needs to reproduce the run; only the
+    /// root and swap filesystem UUIDs are machine-instance identifiers with
+    /// no reproduction value (T-1-06). `nr-capture` calls this when it reads
+    /// `/proc/cmdline` at capture time, before the value is ever written to
+    /// a manifest.
+    pub fn redact_cmdline(raw: &str) -> String {
+        raw.split_whitespace()
+            .map(|token| match token.split_once('=') {
+                Some(("root", _)) => "root=[redacted]",
+                Some(("resume", _)) => "resume=[redacted]",
+                _ => token,
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
 }
 
 /// Whether the run happened on the installed system or a live-USB session, since the
@@ -350,7 +378,11 @@ pub struct ToolInvocation {
     pub name: String,
     /// As reported by the tool itself.
     pub version: String,
-    /// The exact argument vector, for reproduction.
+    /// The exact argument vector, for reproduction. Any output-file path in
+    /// `argv` is recorded relative to the run directory, not as an absolute
+    /// path, so the command a third party pastes actually runs (the rewrite
+    /// happens where argv is captured, in `nr-capture`, plan 01-05).
+    /// Everything else in `argv` is verbatim.
     pub argv: Vec<String>,
     pub exit_code: i32,
 }
@@ -388,4 +420,53 @@ pub struct ArtifactRecord {
     pub blake3: String,
     pub kind: ArtifactKind,
     pub stored: StorageLocation,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn redact_cmdline_redacts_root_and_resume_uuids_only() {
+        let raw = "BOOT_IMAGE=/vmlinuz-7.0.0-30-realtime root=UUID=4c9a2f1e-8b3d-4a6f-9c2e-1a2b3c4d5e6f ro quiet splash isolcpus=6-11 nohz_full=6-11 rcu_nocbs=6-11 irqaffinity=0-5 intel_pstate=no_hwp resume=UUID=9f8e7d6c-5b4a-3928-1706-f5e4d3c2b1a0 resume_offset=53248";
+
+        let redacted = KernelInfo::redact_cmdline(raw);
+
+        assert_eq!(
+            redacted,
+            "BOOT_IMAGE=/vmlinuz-7.0.0-30-realtime root=[redacted] ro quiet splash isolcpus=6-11 nohz_full=6-11 rcu_nocbs=6-11 irqaffinity=0-5 intel_pstate=no_hwp resume=[redacted] resume_offset=53248"
+        );
+
+        // Redaction is visible, never a silent drop.
+        assert!(redacted.contains("root=[redacted]"));
+        assert!(redacted.contains("resume=[redacted]"));
+
+        // No real UUID pattern survives redaction.
+        assert!(!redacted.contains("4c9a2f1e-8b3d-4a6f-9c2e-1a2b3c4d5e6f"));
+        assert!(!redacted.contains("9f8e7d6c-5b4a-3928-1706-f5e4d3c2b1a0"));
+        assert!(!redacted.to_ascii_lowercase().contains("uuid="));
+
+        // Every reproduction-relevant parameter survives verbatim, including
+        // the resume_offset near-miss, which must not be matched as `resume=`.
+        for verbatim in [
+            "BOOT_IMAGE=/vmlinuz-7.0.0-30-realtime",
+            "isolcpus=6-11",
+            "nohz_full=6-11",
+            "rcu_nocbs=6-11",
+            "irqaffinity=0-5",
+            "intel_pstate=no_hwp",
+            "resume_offset=53248",
+        ] {
+            assert!(
+                redacted.contains(verbatim),
+                "expected {verbatim:?} to survive, got {redacted:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn redact_cmdline_is_a_no_op_without_root_or_resume() {
+        let raw = "BOOT_IMAGE=/vmlinuz ro quiet splash isolcpus=6-11";
+        assert_eq!(KernelInfo::redact_cmdline(raw), raw);
+    }
 }
