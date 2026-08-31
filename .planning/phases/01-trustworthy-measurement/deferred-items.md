@@ -59,3 +59,25 @@ originating plan; noted here for a future plan or maintenance pass to pick up.
   repo, on the rig) should fix the path. Meanwhile, any in-repo precondition
   code (`nr-capture`, plan 01-05) must use the correct path directly rather
   than copying the scripts' query.
+
+## From 01-09 (measurement protocol and publication layout documents)
+
+- **The manifest schema does not yet capture `energy_performance_preference`,
+  which `docs/measurement-protocol.md`'s "The governor operating point"
+  section states is required.** `docs/rig/recon-2026-08-31/FINDINGS.md` found
+  that on this Meteor Lake HWP backend, `power-profiles-daemon`'s own
+  "performance" profile is expressed as `energy_performance_preference=
+  performance` with `scaling_governor` left at `powersave`, never as the
+  literal `scaling_governor=performance` value `GovernorIsPerformanceOnAllCpus`
+  checks. The governor value alone therefore no longer fully describes the
+  tuning state a figure was taken under on this class of hardware. Adding a
+  field would touch `crates/manifest/src/fields.rs`'s `TuningInfo`/
+  `CpuGovernor` structs, the generated `schemas/manifest.schema.json`, and
+  `crates/capture/src/environment.rs`'s live and fixture readers, none of
+  which are in this plan's file list (`docs/measurement-protocol.md`,
+  `docs/publication-layout.md`, `crates/capture/tests/protocol_doc.rs` only).
+  Whichever plan next touches the D-14 environment snapshot (plan 01-11's
+  calibration pair is the most likely candidate, since it is the next plan to
+  depend on the governor operating point being reached and verified) should
+  add `energy_performance_preference` alongside `per_cpu_governor`, reading
+  `/sys/devices/system/cpu/cpu{N}/cpufreq/energy_performance_preference`.
