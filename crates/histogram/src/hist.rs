@@ -82,6 +82,14 @@ pub enum HistError {
         #[source]
         source: std::io::Error,
     },
+    #[error("failed to parse --json output: {0}")]
+    JsonDeserialize(#[from] serde_json::Error),
+    #[error("--json summary and .hist run disagree on {field}: json={json}, hist={hist}")]
+    SummaryDisagreement {
+        field: &'static str,
+        json: String,
+        hist: String,
+    },
 }
 
 /// Parses the `# <label>:` prefixed line at `footer_lines[idx]`, returning its line number and
