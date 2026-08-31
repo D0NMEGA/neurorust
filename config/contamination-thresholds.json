@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "status": "uncalibrated",
+  "calibration": {
+    "derived_from": [],
+    "note": "Thresholds are derived from the D-17 calibration pair in plan 01-11: one run under the clean protocol and one deliberately reproducing the 2026-08-28 conditions. Until that pair exists the verdict is uncalibrated, which is reported as such and never rendered as a pass."
+  },
+  "per_run_hour": {
+    "cal_delta_max": null,
+    "tlb_delta_max": null,
+    "res_delta_max": null,
+    "device_irq_delta_max": null,
+    "context_switch_delta_max": null
+  }
+}

@@ -5,5 +5,6 @@
 //! and contamination verdict.
 
 pub mod environment;
+pub mod interference;
 pub mod preconditions;
 pub mod sources;
