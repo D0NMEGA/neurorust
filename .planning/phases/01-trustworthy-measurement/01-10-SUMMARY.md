@@ -1,5 +1,5 @@
 ---
-status: PARTIAL
+status: PASS
 agent: donny-executor
 phase: 01-trustworthy-measurement
 plan: 10
@@ -185,3 +185,23 @@ All 7 claimed files confirmed present on disk (`manifest.json`, `README.md`, `me
 ---
 *Phase: 01-trustworthy-measurement*
 *Completed: 2026-09-01*
+
+
+---
+
+## Resolved 2026-09-01: the date-flake that held this at PARTIAL
+
+This summary was filed PARTIAL because `cargo test --workspace` returned 148/149, with
+`crates/cli/tests/run_pipeline.rs::full_run_report_matches_snapshot` failing. That call was
+correct: the failure was real and unrelated to this plan, and reporting PASS over a red suite
+would have hidden it behind a plan boundary.
+
+The orchestrator has since fixed it. `redact_report` already stripped the volatile wall-clock
+fields from the snapshot, but the run id embeds a date too (`2026-08-31-precision3591-recon`),
+which is easy to miss because it does not look like a timestamp. The test therefore passed on the
+day it was captured and failed on every UTC day after, which would have broken CI daily rather
+than signalling any real change. Only the date is redacted now; the rig slug and run class are
+still asserted, and a unit test covers the redaction helper itself.
+
+Suite is 150 passing, 0 failing. `nrmeasure verify --strict --check-index` still exits 0, fmt and
+clippy clean. No published figure, manifest, or raw capture was touched. Status raised to PASS.

@@ -169,22 +169,64 @@ fn full_run_produces_valid_run_dir() {
 /// Strips the fields that legitimately differ on every run (wall-clock
 /// timestamps, and the manifest blake3 fingerprint that changes whenever any of
 /// those timestamps does) so the snapshot is stable across runs and commits.
+///
+/// The run id carries a wall-clock date too, which is easy to miss because it
+/// does not look like a timestamp. Leaving it unredacted made this test fail on
+/// the first UTC day after the snapshot was captured, rather than on any real
+/// change. Only the date is redacted; the rig slug and run class stay asserted.
 fn redact_report(report: &str) -> String {
     report
         .lines()
         .map(|line| {
             if line.starts_with("utc start: ") {
-                "utc start: [redacted]"
+                "utc start: [redacted]".to_string()
             } else if line.starts_with("utc end: ") {
-                "utc end: [redacted]"
+                "utc end: [redacted]".to_string()
             } else if line.starts_with("manifest blake3: ") {
-                "manifest blake3: [redacted]"
+                "manifest blake3: [redacted]".to_string()
+            } else if let Some(run_id) = line.strip_prefix("run id: ") {
+                format!("run id: {}", redact_leading_date(run_id))
             } else {
-                line
+                line.to_string()
             }
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// Replaces a leading `YYYY-MM-DD` with the literal `[date]`, leaving the rest of
+/// the run id intact. Returns the input unchanged if it does not start with a date.
+fn redact_leading_date(run_id: &str) -> String {
+    let is_date_shaped = run_id.len() >= 10
+        && run_id.as_bytes()[..10].iter().enumerate().all(|(i, b)| {
+            if i == 4 || i == 7 {
+                *b == b'-'
+            } else {
+                b.is_ascii_digit()
+            }
+        });
+
+    if is_date_shaped {
+        format!("[date]{}", &run_id[10..])
+    } else {
+        run_id.to_string()
+    }
+}
+
+#[test]
+fn redact_leading_date_only_touches_a_leading_date() {
+    assert_eq!(
+        redact_leading_date("2026-09-01-precision3591-recon"),
+        "[date]-precision3591-recon"
+    );
+    assert_eq!(
+        redact_leading_date("precision3591-recon"),
+        "precision3591-recon"
+    );
+    assert_eq!(
+        redact_leading_date("2026-9-1-precision3591"),
+        "2026-9-1-precision3591"
+    );
 }
 
 #[test]

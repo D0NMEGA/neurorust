@@ -4,7 +4,7 @@ expression: redact_report(&report)
 ---
 # Run report
 
-run id: 2026-08-31-precision3591-recon
+run id: [date]-precision3591-recon
 run class: recon
 instrument class: headline-series
 provenance tier: harness-generated
