@@ -485,3 +485,60 @@ fn allow_precondition_violation_rejected_outside_calibration_contaminated() {
         manifest.exclusion_reason
     );
 }
+
+/// A missing or unreadable thresholds file must be caught BEFORE the measurement runs,
+/// not at the point of use.
+///
+/// This is a regression test for a real loss. On 2026-09-01 a full one-hour calibration
+/// run completed on the reference rig and was then discarded, because the thresholds path
+/// defaults to `./config/contamination-thresholds.json` and systemd's working directory is
+/// `/`, not the repository root. The harness had already fixed this class of mistake for
+/// tools ("Step 1: ... Fail early if a tool is missing") but loaded this file at step 6.
+///
+/// Asserting the exit code alone would not catch a regression, since the run fails either
+/// way. The marker file is what proves the ordering: cyclictest must never be invoked.
+#[test]
+fn bad_thresholds_path_fails_before_the_measurement_runs() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let facts_path = write_fixture(temp.path(), "facts.txt", &tuned_facts_text());
+    let interrupts_path = write_fixture(temp.path(), "interrupts.txt", INTERRUPTS);
+    let measurements_root = temp.path().join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+    let marker = temp.path().join("cyclictest-was-invoked");
+
+    let mut cmd = Command::cargo_bin("nrmeasure").expect("nrmeasure binary is built");
+    cmd.env("NRMEASURE_CYCLICTEST", fake_cyclictest_path())
+        .env("NRMEASURE_HWLATDETECT", fake_hwlatdetect_path())
+        .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
+        .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+        .env("FAKE_CYCLICTEST_MARKER", &marker)
+        .arg("run")
+        .args(["--rig-slug", "precision3591"])
+        .args(["--cpus", "6-11"])
+        .args(["--main-cpus", "0,1"])
+        .args(["--duration", "1"])
+        .args(["--class", "recon"])
+        .arg("--thresholds")
+        .arg(temp.path().join("definitely-not-here.json"))
+        .arg("--measurements-root")
+        .arg(&measurements_root);
+
+    let output = cmd.output().expect("nrmeasure runs");
+
+    assert!(!output.status.success(), "a bad thresholds path must fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("thresholds"),
+        "the error must name the thresholds file: {stderr}"
+    );
+    assert!(
+        !marker.exists(),
+        "cyclictest must never be invoked when the thresholds file is unreadable; \
+         the marker at {} proves the measurement started anyway",
+        marker.display()
+    );
+    let entries = std::fs::read_dir(&measurements_root)
+        .expect("read_dir")
+        .count();
+    assert_eq!(entries, 0, "no run directory may be written");
+}

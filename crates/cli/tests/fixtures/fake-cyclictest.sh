@@ -7,6 +7,10 @@
 # FAKE_CYCLICTEST_EXIT overrides the exit code, so the non-zero tool-exit path
 # (BENCH-06: recorded, not hidden) is testable without a real failing tool.
 
+# FAKE_CYCLICTEST_MARKER, if set, is touched on every invocation EXCEPT --version.
+# It lets a test prove that the measurement never started, which is how the
+# fail-fast ordering of run.rs step 1 is asserted rather than assumed.
+
 REAL_HIST="$(dirname "$0")/../../../histogram/tests/fixtures/cyclictest-rt-isolated-idle-10m.hist"
 
 histfile=""
@@ -25,6 +29,10 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+if [ -n "$FAKE_CYCLICTEST_MARKER" ]; then
+  : > "$FAKE_CYCLICTEST_MARKER"
+fi
 
 if [ -n "$histfile" ]; then
   cp "$REAL_HIST" "$histfile"

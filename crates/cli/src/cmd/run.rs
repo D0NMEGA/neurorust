@@ -235,7 +235,24 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
 
     let target_cpus = parse_cpu_list(&args.cpus);
 
-    // Step 1: resolve tool paths and versions. Fail early if a tool is missing.
+    // Step 1: resolve tool paths and versions, and load every input the run will need at
+    // the end. Fail early if any of it is missing.
+    //
+    // The thresholds file is loaded HERE rather than at step 6 where it is used. It was
+    // originally loaded at the point of use, which meant a missing or unreadable file was
+    // discovered only after the measurement had already run: on 2026-09-01 a full one-hour
+    // calibration run completed and was then discarded because this path did not resolve
+    // under systemd (whose working directory is `/`, not the repository root). Anything the
+    // run cannot finish without belongs in this step, next to the tool checks.
+    let thresholds = interference::Thresholds::load(&args.thresholds).with_context(|| {
+        format!(
+            "failed to load thresholds from {}; it is read before the measurement starts so a \
+             bad path costs a second rather than the whole run. Pass --thresholds with an \
+             absolute path when running outside the repository root, for example under systemd",
+            args.thresholds.display()
+        )
+    })?;
+
     let cyclictest_path = &overrides.cyclictest_path;
     let cyclictest_version =
         tools::resolve_and_verify("cyclictest", cyclictest_path, &["--version"])
@@ -334,12 +351,7 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
 
     // Step 6: the after interference snapshot and the D-15 verdict.
     let after = take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())?;
-    let thresholds = interference::Thresholds::load(&args.thresholds).with_context(|| {
-        format!(
-            "failed to load thresholds from {}",
-            args.thresholds.display()
-        )
-    })?;
+    // `thresholds` was loaded in step 1, before the measurement ran.
     let outcome = interference::verdict(
         before,
         after,
