@@ -59,3 +59,33 @@ originating plan; noted here for a future plan or maintenance pass to pick up.
   repo, on the rig) should fix the path. Meanwhile, any in-repo precondition
   code (`nr-capture`, plan 01-05) must use the correct path directly rather
   than copying the scripts' query.
+
+## From 01-10 (discovered while re-verifying `cargo test --workspace` before publishing)
+
+- **`crates/cli/tests/run_pipeline.rs::full_run_report_matches_snapshot` fails
+  once a day passes, independent of any code change.** Root cause, fully
+  traced: `crates/cli/src/cmd/run.rs:238` sets `utc_start = OffsetDateTime::
+  now_utc()` for a live run (correct production behaviour). `rundir.rs`
+  derives the run directory name, and therefore `run_id`, from that
+  timestamp's calendar date (`<YYYY-MM-DD>-<rig-slug>-<run-class>`). The
+  integration test exercises this real path end to end with fake tool
+  binaries (no injected clock), so its generated `run_id` always carries the
+  actual wall-clock UTC date. The committed snapshot
+  (`crates/cli/tests/snapshots/run_pipeline__full_run_report_matches_snapshot.snap`)
+  pins a literal date string (`2026-08-31-precision3591-recon`, the day the
+  snapshot was captured), so the test fails every day thereafter with a
+  one-line diff on the `run id:` field alone (confirmed here: it failed as
+  `2026-09-01-precision3591-recon` vs the pinned `2026-08-31-...`, both dates
+  otherwise identical in every other field). All 148 other workspace tests
+  pass; this is the only failure and it is not caused by, and does not
+  touch, any file in plan 01-10's scope
+  (`measurements/2026-08-28-precision3591/`, `measurements/INDEX.md`).
+  Not fixed here: `run_pipeline.rs` and its snapshot belong to plan 01-07
+  (already summarized, already committed), not to this plan's file list.
+  Suggested fix for whoever next touches `nr-cli`'s test suite: the test's
+  own `redact_report()` helper (`crates/cli/tests/run_pipeline.rs:172`)
+  already redacts `utc_start`/`utc_end` to `[redacted]` before comparing to
+  the snapshot; extend the same redaction to the `run id:` line (or just its
+  date prefix) so the snapshot asserts the parts of the report that are
+  actually deterministic. Re-run `cargo test -p nr-cli --test run_pipeline`
+  after the fix and `cargo insta accept` (or hand-edit) the one changed line.
