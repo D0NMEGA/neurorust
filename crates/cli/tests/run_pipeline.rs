@@ -80,6 +80,7 @@ fn tuned_facts_text() -> String {
     lines.push("ssh.active_sessions=0".to_string());
     lines.push("service.gdm.service.ActiveState=inactive".to_string());
     lines.push("graphical.sessions=0".to_string());
+    lines.push("login.local_sessions=".to_string());
     lines.push("cpu.isolated=6-11".to_string());
     lines.push("service.rt-tuning.service.ActiveState=active".to_string());
     format!("{}\n{D14_ENVIRONMENT_FIXTURE}", lines.join("\n"))
@@ -87,7 +88,7 @@ fn tuned_facts_text() -> String {
 
 /// The D-17 contaminated arm, reproduced as a fixture: otherwise identical to
 /// `tuned_facts_text()` (so the D-14 environment snapshot is genuinely
-/// populated and 12 of the 14 checks still pass), but with an active SSH
+/// populated and 13 of the 15 checks still pass), but with an active SSH
 /// session and an active graphical session, the two conditions
 /// `docs/measurement-protocol.md`'s CAVEAT names as what the 2026-08-28
 /// contamination, and this calibration arm, both reproduce.
@@ -378,7 +379,7 @@ fn fixture_facts_refused_for_publishable_classes() {
 /// D-06/D-17/PLAT-02: `--allow-precondition-violation` must be rejected outright
 /// for every run class other than `calibration-contaminated` (checked here for
 /// `headline`, `investigation` and `soak`), and the accepted
-/// `calibration-contaminated` path must still record all 14 precondition
+/// `calibration-contaminated` path must still record all 15 precondition
 /// results and still force `excluded_from_series: true`. Without this
 /// restriction and this test, the flag is a hole that would let a headline run
 /// be published with its preconditions silently waived.
@@ -415,7 +416,7 @@ fn allow_precondition_violation_rejected_outside_calibration_contaminated() {
         "no run directory may be written when the flag is rejected"
     );
 
-    // The accepted path: calibration-contaminated, with two of the fourteen
+    // The accepted path: calibration-contaminated, with two of the fifteen
     // preconditions deliberately violated (an active SSH session and an active
     // graphical session), the same two conditions the real D-17 contaminated
     // arm reproduces.
@@ -457,8 +458,8 @@ fn allow_precondition_violation_rejected_outside_calibration_contaminated() {
 
     assert_eq!(
         manifest.preconditions.len(),
-        14,
-        "every one of the 14 preconditions must still be recorded when the flag waives the \
+        15,
+        "every one of the 15 preconditions must still be recorded when the flag waives the \
          refusal"
     );
     let failed: Vec<_> = manifest

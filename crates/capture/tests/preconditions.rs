@@ -41,11 +41,12 @@ fn investigation_spec() -> PreconditionSpec {
     }
 }
 
-const ALL_CHECKS: [PreconditionCheck; 14] = [
+const ALL_CHECKS: [PreconditionCheck; 15] = [
     PreconditionCheck::NoActiveSshSessions,
     PreconditionCheck::SystemdDefaultTargetIsMultiUser,
     PreconditionCheck::DisplayManagerInactive,
     PreconditionCheck::NoGraphicalSession,
+    PreconditionCheck::NoActiveLoginSessions,
     PreconditionCheck::GovernorIsPerformanceOnAllCpus,
     PreconditionCheck::NoTurboEnabled,
     PreconditionCheck::DeepCstatesDisabled,
@@ -62,11 +63,11 @@ const ALL_CHECKS: [PreconditionCheck; 14] = [
 fn all_precondition_results_recorded() {
     let as_found_facts = FixtureFacts::parse(RIG_AS_FOUND);
     let as_found_results = run_all(&as_found_facts, &headline_spec());
-    assert_eq!(as_found_results.len(), 14, "got {as_found_results:#?}");
+    assert_eq!(as_found_results.len(), 15, "got {as_found_results:#?}");
 
     let violated_facts = FixtureFacts::parse(VIOLATED);
     let violated_results = run_all(&violated_facts, &headline_spec());
-    assert_eq!(violated_results.len(), 14, "got {violated_results:#?}");
+    assert_eq!(violated_results.len(), 15, "got {violated_results:#?}");
 
     // A failing check produces a Fail result; it does not vanish from the list.
     assert!(
@@ -149,6 +150,55 @@ fn tracers_quiescent_allows_investigation_run() {
     assert_eq!(tracer_result.status, PreconditionStatus::NotApplicable);
     // NotApplicable still records what was observed.
     assert_eq!(tracer_result.observed, "timerlat");
+}
+
+/// `FixtureFacts::default()` answers every other fact with `Unavailable`; only
+/// `login.local_sessions` is set, so this exercises `NoActiveLoginSessions` in
+/// isolation rather than requiring a full rig snapshot.
+#[test]
+fn no_active_login_sessions_passes_with_no_sessions() {
+    let facts = FixtureFacts::default().with("login.local_sessions", "");
+    let results = run_all(&facts, &headline_spec());
+    let result = results
+        .iter()
+        .find(|r| r.check == PreconditionCheck::NoActiveLoginSessions)
+        .expect("NoActiveLoginSessions result present");
+    assert_eq!(result.status, PreconditionStatus::Pass);
+    assert_eq!(result.observed, "none");
+}
+
+#[test]
+fn no_active_login_sessions_fails_and_names_the_session() {
+    let facts = FixtureFacts::default().with("login.local_sessions", "tty1 (session 3)");
+    let results = run_all(&facts, &headline_spec());
+    let result = results
+        .iter()
+        .find(|r| r.check == PreconditionCheck::NoActiveLoginSessions)
+        .expect("NoActiveLoginSessions result present");
+    assert_eq!(result.status, PreconditionStatus::Fail);
+    assert!(
+        result.observed.contains("tty1"),
+        "observed should name the offending session: {}",
+        result.observed
+    );
+}
+
+/// RIG_AS_FOUND is the 2026-08-31 recon capture, which predates this check: it
+/// never queried per-session Type/Class/Seat data at all, so the fixture key is
+/// genuinely absent here rather than a simulated failure (the same reason
+/// `NoActiveSshSessions`, `NoGraphicalSession`, `DisplayManagerInactive` and
+/// `RtTuningServiceActive` are also `Unavailable` against this same fixture).
+/// Honest absence must report `Unavailable`, never a silent `Pass` (design point
+/// 4: record, do not guess).
+#[test]
+fn no_active_login_sessions_unavailable_when_loginctl_data_absent() {
+    let facts = FixtureFacts::parse(RIG_AS_FOUND);
+    let results = run_all(&facts, &headline_spec());
+    let result = results
+        .iter()
+        .find(|r| r.check == PreconditionCheck::NoActiveLoginSessions)
+        .expect("NoActiveLoginSessions result present");
+    assert_eq!(result.status, PreconditionStatus::Unavailable);
 }
 
 #[test]

@@ -44,6 +44,7 @@ nic_wifi:     absent driver=absent
 | systemd-default-target-is-multi-user | pass | multi-user.target | multi-user.target |
 | display-manager-inactive | pass | gdm.service=inactive | inactive |
 | no-graphical-session | pass | 0 | 0 |
+| no-active-login-sessions | pass | none | no local console login session |
 | governor-is-performance-on-all-cpus | pass | performance on 22 CPUs | performance on all CPUs |
 | no-turbo-enabled | pass | 1 | 1 |
 | deep-cstates-disabled | pass | C6 not present, C10 not present | C6 disabled, C10 disabled |

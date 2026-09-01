@@ -295,6 +295,7 @@ pub enum PreconditionCheck {
     SystemdDefaultTargetIsMultiUser,
     DisplayManagerInactive,
     NoGraphicalSession,
+    NoActiveLoginSessions,
     GovernorIsPerformanceOnAllCpus,
     NoTurboEnabled,
     DeepCstatesDisabled,
@@ -319,6 +320,7 @@ impl PreconditionCheck {
         PreconditionCheck::SystemdDefaultTargetIsMultiUser,
         PreconditionCheck::DisplayManagerInactive,
         PreconditionCheck::NoGraphicalSession,
+        PreconditionCheck::NoActiveLoginSessions,
         PreconditionCheck::GovernorIsPerformanceOnAllCpus,
         PreconditionCheck::NoTurboEnabled,
         PreconditionCheck::DeepCstatesDisabled,
@@ -554,6 +556,7 @@ mod tests {
             PreconditionCheck::SystemdDefaultTargetIsMultiUser,
             PreconditionCheck::DisplayManagerInactive,
             PreconditionCheck::NoGraphicalSession,
+            PreconditionCheck::NoActiveLoginSessions,
             PreconditionCheck::GovernorIsPerformanceOnAllCpus,
             PreconditionCheck::NoTurboEnabled,
             PreconditionCheck::DeepCstatesDisabled,
@@ -565,7 +568,7 @@ mod tests {
             PreconditionCheck::NoPackageManagerActivity,
             PreconditionCheck::TracersQuiescent,
         ];
-        assert_eq!(PreconditionCheck::ALL.len(), 14);
+        assert_eq!(PreconditionCheck::ALL.len(), 15);
         for variant in &all {
             assert!(
                 PreconditionCheck::ALL.contains(variant),

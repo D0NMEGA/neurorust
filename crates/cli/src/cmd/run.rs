@@ -13,7 +13,7 @@
 //! `--allow-precondition-violation` (D-17) is the one narrow exception to "refuse
 //! before touching anything if one is violated" above: accepted only for
 //! `--class calibration-contaminated`, it waives the refusal alone. Every one of
-//! the 14 precondition results is still recorded with its real observed value, and
+//! the 15 precondition results is still recorded with its real observed value, and
 //! the resulting manifest always has `excluded_from_series` forced to `true`. See
 //! [`execute`] and [`precondition_waiver_reason`].
 
@@ -160,7 +160,7 @@ pub struct Args {
     /// Waives the D-06 refusal for a precondition violation. Accepted ONLY when
     /// `--class` is `calibration-contaminated`; every other run class is
     /// rejected outright, before anything else is checked (see `execute`). The
-    /// preconditions are still evaluated in full and every one of the 14
+    /// preconditions are still evaluated in full and every one of the 15
     /// results is still recorded in the manifest with its real observed value:
     /// this flag waives the refusal, never the assertion or the record. A run
     /// taken with this flag always has `excluded_from_series` forced to `true`
@@ -784,7 +784,7 @@ fn determine_exclusion(
 }
 
 /// The `exclusion_reason` for a `calibration-contaminated` run taken with
-/// `--allow-precondition-violation`: names every one of the 14 checks that did
+/// `--allow-precondition-violation`: names every one of the 15 checks that did
 /// not pass, with its real observed and expected value, so the published
 /// manifest says why the run is excluded rather than only that it is. `results`
 /// is the full, unfiltered precondition list (see `execute`, step 2); nothing
@@ -909,9 +909,11 @@ VERSION=\"26.04.1 LTS\"
     /// passing scenario from it, rather than fabricating one from nothing, keeps
     /// this test grounded in the real fixture's structure. Governor, the systemd
     /// default target, `no_turbo` and thermal readings are the only fields this
-    /// crate's 14 checks treat as a hard `Fail`; every other field in `CLEAN_FACTS`
+    /// crate's 15 checks treat as a hard `Fail`; every other field in `CLEAN_FACTS`
     /// already passes or is merely `Unavailable` (tolerated here via
-    /// `InstrumentClass::Investigation`, the class this test uses).
+    /// `InstrumentClass::Investigation`, the class this test uses). This includes
+    /// `NoActiveLoginSessions`: `CLEAN_FACTS` predates that check and carries no
+    /// `login.local_sessions` data, so it too reads `Unavailable` here.
     fn tuned_facts_text() -> String {
         let text = CLEAN_FACTS
             .replace(".governor=powersave", ".governor=performance")

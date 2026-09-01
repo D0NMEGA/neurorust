@@ -240,7 +240,7 @@ fn render_rig_and_tuning(manifest: &RunManifest) -> String {
     out
 }
 
-/// All 14 D-06 precondition checks, always, whether they passed or failed.
+/// All 15 D-06 precondition checks, always, whether they passed or failed.
 fn render_preconditions(manifest: &RunManifest) -> String {
     let mut out = String::new();
     out.push_str("## Preconditions\n\n");

@@ -42,6 +42,14 @@ pub trait SystemFacts {
     fn systemctl_get_default(&self) -> Result<String, FactsError>;
     fn active_ssh_sessions(&self) -> Result<u32, FactsError>;
     fn graphical_sessions(&self) -> Result<u32, FactsError>;
+    /// Names every active login session of type `tty`, class `user`, on `seat0`: a
+    /// login opened at the machine's own physical console (e.g. a text-mode login
+    /// at `tty1`), as opposed to an SSH session (also `Type=tty` in `loginctl`, but
+    /// attached to no seat) or an x11/wayland session (already covered by
+    /// [`Self::graphical_sessions`]). Named per session, like
+    /// [`Self::running_processes_matching`], so a violation can be attributed
+    /// rather than only counted.
+    fn local_login_sessions(&self) -> Result<Vec<String>, FactsError>;
     fn running_processes_matching(&self, names: &[&str]) -> Result<Vec<String>, FactsError>;
 }
 
@@ -170,6 +178,68 @@ impl SystemFacts for LiveFacts {
             }
         }
         Ok(count)
+    }
+
+    fn local_login_sessions(&self) -> Result<Vec<String>, FactsError> {
+        let list = Command::new("loginctl")
+            .args(["list-sessions", "--no-legend"])
+            .output()
+            .map_err(|source| FactsError::Command {
+                command: "loginctl list-sessions".to_string(),
+                reason: source.to_string(),
+            })?;
+        let list_text = String::from_utf8_lossy(&list.stdout);
+        let mut sessions = Vec::new();
+        for line in list_text.lines() {
+            let Some(session_id) = line.split_whitespace().next() else {
+                continue;
+            };
+            // One call for all four properties, same convention as `systemctl_show`:
+            // parse `Key=Value` lines rather than shelling out per property.
+            let show = Command::new("loginctl")
+                .args([
+                    "show-session",
+                    session_id,
+                    "-p",
+                    "Type",
+                    "-p",
+                    "Class",
+                    "-p",
+                    "Seat",
+                    "-p",
+                    "TTY",
+                ])
+                .output()
+                .map_err(|source| FactsError::Command {
+                    command: format!("loginctl show-session {session_id}"),
+                    reason: source.to_string(),
+                })?;
+            let text = String::from_utf8_lossy(&show.stdout);
+            let mut props = BTreeMap::new();
+            for prop_line in text.lines() {
+                if let Some((key, value)) = prop_line.split_once('=') {
+                    props.insert(key.to_string(), value.to_string());
+                }
+            }
+
+            // A local console login: a real seat (the physical keyboard/display),
+            // not merely a tty-typed session, which an interactive SSH connection
+            // also reports (see the trait doc comment). This is what keeps a single
+            // SSH connection from tripping this check as well as
+            // `NoActiveSshSessions`.
+            let is_local_console_login = props.get("Type").map(String::as_str) == Some("tty")
+                && props.get("Class").map(String::as_str) == Some("user")
+                && props.get("Seat").map(String::as_str) == Some("seat0");
+            if is_local_console_login {
+                let tty = props.get("TTY").cloned().unwrap_or_default();
+                sessions.push(if tty.is_empty() {
+                    format!("session {session_id}")
+                } else {
+                    format!("{tty} (session {session_id})")
+                });
+            }
+        }
+        Ok(sessions)
     }
 
     fn running_processes_matching(&self, names: &[&str]) -> Result<Vec<String>, FactsError> {
@@ -448,6 +518,20 @@ impl SystemFacts for FixtureFacts {
                     reason: "not a number".to_string(),
                 })
             })
+    }
+
+    /// `login.local_sessions`: a comma-separated list of named local console
+    /// sessions, empty for none. Absent (or the `unavailable` sentinel) means the
+    /// fixture never captured this data, same convention as every other
+    /// `get_key`-backed field.
+    fn local_login_sessions(&self) -> Result<Vec<String>, FactsError> {
+        let raw = self.get_key("login.local_sessions", "local_login_sessions")?;
+        Ok(raw
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect())
     }
 
     fn running_processes_matching(&self, names: &[&str]) -> Result<Vec<String>, FactsError> {

@@ -29,6 +29,18 @@ session, a background package-manager timer, a laptop's own charge controller, a
 left armed from an earlier investigation. Naming the exact numbers above is what makes
 this protocol a record of a specific failure rather than a generic checklist.
 
+A second gap surfaced on 2026-09-01: partway through a calibration run, an operator logged
+in at the rig's own keyboard and display, at the physical console (a text-mode session on
+`tty1`), and got a shell. That login started a session on the machine under measurement,
+triggered `update-motd.d`'s own apt and fwupd queries ("2 updates can be applied
+immediately", "2 devices have a firmware upgrade available"), and is exactly the class of
+disturbance this protocol exists to exclude. None of the checks above caught it:
+`NoActiveSshSessions` counts established SSH connections only, `NoGraphicalSession` counts
+x11/wayland sessions only, and `DisplayManagerInactive` inspects the display-manager unit
+only. A local console login falls through all three. Sitting down at the machine's own
+keyboard is the most direct way to perturb it, so a local console login counts as activity
+just as much as a remote one; that is what `NoActiveLoginSessions` (below) now asserts.
+
 ## Required system state
 
 Every row below is one precondition check `nrmeasure run` evaluates, in this order, before
@@ -44,6 +56,7 @@ whether it passes or fails (D-06); the run refuses if any of them fails, or, for
 | `SystemdDefaultTargetIsMultiUser` | `multi-user.target` | `sudo systemctl isolate multi-user.target` | `systemctl get-default` |
 | `DisplayManagerInactive` | `inactive` | `sudo systemctl stop gdm.service` (or `sddm.service` / `lightdm.service`, whichever this machine runs). | `systemctl show <unit> --property=ActiveState` for `gdm.service`, `sddm.service` and `lightdm.service`; every one of these present on the machine must report `inactive`. |
 | `NoGraphicalSession` | `0` | Log out of any desktop session. Isolating `multi-user.target` (the row above) normally satisfies this too. | Lists sessions with `loginctl list-sessions`, then `loginctl show-session <id> -p Type --value` for each, counting sessions of type `x11` or `wayland`. |
+| `NoActiveLoginSessions` | `no local console login session` | Log out of any session opened at the machine's own keyboard and display (for example, a text-mode login at `tty1`), and do not log in at the console while a run is in progress. | Lists sessions with `loginctl list-sessions`, then `loginctl show-session <id>` for each, naming any session where `Type=tty`, `Class=user` and `Seat=seat0`. An SSH session's allocated pty also reports `Type=tty`, but carries no seat, so one SSH connection is never counted here as well as by `NoActiveSshSessions`. |
 | `GovernorIsPerformanceOnAllCpus` | `performance on all CPUs` | See "The governor operating point" below. | Reads `/sys/devices/system/cpu/cpu{N}/cpufreq/scaling_governor` directly, per CPU, for every CPU with a `cpufreq` directory. Never trusts `rt-tuning.service`'s reported state. |
 | `NoTurboEnabled` | `1` | `echo 1 \| sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo` | Reads `/sys/devices/system/cpu/intel_pstate/no_turbo` (the path with a `cpu/` segment; the sibling path with no `cpu/` segment does not exist on this kernel and always reads as absent, a false negative `docs/rig/recon-2026-08-31/FINDINGS.md` documents). |
 | `DeepCstatesDisabled` | `C6 disabled, C10 disabled` | Boot with `intel_idle.max_cstate=1`, which prevents C6/C10 from ever registering (satisfies this check by absence), or `echo 1` to each state's own `disable` file if they are registered. | Probes `/sys/devices/system/cpu/cpu0/cpuidle/state{N}/{name,disable}` for increasing `N`. A present `C6` or `C10` must read `disable=1`; an absent one passes. |
@@ -204,7 +217,7 @@ own `--cpus`/`--main-cpus` (see "Reproducing on different hardware" below).
 
 ## What invalidates a run
 
-- Any of the 14 preconditions failing: `nrmeasure run` refuses before running any tool or
+- Any of the 15 preconditions failing: `nrmeasure run` refuses before running any tool or
   writing anything (exit code 2), naming every offending check. The week is recorded as a
   coverage gap (D-08) rather than backfilled.
 - A tool (`cyclictest` or `hwlatdetect`) exiting non-zero: the run directory is still

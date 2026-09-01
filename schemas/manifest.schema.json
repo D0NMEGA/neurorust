@@ -673,6 +673,7 @@
         "systemd-default-target-is-multi-user",
         "display-manager-inactive",
         "no-graphical-session",
+        "no-active-login-sessions",
         "governor-is-performance-on-all-cpus",
         "no-turbo-enabled",
         "deep-cstates-disabled",

@@ -1,3 +1,6 @@
 /target
 **/*.rs.bk
 .DS_Store
+# insta's own pending-review artifact when a snapshot test fails; regenerated
+# on every red run, never something to commit.
+**/*.snap.new

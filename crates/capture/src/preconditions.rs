@@ -74,6 +74,7 @@ pub fn run_all(facts: &dyn SystemFacts, spec: &PreconditionSpec) -> Vec<Precondi
         check_systemd_default_target(facts),
         check_display_manager_inactive(facts),
         check_no_graphical_session(facts),
+        check_no_active_login_sessions(facts),
         check_governor_is_performance(facts),
         check_no_turbo_enabled(facts),
         check_deep_cstates_disabled(facts),
@@ -250,6 +251,49 @@ fn check_no_graphical_session(facts: &dyn SystemFacts) -> PreconditionResult {
         Err(_) => unavailable(
             PreconditionCheck::NoGraphicalSession,
             "graphical session count not available",
+            expected,
+        ),
+    }
+}
+
+/// Detects a login session opened at the machine's own physical console, e.g. an
+/// operator sitting down and logging in at `tty1` and getting a shell. Found on the
+/// reference rig on 2026-09-01: a console login mid-run triggered
+/// `update-motd.d`'s own apt and fwupd queries, and none of `NoActiveSshSessions`
+/// (established SSH connections only), `NoGraphicalSession` (x11/wayland sessions
+/// only) or `DisplayManagerInactive` (gdm/sddm/lightdm unit state only) could see
+/// it: a text-mode login at the physical keyboard falls through all three.
+///
+/// Scoped to sessions of type `tty`, class `user`, on `seat0` specifically so a
+/// single incoming SSH connection is never counted here as well as by
+/// `NoActiveSshSessions`: an SSH session with an allocated pty also reports
+/// `Type=tty` in `loginctl`, but is attached to no seat (a seat names a physical
+/// console's own keyboard, display and input devices, which a remote session never
+/// has), so `Seat=seat0` is what tells the two apart without double-counting one
+/// SSH connection as two violations. A `systemd-run` transient unit (how this
+/// protocol has `nrmeasure` launched; see docs/measurement-protocol.md) opens no
+/// login session at all, so the harness's own normal invocation never trips this
+/// check.
+fn check_no_active_login_sessions(facts: &dyn SystemFacts) -> PreconditionResult {
+    let expected = "no local console login session";
+    match facts.local_login_sessions() {
+        Ok(sessions) => PreconditionResult {
+            check: PreconditionCheck::NoActiveLoginSessions,
+            status: if sessions.is_empty() {
+                PreconditionStatus::Pass
+            } else {
+                PreconditionStatus::Fail
+            },
+            observed: if sessions.is_empty() {
+                "none".to_string()
+            } else {
+                sessions.join(", ")
+            },
+            expected: expected.to_string(),
+        },
+        Err(_) => unavailable(
+            PreconditionCheck::NoActiveLoginSessions,
+            "loginctl session list not available",
             expected,
         ),
     }
