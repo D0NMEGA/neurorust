@@ -20,11 +20,36 @@ use crate::sources::{
 };
 
 /// Package temperature ceiling for [`PreconditionCheck::ThermalHeadroomAtStart`].
-/// Chosen so a run does not begin already inside the thermal regime the 2026-08-28
-/// `hwlatdetect` screen showed reintroduces firmware latency (91 to 95 C produced 26
-/// to 29 us events against the 30 us gate); see
-/// `measurements/2026-08-28-precision3591/README.md`.
-const THERMAL_HEADROOM_CEILING_C: f32 = 60.0;
+///
+/// Derived from measurement, not assumed. The original 60 C value sat one degree above the
+/// reference rig's own idle floor (58 to 59 C with fans at ~2200 RPM and a load average of
+/// 0.26), which made every run a coin flip on a one-degree margin and blocked the D-17
+/// calibration pair outright.
+///
+/// The evidence for 70 C, all from `hwlatdetect` at a 10 us threshold:
+///
+/// | Package temp | Condition                          | Events > 10 us | Max   |
+/// |--------------|------------------------------------|----------------|-------|
+/// | 59 C         | installed RT kernel, idle          | 0 / 900 s      | none  |
+/// | 91 to 93 C   | stock kernel, 22 cores saturated   | 26 / 900 s     | 29 us |
+/// | 93 to 95 C   | stock kernel, P-cores saturated    | 13 / 600 s     | 22 us |
+///
+/// The 59 C row is `docs/rig/d18-firmware-floor-rt-2026-09-01.txt`; the others are the
+/// 2026-08-28 screening under `measurements/2026-08-28-precision3591/`. Firmware latency is
+/// an SMI property and independent of which kernel is running, which the 59 C row confirms
+/// by reproducing the live-USB idle result on the installed PREEMPT_RT system.
+///
+/// 70 C sits 11 C above the measured idle floor, so a run can actually start, and more than
+/// 20 C below the lowest temperature at which any SMI has been observed on this hardware.
+/// The band between 59 and 91 C remains unmeasured; narrowing it would require heating the
+/// package to a series of setpoints and re-running `hwlatdetect` at each. Until that exists,
+/// 70 C is a bounded extrapolation rather than a measured boundary, and it is stated as such.
+///
+/// This is a start-of-run gate only. A run that heats past this ceiling mid-flight is still
+/// visible after the fact: the manifest records `temp_c_start`, `temp_c_end` and
+/// `package_temp_c_max` per thermal zone, so thermal excursions are auditable rather than
+/// silently absorbed.
+const THERMAL_HEADROOM_CEILING_C: f32 = 70.0;
 
 const DISPLAY_MANAGERS: [&str; 3] = ["gdm.service", "sddm.service", "lightdm.service"];
 const TARGET_DEEP_CSTATES: [&str; 2] = ["C6", "C10"];

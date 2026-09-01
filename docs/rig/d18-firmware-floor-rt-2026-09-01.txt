@@ -1,0 +1,26 @@
+# D-18 firmware floor re-run on the INSTALLED PREEMPT_RT kernel.
+# The 2026-08-28 screening was a live USB on the stock PREEMPT_DYNAMIC kernel.
+# Diagnostic run: taken OUTSIDE the harness deliberately, because its purpose is to
+# determine what the ThermalHeadroomAtStart gate should be. Not a published figure.
+# kernel:   7.0.0-30-realtime
+# governor: performance
+# no_turbo: 1
+# pkg temp at start: 59.0 C
+# fan rpm at start:  2268
+# started: 2026-09-01T15:53:25Z
+
+hwlatdetect:  test duration 900 seconds
+   detector: tracer
+   parameters:
+        CPU list:          None
+        Latency threshold: 10us
+        Sample window:      1000000us
+        Sample width:      500000us
+     Non-sampling period:  500000us
+        Output File:       None
+
+Starting test
+test finished
+Max Latency: Below threshold
+Samples recorded: 0
+Samples exceeding threshold: 0
