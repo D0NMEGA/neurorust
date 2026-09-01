@@ -9,6 +9,13 @@
 //! environment; parse and reconcile the raw captures; create the run directory and
 //! place the captures in unmodified; assemble, validate and write `manifest.json`;
 //! render and write `REPORT.md`.
+//!
+//! `--allow-precondition-violation` (D-17) is the one narrow exception to "refuse
+//! before touching anything if one is violated" above: accepted only for
+//! `--class calibration-contaminated`, it waives the refusal alone. Every one of
+//! the 14 precondition results is still recorded with its real observed value, and
+//! the resulting manifest always has `excluded_from_series` forced to `true`. See
+//! [`execute`] and [`precondition_waiver_reason`].
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -21,7 +28,8 @@ use nr_histogram::hist::{CyclictestRun, parse_hist_file};
 use nr_histogram::json::{parse_json_file, reconcile};
 use nr_manifest::{
     ArtifactKind, ArtifactRecord, ContaminationVerdict, HarnessInfo, InstrumentClass,
-    PreconditionResult, ProvenanceTier, RunClass, RunManifest, StorageLocation, ToolInvocation,
+    PreconditionResult, PreconditionStatus, ProvenanceTier, RunClass, RunManifest, StorageLocation,
+    ToolInvocation,
 };
 use nr_metrics::report::render_run_report;
 use time::OffsetDateTime;
@@ -148,6 +156,17 @@ pub struct Args {
     /// Assert preconditions and print what would run; write nothing.
     #[arg(long)]
     pub dry_run: bool,
+
+    /// Waives the D-06 refusal for a precondition violation. Accepted ONLY when
+    /// `--class` is `calibration-contaminated`; every other run class is
+    /// rejected outright, before anything else is checked (see `execute`). The
+    /// preconditions are still evaluated in full and every one of the 14
+    /// results is still recorded in the manifest with its real observed value:
+    /// this flag waives the refusal, never the assertion or the record. A run
+    /// taken with this flag always has `excluded_from_series` forced to `true`
+    /// with a stated reason; the operator cannot override that.
+    #[arg(long)]
+    pub allow_precondition_violation: bool,
 }
 
 /// Everything `run` would otherwise read from the environment: tool paths and the
@@ -185,6 +204,21 @@ pub fn run(args: Args) -> Result<i32> {
 fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
     let run_class: RunClass = args.class.into();
     let instrument_class: InstrumentClass = args.instrument.into();
+
+    // D-06/D-17: checked first and unconditionally, ahead of every other check
+    // below (including the fixture-facts guard immediately following), so the
+    // rejection is uniform regardless of what else the invocation set. A hole
+    // here is a hole in PLAT-02: without this restriction the flag would let a
+    // headline run be published with its preconditions silently waived.
+    if args.allow_precondition_violation && !matches!(run_class, RunClass::CalibrationContaminated)
+    {
+        anyhow::bail!(
+            "--allow-precondition-violation is accepted only for --class \
+             calibration-contaminated (got {run_class:?}): this flag exists to take the D-17 \
+             deliberately contaminated calibration arm without lying to the harness, and must \
+             never be available to waive preconditions on a publishable run"
+        );
+    }
 
     if overrides.facts_fixture_path.is_some()
         && matches!(
@@ -226,8 +260,23 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
     };
     let results: Vec<PreconditionResult> = preconditions::run_all(facts.as_ref(), &spec);
     if let Err(refusal) = preconditions::refuse_on_violation(&results, &instrument_class) {
-        eprintln!("{refusal}");
-        return Ok(2);
+        if args.allow_precondition_violation {
+            // The class restriction above guarantees run_class is
+            // CalibrationContaminated here. Only the refusal is waived: every
+            // result in `results` still flows into the manifest unchanged below,
+            // and excluded_from_series is forced true regardless (see
+            // precondition_waiver_reason).
+            eprintln!(
+                "warning: proceeding despite {} precondition violation(s) because \
+                 --allow-precondition-violation was given for this calibration-contaminated \
+                 run; every result is still recorded and this run is forced \
+                 excluded_from_series:\n{refusal}",
+                refusal.offenses.len()
+            );
+        } else {
+            eprintln!("{refusal}");
+            return Ok(2);
+        }
     }
 
     if args.dry_run {
@@ -364,11 +413,19 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         })
         .collect();
 
-    let (excluded_from_series, exclusion_reason) = determine_exclusion(
-        &tool_invocations,
-        &outcome.pair.verdict,
-        outcome.reason.as_deref(),
-    );
+    // D-17: a run taken with --allow-precondition-violation is always excluded
+    // from the series, unconditionally overriding whatever determine_exclusion
+    // would otherwise compute from tool exit codes or the contamination
+    // verdict. This is not a default the operator can turn off.
+    let (excluded_from_series, exclusion_reason) = if args.allow_precondition_violation {
+        (true, Some(precondition_waiver_reason(&results)))
+    } else {
+        determine_exclusion(
+            &tool_invocations,
+            &outcome.pair.verdict,
+            outcome.reason.as_deref(),
+        )
+    };
 
     // Step 10: assemble, validate and write manifest.json (written last).
     rundir::refuse_if_manifest_exists(&run_dir.path)
@@ -714,6 +771,40 @@ fn determine_exclusion(
     }
 }
 
+/// The `exclusion_reason` for a `calibration-contaminated` run taken with
+/// `--allow-precondition-violation`: names every one of the 14 checks that did
+/// not pass, with its real observed and expected value, so the published
+/// manifest says why the run is excluded rather than only that it is. `results`
+/// is the full, unfiltered precondition list (see `execute`, step 2); nothing
+/// here changes what was recorded, only how the reason is worded.
+fn precondition_waiver_reason(results: &[PreconditionResult]) -> String {
+    let offending: Vec<String> = results
+        .iter()
+        .filter(|r| {
+            r.status == PreconditionStatus::Fail || r.status == PreconditionStatus::Unavailable
+        })
+        .map(|r| {
+            format!(
+                "{:?} (observed {:?}, expected {:?})",
+                r.check, r.observed, r.expected
+            )
+        })
+        .collect();
+
+    if offending.is_empty() {
+        "excluded_from_series forced true: --allow-precondition-violation was given for this \
+         calibration-contaminated run, though no precondition actually failed"
+            .to_string()
+    } else {
+        format!(
+            "excluded_from_series forced true: --allow-precondition-violation waived {} \
+             precondition violation(s) for this calibration-contaminated run: {}",
+            offending.len(),
+            offending.join("; ")
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -789,6 +880,7 @@ VERSION=\"26.04.1 LTS\"
                 .join("../../config/contamination-thresholds.json"),
             note: None,
             dry_run: false,
+            allow_precondition_violation: false,
         }
     }
 

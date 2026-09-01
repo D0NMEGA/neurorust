@@ -13,7 +13,7 @@
 use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
-use nr_manifest::RunManifest;
+use nr_manifest::{PreconditionStatus, RunManifest};
 
 const CLEAN_FACTS: &str = include_str!("../../capture/tests/fixtures/probe-sysfs-tuning.txt");
 const VIOLATED_FACTS: &str = include_str!("../../capture/tests/fixtures/violated-sysfs-tuning.txt");
@@ -83,6 +83,18 @@ fn tuned_facts_text() -> String {
     lines.push("cpu.isolated=6-11".to_string());
     lines.push("service.rt-tuning.service.ActiveState=active".to_string());
     format!("{}\n{D14_ENVIRONMENT_FIXTURE}", lines.join("\n"))
+}
+
+/// The D-17 contaminated arm, reproduced as a fixture: otherwise identical to
+/// `tuned_facts_text()` (so the D-14 environment snapshot is genuinely
+/// populated and 12 of the 14 checks still pass), but with an active SSH
+/// session and an active graphical session, the two conditions
+/// `docs/measurement-protocol.md`'s CAVEAT names as what the 2026-08-28
+/// contamination, and this calibration arm, both reproduce.
+fn contaminated_calibration_facts_text() -> String {
+    tuned_facts_text()
+        .replace("ssh.active_sessions=0", "ssh.active_sessions=1")
+        .replace("graphical.sessions=0", "graphical.sessions=1")
 }
 
 fn write_fixture(dir: &Path, name: &str, content: &str) -> PathBuf {
@@ -360,5 +372,116 @@ fn fixture_facts_refused_for_publishable_classes() {
             .count(),
         0,
         "no run directory may be written for any publishable class"
+    );
+}
+
+/// D-06/D-17/PLAT-02: `--allow-precondition-violation` must be rejected outright
+/// for every run class other than `calibration-contaminated` (checked here for
+/// `headline`, `investigation` and `soak`), and the accepted
+/// `calibration-contaminated` path must still record all 14 precondition
+/// results and still force `excluded_from_series: true`. Without this
+/// restriction and this test, the flag is a hole that would let a headline run
+/// be published with its preconditions silently waived.
+#[test]
+fn allow_precondition_violation_rejected_outside_calibration_contaminated() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements_root = temp.path().join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+
+    for class in ["headline", "investigation", "soak"] {
+        let output = base_run_command(&measurements_root)
+            .args(["--class", class])
+            .arg("--allow-precondition-violation")
+            .output()
+            .unwrap_or_else(|_| panic!("nrmeasure runs for class {class}"));
+
+        assert!(
+            !output.status.success(),
+            "--allow-precondition-violation must be rejected for class {class}"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("calibration-contaminated"),
+            "stderr for class {class} should name the only class that accepts the flag: \
+             {stderr}"
+        );
+    }
+
+    assert_eq!(
+        std::fs::read_dir(&measurements_root)
+            .expect("read_dir")
+            .count(),
+        0,
+        "no run directory may be written when the flag is rejected"
+    );
+
+    // The accepted path: calibration-contaminated, with two of the fourteen
+    // preconditions deliberately violated (an active SSH session and an active
+    // graphical session), the same two conditions the real D-17 contaminated
+    // arm reproduces.
+    let contaminated_facts_path = write_fixture(
+        temp.path(),
+        "contaminated-facts.txt",
+        &contaminated_calibration_facts_text(),
+    );
+    let interrupts_path = write_fixture(temp.path(), "interrupts.txt", INTERRUPTS);
+
+    let output = base_run_command(&measurements_root)
+        .env("NRMEASURE_FACTS_FIXTURE", &contaminated_facts_path)
+        .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+        .args(["--class", "calibration-contaminated"])
+        .arg("--allow-precondition-violation")
+        .output()
+        .expect("nrmeasure runs");
+
+    assert!(
+        output.status.success(),
+        "the accepted calibration-contaminated path must still succeed: stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let entries: Vec<_> = std::fs::read_dir(&measurements_root)
+        .expect("read_dir")
+        .filter_map(|entry| entry.ok())
+        .collect();
+    assert_eq!(
+        entries.len(),
+        1,
+        "exactly one run directory is written for the accepted path"
+    );
+
+    let manifest_text = std::fs::read_to_string(entries[0].path().join("manifest.json"))
+        .expect("read manifest.json");
+    let manifest: RunManifest = serde_json::from_str(&manifest_text).expect("manifest.json parses");
+
+    assert_eq!(
+        manifest.preconditions.len(),
+        14,
+        "every one of the 14 preconditions must still be recorded when the flag waives the \
+         refusal"
+    );
+    let failed: Vec<_> = manifest
+        .preconditions
+        .iter()
+        .filter(|p| p.status == PreconditionStatus::Fail)
+        .collect();
+    assert!(
+        !failed.is_empty(),
+        "the deliberately violated preconditions must still be recorded as Fail, not silently \
+         dropped: {:?}",
+        manifest.preconditions
+    );
+    assert!(
+        manifest.excluded_from_series,
+        "a run taken with --allow-precondition-violation must always be excluded_from_series"
+    );
+    assert!(
+        manifest
+            .exclusion_reason
+            .as_ref()
+            .is_some_and(|reason| !reason.is_empty()),
+        "excluded_from_series must carry a meaningful, non-empty exclusion_reason, got {:?}",
+        manifest.exclusion_reason
     );
 }
