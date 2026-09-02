@@ -1,0 +1,86 @@
+#!/bin/bash
+# nr-measure-mode {on|off|status}
+#
+# Puts the reference rig into, or out of, the state docs/measurement-protocol.md
+# requires. Everything it changes is reversible with `off`, and `status` reports
+# the live values rather than what any service claims about itself.
+#
+# Why this exists as one command rather than a list in a document: the protocol
+# prep was being applied by hand, and on 2026-09-01 two separate runs were lost
+# to prep mistakes. snapd was stopped rather than masked and came straight back
+# through socket activation; the governor was assumed to be `performance`
+# because rt-tuning.service reported healthy, while power-profiles-daemon had
+# silently overwritten it.
+#
+# The timers matter for long runs. sysstat-collect fires every ten minutes, so
+# it lands roughly six times inside a one-hour capture and two dozen times
+# inside the four-hour PLAT-03 headline run. fstrim and e2scrub_all are weekly
+# but would be severe if they landed mid-run. None of this is visible to the
+# D-06 preconditions, which are asserted once at start and cannot see a timer
+# that fires at minute forty.
+set -u
+
+SERVICES=(power-profiles-daemon.service snapd.service snapd.socket)
+TIMERS=(
+    sysstat-collect.timer anacron.timer fwupd-refresh.timer
+    apt-daily.timer apt-daily-upgrade.timer motd-news.timer
+    update-notifier-download.timer update-notifier-motd.timer
+    man-db.timer logrotate.timer dpkg-db-backup.timer
+    systemd-tmpfiles-clean.timer e2scrub_all.timer fstrim.timer
+    sysstat-rotate.timer sysstat-summary.timer apport-autoreport.timer
+)
+
+need_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "nr-measure-mode: must run as root" >&2
+        exit 2
+    fi
+}
+
+governors() { cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null | sort -u | tr '\n' ' '; }
+
+case "${1:-status}" in
+on)
+    need_root
+    systemctl mask --now "${SERVICES[@]}" >/dev/null 2>&1
+    systemctl mask --now "${TIMERS[@]}" >/dev/null 2>&1
+    systemctl stop unattended-upgrades.service >/dev/null 2>&1
+    systemctl restart rt-tuning.service >/dev/null 2>&1
+    # rt-tuning.service is the intended writer, but verify rather than trust it.
+    if [ "$(governors)" != "performance " ]; then
+        for c in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+            echo performance > "$c" 2>/dev/null
+        done
+    fi
+    echo nop > /sys/kernel/tracing/current_tracer 2>/dev/null
+    systemctl set-default multi-user.target >/dev/null 2>&1
+    echo "measurement mode ON (run 'nr-measure-mode off' to restore the desktop)"
+    "$0" status
+    ;;
+off)
+    need_root
+    systemctl set-default graphical.target >/dev/null 2>&1
+    systemctl unmask "${TIMERS[@]}" >/dev/null 2>&1
+    systemctl unmask "${SERVICES[@]}" >/dev/null 2>&1
+    systemctl start power-profiles-daemon.service snapd.socket >/dev/null 2>&1
+    echo "measurement mode OFF, desktop configuration restored"
+    "$0" status
+    ;;
+status)
+    printf 'governor        : %s\n' "$(governors)"
+    printf 'no_turbo        : %s\n' "$(cat /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || echo unavailable)"
+    printf 'package temp    : %s C\n' "$(awk '{printf "%.1f",$1/1000}' /sys/class/thermal/thermal_zone0/temp 2>/dev/null)"
+    printf 'default target  : %s\n' "$(systemctl get-default 2>/dev/null)"
+    printf 'ppd             : %s\n' "$(systemctl is-enabled power-profiles-daemon.service 2>&1)"
+    printf 'snapd           : %s\n' "$(systemctl is-enabled snapd.socket 2>&1)"
+    masked=0
+    for t in "${TIMERS[@]}"; do
+        [ "$(systemctl is-enabled "$t" 2>&1)" = "masked" ] && masked=$((masked+1))
+    done
+    printf 'timers masked   : %d of %d\n' "$masked" "${#TIMERS[@]}"
+    ;;
+*)
+    echo "usage: nr-measure-mode {on|off|status}" >&2
+    exit 2
+    ;;
+esac
