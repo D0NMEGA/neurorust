@@ -54,12 +54,19 @@ on)
     fi
     echo nop > /sys/kernel/tracing/current_tracer 2>/dev/null
     systemctl set-default multi-user.target >/dev/null 2>&1
+    # Stop the machine putting itself to sleep. This is a laptop: the default
+    # HandleLidSwitch=suspend means a closed lid ends a run outright, and the
+    # PLAT-03 headline capture in plan 01-13 runs four hours unattended. Masking
+    # the sleep targets is the blunt version and covers idle, lid and manual
+    # suspend in one go.
+    systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target >/dev/null 2>&1
     echo "measurement mode ON (run 'nr-measure-mode off' to restore the desktop)"
     "$0" status
     ;;
 off)
     need_root
     systemctl set-default graphical.target >/dev/null 2>&1
+    systemctl unmask sleep.target suspend.target hibernate.target hybrid-sleep.target >/dev/null 2>&1
     systemctl unmask "${TIMERS[@]}" >/dev/null 2>&1
     systemctl unmask "${SERVICES[@]}" >/dev/null 2>&1
     systemctl start power-profiles-daemon.service snapd.socket >/dev/null 2>&1
@@ -78,6 +85,8 @@ status)
         [ "$(systemctl is-enabled "$t" 2>&1)" = "masked" ] && masked=$((masked+1))
     done
     printf 'timers masked   : %d of %d\n' "$masked" "${#TIMERS[@]}"
+    printf 'suspend blocked : %s\n' "$(systemctl is-enabled sleep.target 2>&1)"
+    printf 'ac power        : %s\n' "$(cat /sys/class/power_supply/AC*/online 2>/dev/null | head -1)"
     ;;
 *)
     echo "usage: nr-measure-mode {on|off|status}" >&2
