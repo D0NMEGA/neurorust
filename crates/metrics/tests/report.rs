@@ -124,6 +124,12 @@ const SAMPLE_MANIFEST_JSON: &str = r##"{
       "context_switches": [{ "cpu": 6, "count": 2 }],
       "irqs": [{ "cpu": 6, "count": 0 }]
     },
+    "tail_metrics": {
+      "tail_excursion_ratio": 3.0,
+      "thread_max_spread": 0.6,
+      "overflow_rate_per_s": 0.0
+    },
+    "thresholds_provisional": false,
     "verdict": "clean"
   },
   "tools": [

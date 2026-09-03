@@ -267,8 +267,10 @@ fn counter_for(counters: &[CpuCounter], cpu: u32) -> u64 {
         .unwrap_or(0)
 }
 
-/// The D-15 contamination verdict, with the observed counter deltas per isolated CPU, or the
-/// word "uncalibrated" and the reason when no thresholds exist yet (D-17).
+/// The D-15/D-24 contamination verdict: the D-24 tail metrics computed from the run's own
+/// histogram (the primary signal), whether the thresholds behind the verdict are provisional,
+/// and the `/proc/interrupts` counter deltas per isolated CPU (D-15's original signal, retained
+/// as evidence), or the word "uncalibrated" and the reason when no thresholds exist yet (D-17).
 fn render_contamination(manifest: &RunManifest) -> String {
     let pair = &manifest.interference;
 
@@ -290,6 +292,32 @@ fn render_contamination(manifest: &RunManifest) -> String {
                 out.push_str(&format!("reason: {reason}\n"));
             }
         }
+    }
+    if pair.thresholds_provisional == Some(true) {
+        out.push_str(
+            "thresholds: provisional (derived from 2 runs, not a calibrated set; see \
+             config/contamination-thresholds.json)\n",
+        );
+    }
+
+    out.push_str("\ntail metrics (D-24):\n\n");
+    match &pair.tail_metrics {
+        Some(tail) => {
+            out.push_str("| metric | value |\n|--------|-------|\n");
+            out.push_str(&format!(
+                "| tail excursion ratio (max / p99) | {:.1} |\n",
+                tail.tail_excursion_ratio
+            ));
+            out.push_str(&format!(
+                "| thread-max spread | {:.1}% |\n",
+                tail.thread_max_spread * 100.0
+            ));
+            out.push_str(&format!(
+                "| overflow rate | {:.4}/s |\n",
+                tail.overflow_rate_per_s
+            ));
+        }
+        None => out.push_str("not computed: this manifest predates D-24.\n"),
     }
 
     out.push_str("\ncounter deltas per isolated cpu:\n\n");

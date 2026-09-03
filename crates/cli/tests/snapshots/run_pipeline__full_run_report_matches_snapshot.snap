@@ -58,8 +58,17 @@ nic_wifi:     absent driver=absent
 
 ## Contamination verdict
 
-verdict: uncalibrated
-reason: no calibrated contamination thresholds exist yet (D-17)
+verdict: contaminated
+reason: contamination verdict Contaminated was reached against provisional (D-24, not yet calibrated) thresholds; see config/contamination-thresholds.json
+thresholds: provisional (derived from 2 runs, not a calibrated set; see config/contamination-thresholds.json)
+
+tail metrics (D-24):
+
+| metric | value |
+|--------|-------|
+| tail excursion ratio (max / p99) | 422.9 |
+| thread-max spread | 3.3% |
+| overflow rate | 888.0000/s |
 
 counter deltas per isolated cpu:
 

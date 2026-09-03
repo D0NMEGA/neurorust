@@ -460,6 +460,7 @@
       ]
     },
     "InterferenceSnapshotPair": {
+      "description": "D-15/D-24: the full contamination evidence for one run. `before`/`after`/`delta` are\nthe `/proc/interrupts` interference snapshot (D-15's original signal, retained as\nevidence but no longer sufficient as the sole detector, see `TailMetrics`);\n`tail_metrics` is the D-24 tail-based signal computed from the run's own histogram;\n`verdict` is the resulting call. `tail_metrics` and `thresholds_provisional` are\n`Option` only so a manifest captured before D-24 (2026-09-02 and earlier) still\ndeserializes; every manifest `nrmeasure run` produces from D-24 onward always\npopulates both with `Some`.",
       "type": "object",
       "properties": {
         "after": {
@@ -470,6 +471,23 @@
         },
         "delta": {
           "$ref": "#/$defs/InterferenceDelta"
+        },
+        "tail_metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TailMetrics"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "thresholds_provisional": {
+          "description": "True when `verdict` was computed against provisional (not yet calibrated)\ntail-metric thresholds; see `Thresholds::Provisional` in\n`crates/capture/src/interference.rs`. Never conflate a provisional `Clean` with\na calibrated one: `nr-cli`'s `determine_exclusion` checks this before ever\nadmitting a run to the headline series on the strength of `verdict` alone.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "verdict": {
           "$ref": "#/$defs/ContaminationVerdict"
@@ -813,6 +831,33 @@
             "external"
           ]
         }
+      ]
+    },
+    "TailMetrics": {
+      "description": "D-24: the tail-based contamination metrics, computed from a run's own cyclictest\nhistogram rather than from `/proc/interrupts`. See\n`crates/capture/src/interference.rs` for how each field is computed and why the\ninterference counters below were found insufficient on their own: the D-17\ncalibration pair (`measurements/2026-09-01-precision3591-calibration-clean` and\n`measurements/2026-09-02-precision3591-calibration-contaminated`) showed the\ncontaminated run with FEWER interrupts than the clean one, while producing a worst\ncase 50x higher.",
+      "type": "object",
+      "properties": {
+        "overflow_rate_per_s": {
+          "description": "Overflow samples (recorded at the histogram bound) divided by run duration in\nseconds. Coarser than the other two fields, since it depends on the histogram\nbound (400 us in this project); recorded as evidence, never the primary signal.",
+          "type": "number",
+          "format": "double"
+        },
+        "tail_excursion_ratio": {
+          "description": "Global maximum divided by p99. A clean run and a globally-stalled run can share\nnearly identical percentiles up to p99.99 (contamination here adds rare\ncatastrophic excursions rather than shifting the bulk distribution), so this\nratio is where the two separate: 8.7 on the D-17 clean arm, 428.4 on its\ncontaminated twin.",
+          "type": "number",
+          "format": "double"
+        },
+        "thread_max_spread": {
+          "description": "`(max(per-thread max) - min(per-thread max)) / max(per-thread max)`. A single\nglobal stall (for example `stop_machine()`, or a system-wide TLB shootdown)\nhalts every isolated thread at nearly the same instant, so their per-thread\nmaxima cluster tightly (3.6% on the D-17 contaminated arm) where independent,\nper-core noise scatters them (76.9% on its clean twin). Low spread alone is not\nevidence of contamination: a clean run whose six per-thread maxima happen to sit\nclose together also scores low. See `tail_excursion_ratio`.",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tail_excursion_ratio",
+        "thread_max_spread",
+        "overflow_rate_per_s"
       ]
     },
     "ThermalZone": {

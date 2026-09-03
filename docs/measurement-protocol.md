@@ -215,6 +215,63 @@ own `--cpus`/`--main-cpus` (see "Reproducing on different hardware" below).
    This must exit 0. `.github/workflows/provenance.yml` runs the identical command on every
    push and pull request and blocks the merge if it does not.
 
+## What the contamination detector measures
+
+The checklist above (`nrmeasure run`'s 15 preconditions) is asserted before a
+measurement starts. D-15 is the complementary check taken around the measurement
+itself: a `/proc/interrupts` snapshot before and after the run, diffed per isolated CPU,
+plus (D-24, 2026-09-02) a set of metrics computed from the run's own cyclictest
+histogram.
+
+The `/proc/interrupts` diff alone is not a sufficient detector. Two real one-hour-class
+runs, taken under identical tuning and differing only in contamination, prove this
+directly:
+
+- `measurements/2026-09-01-precision3591-calibration-clean` (3600s, no login session)
+- `measurements/2026-09-02-precision3591-calibration-contaminated` (900s, SSH activity
+  plus an active GDM greeter on seat0)
+
+The contaminated run recorded FEWER CAL/TLB/RES/device-IRQ counts on the isolated cores
+than the clean run, while producing a worst-case latency 50 times higher (78 us clean
+vs 3856 us contaminated). This kernel command line's own `irqaffinity=0-5,12-21` keeps
+interrupts off the isolated cores (6-11) by design, so a global stall (for example
+`stop_machine()`, or a system-wide TLB shootdown) reaches every isolated thread without
+ever registering as per-core interrupt traffic. A threshold derived from these counters
+would be blind to exactly the contamination it exists to catch.
+
+What separates the two runs instead is the tail of the latency distribution, not its
+bulk: p50, p95, p99 and p99.9 are nearly identical between them, but the global maximum
+diverges sharply from p99 (a ratio of 8.7 clean vs 428.4 contaminated), and every
+isolated thread's own maximum lands within a narrow band of every other thread's (a
+spread of 3.6% contaminated vs 76.9% clean, where independent per-core noise scatters
+the six threads' maxima instead of clustering them). D-24 computes three metrics from
+the histogram every run already produces:
+
+- `tail_excursion_ratio`: the global maximum divided by p99.
+- `thread_max_spread`: `(max(per-thread max) - min(per-thread max)) / max(per-thread
+  max)`. Low spread combined with a high excursion ratio is the global-stall signature;
+  low spread alone is not evidence of contamination, since a clean run with six small,
+  near-identical maxima also scores low.
+- `overflow_rate_per_s`: overflow samples divided by run duration. Coarser than the
+  other two (it depends on the histogram bound, 400 us in this project), so it is
+  recorded as evidence but is never the primary signal.
+
+The `/proc/interrupts` counters are still recorded on every run: they remain useful
+evidence for a different class of contamination (for example a genuinely busy IRQ
+storm bleeding onto an isolated core), just not for the global-stall pattern above.
+Neither signal is deleted in favour of the other.
+
+`config/contamination-thresholds.json` ships with `tail_excursion_ratio_max` and
+`thread_max_spread_min` set from exactly this one calibration pair (n=2). Two runs are
+not a calibration set: their durations differ (3600s vs 900s), and the global maximum
+is duration-sensitive (a longer clean run has more chances to catch a rare excursion,
+so the clean arm's own 8.7 ratio is a lower bound on what a clean 4 hour headline run
+might show). The shipped thresholds are therefore marked `"status": "provisional"`,
+both in that file and in every manifest's `interference.thresholds_provisional` field,
+and a provisional verdict is never enough on its own to admit a run to the headline
+series (see "What invalidates a run" below); only a properly calibrated threshold set,
+derived from many runs, may do that.
+
 ## What invalidates a run
 
 - Any of the 15 preconditions failing: `nrmeasure run` refuses before running any tool or
@@ -224,12 +281,14 @@ own `--cpus`/`--main-cpus` (see "Reproducing on different hardware" below).
   written in full (BENCH-06: a losing configuration is retained, never dropped), but the
   manifest marks `excluded_from_series: true` with the tool's name and exit code as the
   reason.
-- A non-clean contamination verdict: the same treatment, excluded from the series with a
-  reason, never omitted from `measurements/INDEX.md`. Today, before plan 01-11's
-  calibration pair lands, `config/contamination-thresholds.json` ships uncalibrated, and
-  every run is marked excluded from the series for that reason alone, regardless of how
-  clean it actually was; once calibrated thresholds exist, only a run whose interference
-  counters exceed them is marked contaminated.
+- A non-clean contamination verdict, or a verdict reached against provisional
+  thresholds: the same treatment, excluded from the series with a reason, never omitted
+  from `measurements/INDEX.md`. `config/contamination-thresholds.json` ships with
+  `"status": "provisional"`, derived from exactly the D-17 calibration pair (n=2, see
+  "What the contamination detector measures" above); every run is marked excluded from
+  the series regardless of whether its own D-24 tail metrics score clean or
+  contaminated, because a provisional threshold set is not trusted to admit a run on
+  its own. Only a properly calibrated threshold set (many runs, not two) changes this.
 - A tracer armed during a `headline-series` run: refused outright by `TracersQuiescent`,
   because tracer overhead inflates the very numbers being published.
 - Running cyclictest and hwlatdetect concurrently: not possible through `nrmeasure run`

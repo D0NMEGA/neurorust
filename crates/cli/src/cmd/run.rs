@@ -5,10 +5,12 @@
 //! fail early if one is missing; assert every D-06 precondition and refuse before
 //! touching anything if one is violated; snapshot interference before the tools
 //! run; execute `cyclictest` (and `hwlatdetect` if requested, never concurrently);
-//! snapshot interference again and render the D-15 verdict; snapshot the D-14
-//! environment; parse and reconcile the raw captures; create the run directory and
-//! place the captures in unmodified; assemble, validate and write `manifest.json`;
-//! render and write `REPORT.md`.
+//! parse and reconcile the raw captures; snapshot interference again and render the
+//! D-15/D-24 verdict (D-24's tail metrics are computed from the just-parsed
+//! histogram, which is why parsing now happens before this step rather than after
+//! it); snapshot the D-14 environment; create the run directory and place the
+//! captures in unmodified; assemble, validate and write `manifest.json`; render and
+//! write `REPORT.md`.
 //!
 //! `--allow-precondition-violation` (D-17) is the one narrow exception to "refuse
 //! before touching anything if one is violated" above: accepted only for
@@ -349,23 +351,10 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         tool_invocations.push(hwlatdetect_output.invocation);
     }
 
-    // Step 6: the after interference snapshot and the D-15 verdict.
-    let after = take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())?;
-    // `thresholds` was loaded in step 1, before the measurement ran.
-    let outcome = interference::verdict(
-        before,
-        after,
-        &thresholds,
-        Duration::from_secs(args.duration),
-    );
-
-    // Step 7: the D-14 environment snapshot.
-    let env_snapshot = environment::snapshot(facts.as_ref(), &args.rig_slug)
-        .context("failed to capture the environment snapshot")?;
-
-    let utc_end = OffsetDateTime::now_utc();
-
-    // Step 8: parse the raw captures and reconcile them.
+    // Step 6: parse the raw captures and reconcile them. Moved ahead of the D-15/D-24
+    // verdict below (it used to follow it): D-24's tail metrics need the parsed
+    // histogram, and nothing in between depends on the other's output, so parsing
+    // here costs nothing.
     let cyclictest_run: CyclictestRun = parse_hist_file(&hist_path, Some(args.histogram_max))
         .context("failed to parse cyclictest's .hist output")?;
     if json_path.is_file() {
@@ -374,6 +363,24 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         reconcile(&summary, &cyclictest_run)
             .context("cyclictest --json and .hist disagree; refusing a mismatched pairing")?;
     }
+
+    // Step 7: the after interference snapshot and the D-15/D-24 verdict.
+    let after = take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())?;
+    // `thresholds` was loaded in step 1, before the measurement ran.
+    let outcome = interference::verdict(
+        before,
+        after,
+        &cyclictest_run,
+        &thresholds,
+        Duration::from_secs(args.duration),
+    )
+    .context("failed to compute the D-15/D-24 contamination verdict")?;
+
+    // Step 8: the D-14 environment snapshot.
+    let env_snapshot = environment::snapshot(facts.as_ref(), &args.rig_slug)
+        .context("failed to capture the environment snapshot")?;
+
+    let utc_end = OffsetDateTime::now_utc();
 
     // Step 9: create the run directory and place the raw captures in unmodified.
     let run_dir = RunDir::create(
@@ -436,6 +443,7 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
             &tool_invocations,
             &outcome.pair.verdict,
             outcome.reason.as_deref(),
+            outcome.pair.thresholds_provisional.unwrap_or(false),
         )
     };
 
@@ -506,6 +514,14 @@ fn print_summary(run_dir: &RunDir, run: &CyclictestRun, manifest: &RunManifest) 
         "contamination verdict: {:?}, excluded_from_series: {}",
         manifest.interference.verdict, manifest.excluded_from_series
     );
+    if let Some(tail) = &manifest.interference.tail_metrics {
+        println!(
+            "tail excursion ratio={:.1} thread-max spread={:.1}% overflow rate={:.4}/s",
+            tail.tail_excursion_ratio,
+            tail.thread_max_spread * 100.0,
+            tail.overflow_rate_per_s
+        );
+    }
     Ok(())
 }
 
@@ -744,17 +760,20 @@ fn write_hist_tsv(run_dir: &Path, run: &CyclictestRun) -> Result<()> {
     std::fs::write(run_dir.join("hist.tsv"), out).context("failed to write hist.tsv")
 }
 
-/// BENCH-06: a tool failure or a non-clean contamination verdict does not drop the
-/// run. It is retained and published, only marked excluded from the regression
-/// series with a reason. `Uncalibrated` (the shipped default until plan 01-11's
-/// calibration pair exists) is treated the same as `Contaminated` here: a run
-/// whose contamination status cannot be judged is not a defensible headline
-/// figure either, matching this project's rig-discipline stance that an unknown
-/// is never silently treated as clean.
+/// BENCH-06: a tool failure, a non-clean contamination verdict, or a verdict reached
+/// against provisional (not yet calibrated) thresholds does not drop the run. It is
+/// retained and published, only marked excluded from the regression series with a
+/// reason. `Uncalibrated` and a provisional `Clean`/`Contaminated` (D-24; see
+/// `crates/capture/src/interference.rs`'s `Thresholds::Provisional`) are both treated
+/// the same way here: a run whose contamination status cannot be judged, or can only
+/// be judged against a threshold set derived from two runs, is not a defensible
+/// headline figure either, matching this project's rig-discipline stance that an
+/// unknown, or an unproven, is never silently treated as clean.
 fn determine_exclusion(
     tool_invocations: &[ToolInvocation],
     verdict: &ContaminationVerdict,
     verdict_reason: Option<&str>,
+    thresholds_provisional: bool,
 ) -> (bool, Option<String>) {
     if let Some(failed) = tool_invocations.iter().find(|tool| tool.exit_code != 0) {
         return (
@@ -762,6 +781,16 @@ fn determine_exclusion(
             Some(format!(
                 "{} exited with code {}",
                 failed.name, failed.exit_code
+            )),
+        );
+    }
+
+    if thresholds_provisional {
+        return (
+            true,
+            Some(format!(
+                "contamination verdict {verdict:?} was reached against provisional (D-24, not \
+                 yet calibrated) thresholds; see config/contamination-thresholds.json"
             )),
         );
     }

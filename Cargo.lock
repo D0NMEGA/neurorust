@@ -530,6 +530,7 @@ name = "nr-capture"
 version = "0.1.0"
 dependencies = [
  "insta",
+ "nr-histogram",
  "nr-manifest",
  "procfs",
  "serde",

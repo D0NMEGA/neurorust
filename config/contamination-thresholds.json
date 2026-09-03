@@ -1,9 +1,12 @@
 {
-  "schema_version": 1,
-  "status": "uncalibrated",
+  "schema_version": 2,
+  "status": "provisional",
   "calibration": {
-    "derived_from": [],
-    "note": "Thresholds are derived from the D-17 calibration pair in plan 01-11: one run under the clean protocol and one deliberately reproducing the 2026-08-28 conditions. Until that pair exists the verdict is uncalibrated, which is reported as such and never rendered as a pass."
+    "derived_from": [
+      "2026-09-01-precision3591-calibration-clean",
+      "2026-09-02-precision3591-calibration-contaminated"
+    ],
+    "note": "D-24: derived from exactly the D-17 calibration pair (n=2), which is not a calibration set. The two runs also differ in duration (3600s clean vs 900s contaminated), and max is duration-sensitive, so the clean arm's own 8.7 tail excursion ratio is a lower bound on what a clean 4 hour headline run might show; its 76.9% thread-max spread is also computed over very small values (18 to 78 us) where relative spread is naturally noisy. tail_excursion_ratio_max=50.0 and thread_max_spread_min=0.2 sit with wide margin on both sides of the two observed points (8.7/428.4 and 76.9%/3.6%) rather than hugging them, but they are not calibrated: do not read a Clean or Contaminated verdict produced under this status as a validated pass or fail. nr-cli's determine_exclusion never admits a run to the headline series on the strength of a provisional verdict alone; see crates/capture/src/interference.rs's Thresholds::Provisional doc comment. The per_run_hour interference-counter thresholds below remain unset: the same calibration pair showed the contaminated run with FEWER CAL/TLB/RES/device-IRQ counts than the clean run, so no threshold derived from them would be a defensible detector either."
   },
   "per_run_hour": {
     "cal_delta_max": null,
@@ -11,5 +14,9 @@
     "res_delta_max": null,
     "device_irq_delta_max": null,
     "context_switch_delta_max": null
+  },
+  "tail_metrics": {
+    "tail_excursion_ratio_max": 50.0,
+    "thread_max_spread_min": 0.2
   }
 }

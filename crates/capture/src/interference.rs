@@ -20,14 +20,39 @@
 //! `ctxt` counter is a single machine-wide total with no per-CPU breakdown, and that
 //! field's type (`Vec<CpuCounter>`, one entry per isolated CPU) requires one. Device
 //! IRQ totals (every numbered IRQ row, summed per CPU) fill `irqs`.
+//!
+//! **D-24 addendum (2026-09-02): the counters above are not a sufficient detector.**
+//! The D-17 calibration pair (`measurements/2026-09-01-precision3591-calibration-clean`,
+//! 3600s, vs `measurements/2026-09-02-precision3591-calibration-contaminated`, 900s,
+//! taken under identical tuning and differing only in contamination) showed the
+//! contaminated arm with FEWER CAL/TLB/RES/device-IRQ counts than the clean arm, while
+//! producing a worst case 50x higher (78 us clean vs 3856 us contaminated). Likely
+//! cause: this kernel command line's own `irqaffinity=0-5,12-21` keeps interrupts off
+//! the isolated cores (6-11) by design, so a global stall (for example
+//! `stop_machine()`, or a system-wide TLB shootdown) reaches every isolated thread
+//! without ever registering as per-core interrupt traffic. A threshold derived from
+//! these counters would be blind to exactly the contamination it exists to catch.
+//!
+//! What separates the two runs instead is the tail of the latency distribution, not
+//! its bulk: p50/p95/p99/p99.9 are nearly identical between them, but the global
+//! maximum diverges sharply from p99 (a ratio of 8.7 clean vs 428.4 contaminated), and
+//! every isolated thread's own maximum lands within a narrow band of every other
+//! thread's (a spread of 3.6% contaminated vs 76.9% clean). [`compute_tail_metrics`]
+//! turns this into three per-run numbers ([`nr_manifest::TailMetrics`]);
+//! [`evaluate_tail`] turns those into a verdict. The interference counters above are
+//! retained and still recorded: they remain useful evidence for a different class of
+//! contamination (for example a genuinely busy IRQ storm bleeding onto an isolated
+//! core), they are simply no longer the sole basis for the verdict.
 
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Duration;
 
+use nr_histogram::hist::CyclictestRun;
+use nr_histogram::percentiles::PercentileError;
 use nr_manifest::{
     ContaminationVerdict, CpuCounter, InterferenceDelta, InterferenceSnapshot,
-    InterferenceSnapshotPair,
+    InterferenceSnapshotPair, TailMetrics,
 };
 use serde::Deserialize;
 use thiserror::Error;
@@ -63,6 +88,19 @@ pub enum InterferenceError {
          a threshold set that cannot say which runs it came from is not calibrated"
     )]
     CalibratedMissingProvenance,
+    #[error("failed to compute D-24 tail metrics: {0}")]
+    TailPercentile(#[from] PercentileError),
+    #[error(
+        "status is 'provisional' but tail_metrics thresholds are missing or incomplete: both \
+         tail_excursion_ratio_max and thread_max_spread_min are required"
+    )]
+    ProvisionalMissingThresholds,
+    #[error(
+        "status is 'provisional' but calibration.derived_from names fewer than 2 runs; a \
+         threshold set that cannot say which runs informed it is not provisional, it is \
+         invented"
+    )]
+    ProvisionalMissingProvenance,
 }
 
 // ---------------------------------------------------------------------------------
@@ -253,6 +291,9 @@ struct ThresholdsFile {
     status: String,
     calibration: CalibrationBlock,
     per_run_hour: PerRunHour,
+    /// Present for `status: "provisional"`. Absent from a file predating D-24, which is
+    /// fine: only the `"provisional"` arm of [`Thresholds::parse`] reads it.
+    tail_metrics: Option<TailThresholdsRaw>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -273,13 +314,48 @@ struct PerRunHour {
     context_switch_delta_max: Option<f64>,
 }
 
-/// D-17: contamination thresholds, expressed per run hour. `Uncalibrated` is the
-/// shipped state (`config/contamination-thresholds.json`) until plan 01-11 runs the
-/// calibration pair; [`verdict`] always returns
-/// [`ContaminationVerdict::Uncalibrated`] for it, regardless of the observed deltas.
+/// D-24 tail-metric thresholds, as loaded from JSON. Both fields are required for
+/// `status: "provisional"`; see [`Thresholds::parse`].
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TailThresholdsRaw {
+    tail_excursion_ratio_max: Option<f64>,
+    thread_max_spread_min: Option<f64>,
+}
+
+/// D-24 tail-metric thresholds, validated and ready to evaluate against. Loaded only
+/// for [`Thresholds::Provisional`].
+#[derive(Debug, Clone)]
+pub struct TailThresholds {
+    pub tail_excursion_ratio_max: f64,
+    pub thread_max_spread_min: f64,
+}
+
+/// D-17: contamination thresholds. `Uncalibrated` was the shipped state
+/// (`config/contamination-thresholds.json`) before plan 01-11 ran the D-17 calibration
+/// pair; [`verdict`] always returns [`ContaminationVerdict::Uncalibrated`] for it,
+/// regardless of the observed deltas or tail metrics.
 #[derive(Debug, Clone)]
 pub enum Thresholds {
     Uncalibrated,
+    /// D-24: a threshold set derived from exactly 2 runs (the D-17 calibration pair),
+    /// evaluated for real against the tail metrics, but never presented as calibrated.
+    /// Two runs are not a calibration set: the durations differ (3600s clean vs 900s
+    /// contaminated), and `max` is duration-sensitive (a longer clean run has more
+    /// chances to catch a rare excursion, so the clean arm's observed 8.7 excursion
+    /// ratio is a lower bound on what a clean 4 hour headline run might show; its
+    /// 76.9% spread is also computed over very small values, 18 to 78 us, where
+    /// relative spread is naturally large and noisy).
+    ///
+    /// [`verdict`] still reports a genuine, metric-driven `Clean`/`Contaminated`
+    /// outcome under this variant, rather than a flat `Uncalibrated` regardless of how
+    /// extreme a run's own numbers are: that outcome is real, human-readable evidence.
+    /// What it is not is a licence to publish: `nr-cli`'s `determine_exclusion` checks
+    /// [`nr_manifest::InterferenceSnapshotPair::thresholds_provisional`] and never
+    /// admits a run to the headline series on the strength of a provisional verdict
+    /// alone. Only a future threshold set calibrated from many runs, not two, may do
+    /// that.
+    Provisional(TailThresholds),
     Calibrated(CalibratedThresholds),
 }
 
@@ -315,6 +391,24 @@ impl Thresholds {
 
         match file.status.as_str() {
             "uncalibrated" => Ok(Thresholds::Uncalibrated),
+            "provisional" => {
+                let tail = file
+                    .tail_metrics
+                    .as_ref()
+                    .ok_or(InterferenceError::ProvisionalMissingThresholds)?;
+                let (Some(ratio_max), Some(spread_min)) =
+                    (tail.tail_excursion_ratio_max, tail.thread_max_spread_min)
+                else {
+                    return Err(InterferenceError::ProvisionalMissingThresholds);
+                };
+                if file.calibration.derived_from.len() < 2 {
+                    return Err(InterferenceError::ProvisionalMissingProvenance);
+                }
+                Ok(Thresholds::Provisional(TailThresholds {
+                    tail_excursion_ratio_max: ratio_max,
+                    thread_max_spread_min: spread_min,
+                }))
+            }
             "calibrated" => {
                 let p = &file.per_run_hour;
                 let (Some(cal), Some(tlb), Some(res), Some(irq), Some(ctxt)) = (
@@ -347,13 +441,12 @@ impl Thresholds {
 // The verdict (D-15)
 // ---------------------------------------------------------------------------------
 
-/// The result of comparing a before/after pair against thresholds. Wraps
-/// [`nr_manifest::InterferenceSnapshotPair`] (unchanged from plan 01-03's schema,
-/// which has no field for a human-readable reason) with one: D-15 requires the
-/// verdict to name the offending counter and CPU. A future caller (nr-cli, plan
-/// 01-07) folds `reason` into `RunManifest::exclusion_reason` when `pair.verdict` is
-/// `Contaminated` (BENCH-06: the run is retained and published, only excluded from
-/// the headline series).
+/// The result of comparing a before/after pair, plus the D-24 tail metrics, against
+/// thresholds. Wraps [`nr_manifest::InterferenceSnapshotPair`] with one thing it has no
+/// field for: a human-readable reason naming the offending counter and CPU (D-15) or
+/// the offending tail-metric comparison (D-24). `nr-cli` folds `reason` into
+/// `RunManifest::exclusion_reason` when `pair.verdict` is `Contaminated` (BENCH-06: the
+/// run is retained and published, only excluded from the headline series).
 #[derive(Debug, Clone)]
 pub struct VerdictOutcome {
     pub pair: InterferenceSnapshotPair,
@@ -381,6 +474,45 @@ fn compute_delta(before: &InterferenceSnapshot, after: &InterferenceSnapshot) ->
         context_switches: diff_counters(&before.context_switches, &after.context_switches),
         irqs: diff_counters(&before.irqs, &after.irqs),
     }
+}
+
+/// D-24: computes [`TailMetrics`] from `run`'s own histogram. See the module
+/// documentation for what each field means and why it separates the D-17 calibration
+/// pair where the interference counters above do not.
+fn compute_tail_metrics(
+    run: &CyclictestRun,
+    run_duration: Duration,
+) -> Result<TailMetrics, InterferenceError> {
+    let percentiles = run.percentiles(&[0.99])?;
+    let p99_us = percentiles.values.first().map(|&(_, v)| v).unwrap_or(0);
+    let max_us = percentiles.max_us;
+
+    // A run with p99 == 0 has no meaningful ratio to compute; recorded as 0.0 rather
+    // than dividing by zero. Not observed on any real capture this project has taken.
+    let tail_excursion_ratio = if p99_us == 0 {
+        0.0
+    } else {
+        max_us as f64 / p99_us as f64
+    };
+
+    let thread_max_max = run.max_us.iter().copied().max().unwrap_or(0);
+    let thread_max_min = run.max_us.iter().copied().min().unwrap_or(0);
+    let thread_max_spread = if thread_max_max == 0 {
+        0.0
+    } else {
+        (thread_max_max - thread_max_min) as f64 / thread_max_max as f64
+    };
+
+    // `.max(f64::MIN_POSITIVE)` mirrors `evaluate`'s own guard below: a zero duration
+    // must never produce an infinite or NaN rate.
+    let overflow_rate_per_s =
+        percentiles.overflow_samples as f64 / run_duration.as_secs_f64().max(f64::MIN_POSITIVE);
+
+    Ok(TailMetrics {
+        tail_excursion_ratio,
+        thread_max_spread,
+        overflow_rate_per_s,
+    })
 }
 
 fn evaluate(
@@ -413,32 +545,77 @@ fn evaluate(
     (ContaminationVerdict::Clean, None)
 }
 
-/// Computes the delta and renders D-15's verdict. `thresholds` are expressed per run
-/// hour and scaled by `run_duration`, so a 1 hour weekly run and a 12 hour soak use
-/// the same configuration. A `Contaminated` verdict never drops the run (BENCH-06);
+/// D-24's tail-based verdict: `Contaminated` only when BOTH the tail excursion ratio is
+/// high AND the thread-max spread is low (the global-stall signature described in the
+/// module documentation). Neither alone is sufficient: a high ratio with high spread is
+/// one noisy thread, not a global event, and a low spread with a low ratio is just a
+/// clean run whose per-thread maxima happen to sit close together (small numbers have
+/// naturally high relative noise). Deliberately does not gate on `overflow_rate_per_s`:
+/// it is recorded on every run (see [`TailMetrics`]), but it depends on the histogram
+/// bound and is coarser evidence than the other two, so it is not part of this
+/// decision.
+fn evaluate_tail(
+    metrics: &TailMetrics,
+    limits: &TailThresholds,
+) -> (ContaminationVerdict, Option<String>) {
+    let excursion_high = metrics.tail_excursion_ratio > limits.tail_excursion_ratio_max;
+    let spread_low = metrics.thread_max_spread < limits.thread_max_spread_min;
+
+    if excursion_high && spread_low {
+        let reason = format!(
+            "tail excursion ratio {:.1} exceeds the provisional limit {} and thread-max spread \
+             {:.3} is below the provisional limit {}: the global-stall signature (a rare, \
+             catastrophic excursion landing at nearly the same value on every isolated thread)",
+            metrics.tail_excursion_ratio,
+            limits.tail_excursion_ratio_max,
+            metrics.thread_max_spread,
+            limits.thread_max_spread_min
+        );
+        (ContaminationVerdict::Contaminated, Some(reason))
+    } else {
+        (ContaminationVerdict::Clean, None)
+    }
+}
+
+/// Computes the delta, the D-24 tail metrics, and renders D-15's verdict. `thresholds`
+/// (the interference-counter kind) are expressed per run hour and scaled by
+/// `run_duration`, so a 1 hour weekly run and a 12 hour soak use the same
+/// configuration; this scaling is unchanged by D-24 and applies only to the
+/// `Calibrated` arm below. A `Contaminated` verdict never drops the run (BENCH-06);
 /// that decision belongs to the caller, using `reason`.
 pub fn verdict(
     before: InterferenceSnapshot,
     after: InterferenceSnapshot,
+    run: &CyclictestRun,
     thresholds: &Thresholds,
     run_duration: Duration,
-) -> VerdictOutcome {
+) -> Result<VerdictOutcome, InterferenceError> {
     let delta = compute_delta(&before, &after);
+    let tail_metrics = compute_tail_metrics(run, run_duration)?;
 
-    let (contamination, reason) = match thresholds {
-        Thresholds::Uncalibrated => (ContaminationVerdict::Uncalibrated, None),
-        Thresholds::Calibrated(limits) => evaluate(&delta, limits, run_duration),
+    let (contamination, reason, thresholds_provisional) = match thresholds {
+        Thresholds::Uncalibrated => (ContaminationVerdict::Uncalibrated, None, false),
+        Thresholds::Provisional(limits) => {
+            let (verdict, reason) = evaluate_tail(&tail_metrics, limits);
+            (verdict, reason, true)
+        }
+        Thresholds::Calibrated(limits) => {
+            let (verdict, reason) = evaluate(&delta, limits, run_duration);
+            (verdict, reason, false)
+        }
     };
 
-    VerdictOutcome {
+    Ok(VerdictOutcome {
         pair: InterferenceSnapshotPair {
             before,
             after,
             delta,
+            tail_metrics: Some(tail_metrics),
+            thresholds_provisional: Some(thresholds_provisional),
             verdict: contamination,
         },
         reason,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -504,5 +681,127 @@ mod tests {
             Thresholds::parse(json).unwrap_err(),
             InterferenceError::InvalidStatus(_)
         ));
+    }
+
+    #[test]
+    fn thresholds_provisional_loads_with_tail_metrics() {
+        let json = r#"{"schema_version":1,"status":"provisional","calibration":{"derived_from":["a","b"],"note":"x"},"per_run_hour":{"cal_delta_max":null,"tlb_delta_max":null,"res_delta_max":null,"device_irq_delta_max":null,"context_switch_delta_max":null},"tail_metrics":{"tail_excursion_ratio_max":50.0,"thread_max_spread_min":0.2}}"#;
+        let thresholds = Thresholds::parse(json).expect("valid provisional thresholds");
+        match thresholds {
+            Thresholds::Provisional(limits) => {
+                assert_eq!(limits.tail_excursion_ratio_max, 50.0);
+                assert_eq!(limits.thread_max_spread_min, 0.2);
+            }
+            other => panic!("expected Provisional, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn thresholds_provisional_requires_tail_metrics_present() {
+        let json = r#"{"schema_version":1,"status":"provisional","calibration":{"derived_from":["a","b"],"note":"x"},"per_run_hour":{"cal_delta_max":null,"tlb_delta_max":null,"res_delta_max":null,"device_irq_delta_max":null,"context_switch_delta_max":null}}"#;
+        assert!(matches!(
+            Thresholds::parse(json).unwrap_err(),
+            InterferenceError::ProvisionalMissingThresholds
+        ));
+    }
+
+    #[test]
+    fn thresholds_provisional_requires_calibration_provenance() {
+        let json = r#"{"schema_version":1,"status":"provisional","calibration":{"derived_from":[],"note":"x"},"per_run_hour":{"cal_delta_max":null,"tlb_delta_max":null,"res_delta_max":null,"device_irq_delta_max":null,"context_switch_delta_max":null},"tail_metrics":{"tail_excursion_ratio_max":50.0,"thread_max_spread_min":0.2}}"#;
+        assert!(matches!(
+            Thresholds::parse(json).unwrap_err(),
+            InterferenceError::ProvisionalMissingProvenance
+        ));
+    }
+
+    /// D-24: a fresh, minimal, valid single-thread run, used so `verdict` (which now
+    /// always computes tail metrics) has something real to compute over. Not the D-17
+    /// calibration pair itself; see `crates/capture/tests/interference.rs` for the
+    /// tests proving the metrics separate those two real captures.
+    fn sample_cyclictest_run() -> CyclictestRun {
+        let hist = "# Histogram\n\
+                     000001 000001\n\
+                     000002 000002\n\
+                     # Min Latencies: 00001\n\
+                     # Avg Latencies: 00001\n\
+                     # Max Latencies: 00002\n\
+                     # Histogram Overflows: 00000\n\
+                     # Histogram Overflow at cycle number:\n\
+                     # Thread 0: \n";
+        nr_histogram::hist::parse_hist(hist, Some(400)).expect("the minimal fixture parses")
+    }
+
+    #[test]
+    fn verdict_computes_tail_metrics_even_under_uncalibrated_thresholds() {
+        let snapshot = InterferenceSnapshot {
+            isolated_cpus: vec![6],
+            cal_ipis: vec![CpuCounter { cpu: 6, count: 0 }],
+            tlb_ipis: vec![CpuCounter { cpu: 6, count: 0 }],
+            context_switches: vec![CpuCounter { cpu: 6, count: 0 }],
+            irqs: vec![CpuCounter { cpu: 6, count: 0 }],
+        };
+        let outcome = verdict(
+            snapshot.clone(),
+            snapshot,
+            &sample_cyclictest_run(),
+            &Thresholds::Uncalibrated,
+            Duration::from_secs(1),
+        )
+        .expect("verdict computes over a valid run");
+
+        // Uncalibrated still means Uncalibrated (D-17's own rule is untouched by D-24),
+        // but the tail metrics themselves are always recorded regardless.
+        assert_eq!(outcome.pair.verdict, ContaminationVerdict::Uncalibrated);
+        assert_eq!(outcome.pair.thresholds_provisional, Some(false));
+        let tail = outcome
+            .pair
+            .tail_metrics
+            .expect("verdict always populates tail_metrics");
+        assert_eq!(
+            tail.thread_max_spread, 0.0,
+            "a single thread has zero spread"
+        );
+    }
+
+    #[test]
+    fn evaluate_tail_requires_both_high_ratio_and_low_spread() {
+        let limits = TailThresholds {
+            tail_excursion_ratio_max: 50.0,
+            thread_max_spread_min: 0.2,
+        };
+
+        // High ratio, high spread: one noisy thread, not a global stall.
+        let (noisy_thread, _) = evaluate_tail(
+            &TailMetrics {
+                tail_excursion_ratio: 100.0,
+                thread_max_spread: 0.9,
+                overflow_rate_per_s: 0.0,
+            },
+            &limits,
+        );
+        assert_eq!(noisy_thread, ContaminationVerdict::Clean);
+
+        // Low spread, low ratio: a clean run whose small maxima sit close together.
+        let (small_and_close, _) = evaluate_tail(
+            &TailMetrics {
+                tail_excursion_ratio: 1.0,
+                thread_max_spread: 0.05,
+                overflow_rate_per_s: 0.0,
+            },
+            &limits,
+        );
+        assert_eq!(small_and_close, ContaminationVerdict::Clean);
+
+        // Both: the global-stall signature.
+        let (global_stall, reason) = evaluate_tail(
+            &TailMetrics {
+                tail_excursion_ratio: 428.4,
+                thread_max_spread: 0.036,
+                overflow_rate_per_s: 0.8822,
+            },
+            &limits,
+        );
+        assert_eq!(global_stall, ContaminationVerdict::Contaminated);
+        assert!(reason.is_some());
     }
 }

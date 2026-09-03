@@ -183,6 +183,16 @@ pub fn run(args: Args) -> anyhow::Result<i32> {
         "no /proc/interrupts snapshot exists for a pre-harness capture",
     ));
     absent.push(absent_field(
+        "interference.tail_metrics",
+        "a reconstructed manifest is built from RIG.txt/README prose (D-16); the D-24 tail \
+         metrics require parsing the run's own cyclictest histogram, which this command does \
+         not do",
+    ));
+    absent.push(absent_field(
+        "interference.thresholds_provisional",
+        "no D-24 tail-metric verdict was computed for this reconstructed manifest",
+    ));
+    absent.push(absent_field(
         "tools",
         "RIG.txt and the README describe the run in prose but do not record a machine-readable \
          tool invocation (argv, exit code) for the pre-harness capture",
@@ -216,6 +226,8 @@ pub fn run(args: Args) -> anyhow::Result<i32> {
             context_switches: Vec::new(),
             irqs: Vec::new(),
         },
+        tail_metrics: None,
+        thresholds_provisional: None,
         verdict: args.verdict.into(),
     };
 

@@ -402,12 +402,58 @@ pub enum ContaminationVerdict {
     Uncalibrated,
 }
 
+/// D-24: the tail-based contamination metrics, computed from a run's own cyclictest
+/// histogram rather than from `/proc/interrupts`. See
+/// `crates/capture/src/interference.rs` for how each field is computed and why the
+/// interference counters below were found insufficient on their own: the D-17
+/// calibration pair (`measurements/2026-09-01-precision3591-calibration-clean` and
+/// `measurements/2026-09-02-precision3591-calibration-contaminated`) showed the
+/// contaminated run with FEWER interrupts than the clean one, while producing a worst
+/// case 50x higher.
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct TailMetrics {
+    /// Global maximum divided by p99. A clean run and a globally-stalled run can share
+    /// nearly identical percentiles up to p99.99 (contamination here adds rare
+    /// catastrophic excursions rather than shifting the bulk distribution), so this
+    /// ratio is where the two separate: 8.7 on the D-17 clean arm, 428.4 on its
+    /// contaminated twin.
+    pub tail_excursion_ratio: f64,
+    /// `(max(per-thread max) - min(per-thread max)) / max(per-thread max)`. A single
+    /// global stall (for example `stop_machine()`, or a system-wide TLB shootdown)
+    /// halts every isolated thread at nearly the same instant, so their per-thread
+    /// maxima cluster tightly (3.6% on the D-17 contaminated arm) where independent,
+    /// per-core noise scatters them (76.9% on its clean twin). Low spread alone is not
+    /// evidence of contamination: a clean run whose six per-thread maxima happen to sit
+    /// close together also scores low. See `tail_excursion_ratio`.
+    pub thread_max_spread: f64,
+    /// Overflow samples (recorded at the histogram bound) divided by run duration in
+    /// seconds. Coarser than the other two fields, since it depends on the histogram
+    /// bound (400 us in this project); recorded as evidence, never the primary signal.
+    pub overflow_rate_per_s: f64,
+}
+
+/// D-15/D-24: the full contamination evidence for one run. `before`/`after`/`delta` are
+/// the `/proc/interrupts` interference snapshot (D-15's original signal, retained as
+/// evidence but no longer sufficient as the sole detector, see `TailMetrics`);
+/// `tail_metrics` is the D-24 tail-based signal computed from the run's own histogram;
+/// `verdict` is the resulting call. `tail_metrics` and `thresholds_provisional` are
+/// `Option` only so a manifest captured before D-24 (2026-09-02 and earlier) still
+/// deserializes; every manifest `nrmeasure run` produces from D-24 onward always
+/// populates both with `Some`.
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct InterferenceSnapshotPair {
     pub before: InterferenceSnapshot,
     pub after: InterferenceSnapshot,
     pub delta: InterferenceDelta,
+    pub tail_metrics: Option<TailMetrics>,
+    /// True when `verdict` was computed against provisional (not yet calibrated)
+    /// tail-metric thresholds; see `Thresholds::Provisional` in
+    /// `crates/capture/src/interference.rs`. Never conflate a provisional `Clean` with
+    /// a calibrated one: `nr-cli`'s `determine_exclusion` checks this before ever
+    /// admitting a run to the headline series on the strength of `verdict` alone.
+    pub thresholds_provisional: Option<bool>,
     pub verdict: ContaminationVerdict,
 }
 

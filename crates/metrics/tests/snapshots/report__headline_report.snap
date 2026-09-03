@@ -10,7 +10,7 @@ instrument class: headline-series
 provenance tier: harness-generated
 utc start: 2026-08-31T06:00:00Z
 utc end: 2026-08-31T06:10:00Z
-manifest blake3: a8a8db46dfb718389f8333ed5ecb070d1f52f071fcd879ed602530435a5f7ab0
+manifest blake3: 1357aaa82fad4fe228b8ebaf870c1156754dd1bd9babb316bc7fe1587bdf51dc
 
 ## Rig and tuning
 
@@ -58,6 +58,14 @@ nic_wifi:     wlp0s20f3 driver=iwlwifi
 ## Contamination verdict
 
 verdict: clean
+
+tail metrics (D-24):
+
+| metric | value |
+|--------|-------|
+| tail excursion ratio (max / p99) | 3.0 |
+| thread-max spread | 60.0% |
+| overflow rate | 0.0000/s |
 
 counter deltas per isolated cpu:
 
