@@ -54,6 +54,11 @@ on)
     fi
     echo nop > /sys/kernel/tracing/current_tracer 2>/dev/null
     systemctl set-default multi-user.target >/dev/null 2>&1
+    # set-default only changes what the NEXT boot does. Without isolate, gdm keeps
+    # running and DisplayManagerInactive/NoGraphicalSession still fail, while status
+    # reports multi-user.target and looks correct. That gap cost a scheduled run on
+    # 2026-09-03.
+    systemctl isolate multi-user.target >/dev/null 2>&1
     # Stop the machine putting itself to sleep. This is a laptop: the default
     # HandleLidSwitch=suspend means a closed lid ends a run outright, and the
     # PLAT-03 headline capture in plan 01-13 runs four hours unattended. Masking
@@ -70,6 +75,7 @@ off)
     systemctl unmask "${TIMERS[@]}" >/dev/null 2>&1
     systemctl unmask "${SERVICES[@]}" >/dev/null 2>&1
     systemctl start power-profiles-daemon.service snapd.socket >/dev/null 2>&1
+    systemctl isolate graphical.target >/dev/null 2>&1
     echo "measurement mode OFF, desktop configuration restored"
     "$0" status
     ;;
@@ -78,6 +84,8 @@ status)
     printf 'no_turbo        : %s\n' "$(cat /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || echo unavailable)"
     printf 'package temp    : %s C\n' "$(awk '{printf "%.1f",$1/1000}' /sys/class/thermal/thermal_zone0/temp 2>/dev/null)"
     printf 'default target  : %s\n' "$(systemctl get-default 2>/dev/null)"
+    printf 'ACTIVE target   : %s\n' "$(systemctl is-active graphical.target >/dev/null 2>&1 && echo graphical.target || echo multi-user.target)"
+    printf 'display manager : %s\n' "$(systemctl is-active gdm.service 2>&1)"
     printf 'ppd             : %s\n' "$(systemctl is-enabled power-profiles-daemon.service 2>&1)"
     printf 'snapd           : %s\n' "$(systemctl is-enabled snapd.socket 2>&1)"
     masked=0
