@@ -4,7 +4,9 @@
 use nr_capture::environment;
 use nr_capture::preconditions::{PreconditionSpec, refuse_on_violation, run_all};
 use nr_capture::sources::FixtureFacts;
-use nr_manifest::{InstrumentClass, PreconditionCheck, PreconditionResult, PreconditionStatus};
+use nr_manifest::{
+    InstrumentClass, PreconditionCheck, PreconditionResult, PreconditionStatus, RunClass,
+};
 
 /// The real D-06/D-14 tuning snapshot from the reference rig (plan 01-02), exactly as the
 /// machine was found. It is NOT a passing baseline: the rig boots untuned, so its governor
@@ -30,6 +32,7 @@ const TARGET_CPUS: [u32; 6] = [6, 7, 8, 9, 10, 11];
 fn headline_spec() -> PreconditionSpec {
     PreconditionSpec {
         instrument_class: InstrumentClass::HeadlineSeries,
+        run_class: RunClass::Headline,
         target_cpus: TARGET_CPUS.to_vec(),
     }
 }
@@ -37,6 +40,17 @@ fn headline_spec() -> PreconditionSpec {
 fn investigation_spec() -> PreconditionSpec {
     PreconditionSpec {
         instrument_class: InstrumentClass::Investigation,
+        run_class: RunClass::Investigation,
+        target_cpus: TARGET_CPUS.to_vec(),
+    }
+}
+
+/// A D-18 firmware screen. It saturates the machine on purpose, so it is the one run
+/// class that legitimately starts hot.
+fn screen_spec() -> PreconditionSpec {
+    PreconditionSpec {
+        instrument_class: InstrumentClass::HeadlineSeries,
+        run_class: RunClass::Screen,
         target_cpus: TARGET_CPUS.to_vec(),
     }
 }
@@ -294,4 +308,57 @@ fn harness_mutates_nothing() {
         offending.is_empty(),
         "found system-mutating writes: {offending:#?}"
     );
+}
+
+/// The D-18 under-load arms saturate 22 cores and hold the package in the low 90s C by
+/// design: `hwlatdetect` is screening for load-triggered SMIs, and the 2026-08-28
+/// screening this re-run is compared against reported 91 to 93 C whole-machine and 93 to
+/// 95 C P-core-only. `ThermalHeadroomAtStart` exists to stop a *latency* run from
+/// starting thermally throttled, which is a different question, so it must not refuse a
+/// firmware screen for being hot. Discovered the hard way: with the check applied
+/// unconditionally, arm 2 was refused at 78 C and the arms were impossible to take
+/// through the harness at all, even though the 70 C ceiling's own justification table is
+/// built from those very under-load rows.
+#[test]
+fn thermal_headroom_does_not_refuse_a_firmware_screen() {
+    let hot = RIG_AS_FOUND.replace("thermal.x86_pkg_temp=64000", "thermal.x86_pkg_temp=92000");
+    let facts = FixtureFacts::parse(&hot);
+
+    let screen = thermal_result(&run_all(&facts, &screen_spec()));
+    assert_eq!(
+        screen.status,
+        PreconditionStatus::NotApplicable,
+        "a screen run must not be refused for starting hot"
+    );
+    assert_eq!(
+        screen.observed, "92.0 C",
+        "NotApplicable still records the real observed temperature"
+    );
+
+    // The gate stays intact for every class that measures latency.
+    let headline = thermal_result(&run_all(&facts, &headline_spec()));
+    assert_eq!(headline.status, PreconditionStatus::Fail);
+    assert_eq!(headline.observed, "92.0 C");
+}
+
+/// A screen run that starts cold still reports a real Pass, not a blanket exemption.
+///
+/// The observed value is 69.1 C rather than the fixture's `thermal.x86_pkg_temp=64000`
+/// because the check reports the hottest zone across all of them, not the package zone
+/// alone. That leaves this fixture sitting 0.9 C under the ceiling, which is worth
+/// knowing: it is the same one-degree margin that made the old 60 C ceiling a coin flip.
+#[test]
+fn thermal_headroom_still_passes_a_cold_screen() {
+    let facts = FixtureFacts::parse(RIG_AS_FOUND);
+    let screen = thermal_result(&run_all(&facts, &screen_spec()));
+    assert_eq!(screen.status, PreconditionStatus::Pass);
+    assert_eq!(screen.observed, "69.1 C");
+}
+
+fn thermal_result(results: &[PreconditionResult]) -> PreconditionResult {
+    results
+        .iter()
+        .find(|r| r.check == PreconditionCheck::ThermalHeadroomAtStart)
+        .expect("ThermalHeadroomAtStart result present")
+        .clone()
 }

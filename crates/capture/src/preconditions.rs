@@ -12,7 +12,9 @@
 //! when a tracer is armed, so investigation overhead can never leak into the
 //! published series, even by mistake.
 
-use nr_manifest::{InstrumentClass, PreconditionCheck, PreconditionResult, PreconditionStatus};
+use nr_manifest::{
+    InstrumentClass, PreconditionCheck, PreconditionResult, PreconditionStatus, RunClass,
+};
 
 use crate::sources::{
     SystemFacts, discover_ac_online, discover_cstates, discover_governed_cpu_count,
@@ -60,6 +62,9 @@ const PACKAGE_MANAGER_PROCESSES: [&str; 4] = ["apt", "dpkg", "unattended-upgrade
 #[derive(Debug, Clone)]
 pub struct PreconditionSpec {
     pub instrument_class: InstrumentClass,
+    /// The run's cadence class. Only [`check_thermal_headroom_at_start`] consults it, to
+    /// exempt a firmware screen whose whole purpose is to start hot.
+    pub run_class: RunClass,
     pub target_cpus: Vec<u32>,
 }
 
@@ -82,7 +87,7 @@ pub fn run_all(facts: &dyn SystemFacts, spec: &PreconditionSpec) -> Vec<Precondi
         check_kernel_is_realtime(facts),
         check_rt_tuning_service_active(facts),
         check_on_ac_power(facts),
-        check_thermal_headroom_at_start(facts),
+        check_thermal_headroom_at_start(facts, &spec.run_class),
         check_no_package_manager_activity(facts),
         check_tracers_quiescent(facts, &spec.instrument_class),
     ]
@@ -514,7 +519,24 @@ fn check_on_ac_power(facts: &dyn SystemFacts) -> PreconditionResult {
     }
 }
 
-fn check_thermal_headroom_at_start(facts: &dyn SystemFacts) -> PreconditionResult {
+/// Refuses a run that starts thermally loaded, except for [`RunClass::Screen`].
+///
+/// The ceiling protects a *latency* measurement from starting throttled. A firmware
+/// screen asks a different question: `hwlatdetect` under D-18 saturates 22 cores on
+/// purpose to provoke load-triggered SMIs, and the 2026-08-28 screening it is compared
+/// against ran at 91 to 93 C whole-machine and 93 to 95 C P-core-only. Applying the
+/// ceiling to a screen made those arms impossible to take through the harness at all:
+/// arm 2 was refused at 78 C on 2026-09-04, even though this very constant's evidence
+/// table is built from the under-load rows it was forbidding.
+///
+/// A screen still records its real observed temperature as
+/// [`PreconditionStatus::NotApplicable`], never a silent omission and never a fake pass,
+/// and the manifest keeps `temp_c_start`, `temp_c_end` and `package_temp_c_max` per zone
+/// regardless. Every other class, including `Headline` and `Weekly`, is unchanged.
+fn check_thermal_headroom_at_start(
+    facts: &dyn SystemFacts,
+    run_class: &RunClass,
+) -> PreconditionResult {
     let expected = format!("package temp <= {THERMAL_HEADROOM_CEILING_C} C");
     let zones = discover_thermal_zones_c(facts);
     if zones.is_empty() {
@@ -526,13 +548,14 @@ fn check_thermal_headroom_at_start(facts: &dyn SystemFacts) -> PreconditionResul
     }
 
     let max_c = zones.iter().map(|(_, c)| *c).fold(f32::MIN, f32::max);
+    let status = match run_class {
+        RunClass::Screen if max_c > THERMAL_HEADROOM_CEILING_C => PreconditionStatus::NotApplicable,
+        _ if max_c <= THERMAL_HEADROOM_CEILING_C => PreconditionStatus::Pass,
+        _ => PreconditionStatus::Fail,
+    };
     PreconditionResult {
         check: PreconditionCheck::ThermalHeadroomAtStart,
-        status: if max_c <= THERMAL_HEADROOM_CEILING_C {
-            PreconditionStatus::Pass
-        } else {
-            PreconditionStatus::Fail
-        },
+        status,
         observed: format!("{max_c:.1} C"),
         expected,
     }

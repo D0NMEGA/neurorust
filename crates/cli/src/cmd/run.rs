@@ -282,6 +282,7 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
     let facts = build_facts(overrides.facts_fixture_path.as_deref())?;
     let spec = preconditions::PreconditionSpec {
         instrument_class: instrument_class.clone(),
+        run_class: run_class.clone(),
         target_cpus: target_cpus.clone(),
     };
     let results: Vec<PreconditionResult> = preconditions::run_all(facts.as_ref(), &spec);
