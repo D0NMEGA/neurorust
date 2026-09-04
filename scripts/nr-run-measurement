@@ -1,0 +1,76 @@
+#!/bin/bash
+# nr-run-measurement run [nrmeasure run flags...]
+#
+# The narrow root entry point for a measurement capture. Installed on the rig at
+# /usr/local/sbin/nr-run-measurement and granted NOPASSWD sudo, the same pattern
+# already used for nr-recon, nr-probe and nr-measure-mode.
+#
+# Why this exists: cyclictest needs SCHED_FIFO, which needs root or CAP_SYS_NICE,
+# and `ulimit -r` is 0 for the operator account with no capability bits on either
+# tool binary. General sudo on this rig requires an interactive password. That is
+# fine for a human at a keyboard and impossible for the BENCH-08 weekly timer,
+# which runs with nobody logged in. It also blocked the D-18 firmware floor arms
+# and will block the PLAT-03 headline run.
+#
+# Why the run is launched through systemd-run rather than executed directly: the
+# protocol's NoActiveSshSessions precondition expects zero established
+# connections to port 22, because SSH traffic broadcasts TLB shootdown IPIs to
+# the isolated cores. That is what put roughly 137k CAL interrupts on CPUs 6-11
+# and made the 2026-08-28 baseline unpublishable. Launching a transient unit lets
+# the caller disconnect immediately and poll from a new short connection later.
+# The unit is deliberately not run with --wait for the same reason.
+#
+# Why the two path arguments are pinned below rather than passed through: this
+# script runs as root without a password, so any path it accepts from argv is a
+# root file write at a caller-chosen location, with caller-influenced content by
+# way of --note. Pinning them keeps the grant to what it claims to be, which is
+# permission to take a measurement, not permission to write anywhere as root.
+set -euo pipefail
+
+BIN=/home/d0nmega/neurorust/target/release/nrmeasure
+MEASUREMENTS_ROOT=/home/d0nmega/neurorust/measurements
+THRESHOLDS=/home/d0nmega/neurorust/config/contamination-thresholds.json
+UNIT=nr-measurement
+
+if [ "${1:-}" != "run" ]; then
+    echo "nr-run-measurement: first argument must be 'run', got '${1:-}'" >&2
+    exit 2
+fi
+
+for arg in "$@"; do
+    case "$arg" in
+        --measurements-root|--measurements-root=*|--thresholds|--thresholds=*)
+            echo "nr-run-measurement: ${arg%%=*} is pinned by this script and cannot be overridden" >&2
+            exit 2
+            ;;
+    esac
+done
+
+if [ ! -x "$BIN" ]; then
+    echo "nr-run-measurement: $BIN is missing or not executable." >&2
+    echo "  Build it on the rig: cargo build -p nr-cli --release" >&2
+    exit 2
+fi
+
+# A second concurrent capture would contaminate the first, so a live unit of this
+# name is a refusal rather than something to work around. --collect reaps the
+# unit once it finishes, including on failure, so the name is free again after.
+if systemctl is-active --quiet "$UNIT.service"; then
+    echo "nr-run-measurement: $UNIT.service is already running; refusing to start a second capture." >&2
+    echo "  Watch it with: journalctl -fu $UNIT" >&2
+    exit 3
+fi
+
+echo "nr-run-measurement: starting $UNIT.service"
+echo "  watch:  journalctl -fu $UNIT"
+echo "  status: systemctl status $UNIT"
+
+exec systemd-run \
+    --unit="$UNIT" \
+    --collect \
+    --property=Type=oneshot \
+    --property=StandardOutput=journal \
+    --property=StandardError=journal \
+    "$BIN" "$@" \
+    --measurements-root "$MEASUREMENTS_ROOT" \
+    --thresholds "$THRESHOLDS"
