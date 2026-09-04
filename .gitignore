@@ -1,6 +1,9 @@
 /target
 **/*.rs.bk
 .DS_Store
+# Donny workflow's own append-only phase-execution event log (timestamps of
+# phase_start/etc.), not project documentation; regenerated per session.
+.planning/phases/*/*-LEDGER.jsonl
 # insta's own pending-review artifact when a snapshot test fails; regenerated
 # on every red run, never something to commit.
 **/*.snap.new

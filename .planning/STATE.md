@@ -3,9 +3,9 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-10-PLAN.md
-last_updated: "2026-09-01T04:14:21.403Z"
-last_activity: 2026-09-01
+stopped_at: 01-11 task 2 blocked (rig root access), task 3 closed
+last_updated: "2026-09-04T16:51:28.165Z"
+last_activity: "2026-09-04 -- 01-11 resumed: task 3 closed, D-18 rig captures blocked on missing root access"
 progress:
   total_phases: 8
   completed_phases: 0
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 
 Phase: 01 (trustworthy-measurement) — EXECUTING
 Plan: 11 of 15
-Status: Ready to execute
-Last activity: 2026-09-01
+Status: Blocked mid-plan: 01-11 task 2 needs a rig-access decision (see 01-11-SUMMARY.md checkpoint); task 3 closed
+Last activity: 2026-09-04 -- 01-11 resumed: task 3 closed, D-18 rig captures blocked on missing root access
 
 Progress: [███████░░░] 67%
 
@@ -110,6 +110,8 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-09: requirements-completed left empty in the SUMMARY frontmatter for PLAT-02/BENCH-05/BENCH-06, matching plan 01-08's precedent and this execution's explicit instruction not to touch REQUIREMENTS.md; PLAT-02 is not actually complete until a human follows the protocol on a clean rig (ROADMAP.md success criterion 2), which cannot be automated.
 - [Phase 01]: 01-10: Reconstructed the 2026-08-28 capture set as contaminated/excluded (not exempt) and corrected its README's bimodality claim (withdrawn: bins 14-99 hold 410 samples, not zero) and over-gate count (1,201 of 17,994,956 -> 2,093 of 17,995,844, boundary >= 30us, denominator including the 888 histogram overflows). The percentile table regenerated with overflows counted: p99.99 12us -> 108us, max ~3800us -> 3806us. A human explicitly confirmed both percentile changes and the published exclusion-reason string before publication (Task 3 blocking checkpoint); every figure was independently re-derived from the raw histogram (awk plus a from-scratch Python parser) and matches crates/histogram/tests/fixtures/README.md's recorded expected values.
 - [Phase 01]: 01-10: cargo test --workspace surfaced a pre-existing, out-of-scope failure (crates/cli/tests/run_pipeline.rs::full_run_report_matches_snapshot) caused by the wall clock crossing midnight UTC since plan 01-07's snapshot was captured: cmd/run.rs's OffsetDateTime::now_utc() feeds the generated run_id's date, and the test's own redact_report() helper redacts utc_start/utc_end but not the run id line, so the snapshot rots one day after capture regardless of code correctness. Not fixed here (plan 01-07's files, not this plan's); logged to deferred-items.md with the exact fix location. All 148 other workspace tests pass, fmt and clippy are clean, and the provenance gate is green; this is the only reason this plan's SUMMARY status is PARTIAL rather than PASS.
+- [Phase 01]: 01-11 task 3: kept the provisional D-24 detector rather than manufacturing calibrated per-counter thresholds. Added calibration_pair_separates (crates/capture/tests/interference.rs), combining the two already-passing per-arm assertions into the name the plan's own verify command selects. calibration.derived_from left unchanged (2026-09-01-clean, 2026-09-02-contaminated: the true numeric source; report.rs hardcodes 'derived from 2 runs' as part of Thresholds::Provisional's own contract). The later duration-matched confirmatory run (2026-09-03-contaminated, 3600s) is documented in the note field instead: it independently scores Contaminated under the same shipped thresholds (ratio 211.2, spread 3.7%) without being folded into derived_from, since it did not inform the chosen numbers.
+- [Phase 01]: 01-11 task 2: added --hwlatdetect-cpu-list to nrmeasure run (crates/cli/src/cmd/run.rs), the plan's preferred resolution (a) for the P-core-restricted D-18 arm 3, so it will be harness-stamped once captured. Code-only, built and verified on both the dev host and the rig (rsynced and rebuilt there); no rig capture was taken with it yet.
 
 ### Pending Todos
 
@@ -122,11 +124,12 @@ None yet.
 - Doc inconsistency: PROJECT.md Constraints still says "software timestamping only", which the corrected Out of Scope entry (PTP hardware timestamps back in scope, WIRE-06) supersedes. Fix at the next PROJECT.md update.
 - WIRE-06 needs an ethernet cable on `enp0s31f6`; the wifi adapter has no PTP clock.
 - Rig boots untuned: every CPU governor reads powersave despite rt-tuning.service reporting active/enabled (power-profiles-daemon wins a boot-time race, see docs/rig/recon-2026-08-31/FINDINGS.md). Any plan that runs the real measurement protocol must fix this or rely on nr-capture's own precondition check; it must not trust rt-tuning.service's ActiveState.
+- 01-11 task 2 (D-18 firmware floor re-run) cannot take the 2 remaining hwlatdetect arms: nrmeasure run needs root (cyclictest calls sched_setscheduler(SCHED_FIFO), confirmed refuses without it: 'Unable to change scheduling policy... run as root or increase RLIMIT_RTPRIO'), and this rig's sudo requires an interactive password for everything except 3 narrowly-scoped commands (nr-recon, nr-probe, nr-measure-mode; confirmed via sudo -l and a live sudo -n true / systemd-run probe, both refused with 'interactive authentication is required'). nr-measure-mode itself (passwordless) does bring the rig to protocol state successfully. See 01-11-SUMMARY.md for the full evidence and two remediation options.
 
 ## Session Continuity
 
-Last session: 2026-09-01T04:12:01.793Z
-Stopped at: Completed 01-10-PLAN.md
-Resume file: None
+Last session: 2026-09-04T16:51:28.163Z
+Stopped at: 01-11 task 2 blocked (rig root access), task 3 closed
+Resume file: .planning/phases/01-trustworthy-measurement/01-11-SUMMARY.md
 
 Next: `/donny-plan-phase 1`
