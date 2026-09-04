@@ -397,3 +397,51 @@ fn real_contaminated_arm_scores_contaminated_under_the_shipped_provisional_thres
         "reason should name both metrics: {reason}"
     );
 }
+
+/// Plan 01-11 task 3's named acceptance test: the D-17 calibration pair (the two real
+/// captures `config/contamination-thresholds.json`'s `calibration.derived_from` names)
+/// separates under the shipped thresholds. This ties together the two assertions
+/// proven separately above (clean scores Clean, contaminated scores Contaminated) into
+/// the one check the plan's own verification command names, so
+/// `cargo test -p nr-capture calibration_pair_separates` selects and passes something
+/// real rather than a substring match on nothing.
+#[test]
+fn calibration_pair_separates() {
+    let thresholds = shipped_thresholds();
+    assert!(
+        matches!(thresholds, Thresholds::Provisional(_)),
+        "config/contamination-thresholds.json must ship provisional, got {thresholds:?}"
+    );
+
+    let clean_run = load_real_run(CLEAN_HIST);
+    let (clean_before, clean_after) = load_real_snapshots(CLEAN_MANIFEST);
+    let clean = interference::verdict(
+        clean_before,
+        clean_after,
+        &clean_run,
+        &thresholds,
+        CLEAN_DURATION,
+    )
+    .expect("verdict computes on the real clean arm");
+    assert_eq!(
+        clean.pair.verdict,
+        ContaminationVerdict::Clean,
+        "the clean arm of the D-17 pair must read Clean under the shipped thresholds"
+    );
+
+    let contaminated_run = load_real_run(CONTAMINATED_HIST);
+    let (contaminated_before, contaminated_after) = load_real_snapshots(CONTAMINATED_MANIFEST);
+    let contaminated = interference::verdict(
+        contaminated_before,
+        contaminated_after,
+        &contaminated_run,
+        &thresholds,
+        CONTAMINATED_DURATION,
+    )
+    .expect("verdict computes on the real contaminated arm");
+    assert_eq!(
+        contaminated.pair.verdict,
+        ContaminationVerdict::Contaminated,
+        "the contaminated arm of the D-17 pair must read Contaminated under the shipped thresholds"
+    );
+}
