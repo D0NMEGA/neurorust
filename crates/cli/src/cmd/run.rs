@@ -138,6 +138,13 @@ pub struct Args {
     #[arg(long, default_value_t = 900)]
     pub hwlatdetect_duration: u64,
 
+    /// Restricts hwlatdetect's sampling to this CPU list (hwlatdetect's own
+    /// `--cpu-list`), e.g. `0-11` for a P-core-only D-18 arm. Ignored unless
+    /// `--with-hwlatdetect` is also given. Default (unset) samples every CPU, hwlatdetect's
+    /// own default.
+    #[arg(long)]
+    pub hwlatdetect_cpu_list: Option<String>,
+
     /// Optional cyclictest breaktrace threshold in microseconds; also adds
     /// --tracemark.
     #[arg(long)]
@@ -342,7 +349,7 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
     let mut hwlatdetect_raw: Option<Vec<u8>> = None;
     if args.with_hwlatdetect {
         let version = hwlatdetect_version.expect("captured above when with_hwlatdetect is set");
-        let hwlatdetect_argv = vec![format!("--duration={}", args.hwlatdetect_duration)];
+        let hwlatdetect_argv = build_hwlatdetect_argv(&args);
         let hwlatdetect_output =
             tools::run_tool("hwlatdetect", hwlatdetect_path, &version, hwlatdetect_argv)
                 .context("failed to execute hwlatdetect")?;
@@ -551,11 +558,21 @@ fn print_dry_run(args: &Args, thread_count: usize) {
     );
     println!("would run: cyclictest {}", cyclictest_argv.join(" "));
     if args.with_hwlatdetect {
-        println!(
-            "would run: hwlatdetect --duration={}",
-            args.hwlatdetect_duration
-        );
+        let hwlatdetect_argv = build_hwlatdetect_argv(args);
+        println!("would run: hwlatdetect {}", hwlatdetect_argv.join(" "));
     }
+}
+
+/// The exact hwlatdetect invocation this command builds, shared between the real
+/// execution path and `print_dry_run` so the two can never drift apart. `--cpu-list`
+/// is appended only when `--hwlatdetect-cpu-list` was given; hwlatdetect's own default
+/// (sample every CPU) applies otherwise.
+fn build_hwlatdetect_argv(args: &Args) -> Vec<String> {
+    let mut argv = vec![format!("--duration={}", args.hwlatdetect_duration)];
+    if let Some(cpu_list) = &args.hwlatdetect_cpu_list {
+        argv.push(format!("--cpu-list={cpu_list}"));
+    }
+    argv
 }
 
 /// The exact cyclictest invocation this command builds. `--distance=0` keeps every
@@ -915,6 +932,7 @@ VERSION=\"26.04.1 LTS\"
             priority: 99,
             with_hwlatdetect: false,
             hwlatdetect_duration: 900,
+            hwlatdetect_cpu_list: None,
             breaktrace: None,
             measurements_root,
             thresholds: PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1072,5 +1090,23 @@ VERSION=\"26.04.1 LTS\"
             .find(|artifact| artifact.path == "cyclictest.hist")
             .expect("cyclictest.hist is recorded");
         assert_eq!(recorded.blake3, blake3::hash(expected).to_hex().to_string());
+    }
+
+    #[test]
+    fn hwlatdetect_argv_omits_cpu_list_by_default() {
+        let mut args = base_args(PathBuf::from("/tmp"));
+        args.hwlatdetect_duration = 600;
+        assert_eq!(build_hwlatdetect_argv(&args), vec!["--duration=600"]);
+    }
+
+    #[test]
+    fn hwlatdetect_argv_appends_cpu_list_when_given() {
+        let mut args = base_args(PathBuf::from("/tmp"));
+        args.hwlatdetect_duration = 600;
+        args.hwlatdetect_cpu_list = Some("0-11".to_string());
+        assert_eq!(
+            build_hwlatdetect_argv(&args),
+            vec!["--duration=600", "--cpu-list=0-11"]
+        );
     }
 }
