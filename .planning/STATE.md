@@ -2,16 +2,16 @@
 donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
+status: "Blocked mid-plan: 01-11 task 2 needs a rig-access decision (see 01-11-SUMMARY.md checkpoint); task 3 closed"
 stopped_at: 01-11 task 2 blocked (rig root access), task 3 closed
-last_updated: "2026-09-04T16:51:28.165Z"
+last_updated: "2026-09-05T14:36:30.079Z"
 last_activity: "2026-09-04 -- 01-11 resumed: task 3 closed, D-18 rig captures blocked on missing root access"
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 15
-  completed_plans: 10
-  percent: 67
+  completed_plans: 11
+  percent: 73
 ---
 
 # Project State
@@ -30,7 +30,7 @@ Plan: 11 of 15
 Status: Blocked mid-plan: 01-11 task 2 needs a rig-access decision (see 01-11-SUMMARY.md checkpoint); task 3 closed
 Last activity: 2026-09-04 -- 01-11 resumed: task 3 closed, D-18 rig captures blocked on missing root access
 
-Progress: [███████░░░] 67%
+Progress: [███████░░░] 73%
 
 ## Performance Metrics
 
