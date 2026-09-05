@@ -26,49 +26,74 @@ const HISTOGRAM_BAR_WIDTH: usize = 40;
 pub enum ReportError {
     #[error("failed to compute percentiles: {0}")]
     Percentile(#[from] PercentileError),
-    /// D-22 made mechanical: the 30 us gate sits barely above a 22 to 29 us firmware floor, so
-    /// an undecomposed maximum is uninterpretable. A verdict cannot be rendered without the
-    /// floor and the run id it was measured in.
-    #[error("a PLAT-03 verdict requires a firmware floor and its source run id")]
-    FirmwareFloorRequired,
     #[error("failed to format a timestamp: {0}")]
     Timestamp(#[from] time::error::Format),
 }
 
-/// The D-22 PLAT-03 decomposition input.
+/// The PLAT-03 verdict input.
 ///
-/// `firmware_floor_us` and `firmware_floor_source_run_id` are not `Option`: the type does not
-/// let a caller silently default them to a missing value. A caller with no floor measurement
-/// yet passes an empty `firmware_floor_source_run_id`, which [`render_plat03_verdict`] rejects
-/// with [`ReportError::FirmwareFloorRequired`] rather than reporting only the total.
-///
-/// `firmware_floor_us` is a caller-supplied input, not a constant: which floor applies depends
-/// on the run's load class (idle, whole-machine saturated, P-core saturated all measured
-/// different floors on this rig), and plan 01-11 re-measures it on the installed PREEMPT_RT
-/// kernel, so this type must accept whatever value it is given rather than hardcode one.
+/// The `hwlat` observation is `Option` on purpose. It used to be a required scalar, which
+/// forced every caller to supply a "firmware floor" and made subtracting it look like the
+/// intended use. A verdict is perfectly reportable without one: the scheduling maximum against
+/// the gate stands on its own, and a missing hwlat observation is printed as missing rather
+/// than defaulted to zero.
 #[derive(Debug, Clone)]
 pub struct Plat03Input {
     pub observed_max_us: u64,
     /// The gate PLAT-03 measures against. 30 in this project.
     pub gate_us: u64,
-    pub firmware_floor_us: u64,
-    pub firmware_floor_source_run_id: String,
+    /// An independent `hwlatdetect` observation, when a paired one exists. Reported alongside
+    /// the scheduling maximum and never combined with it; see [`render_plat03_verdict`].
+    pub hwlat: Option<HwlatObservation>,
     pub p99_us: u64,
     pub p50_us: u64,
 }
 
-/// Renders the D-22 PLAT-03 decomposition: the total observed maximum against the gate, and,
-/// separately, the kernel's own contribution above the independently measured firmware floor.
-pub fn render_plat03_verdict(input: &Plat03Input) -> Result<String, ReportError> {
-    if input.firmware_floor_source_run_id.trim().is_empty() {
-        return Err(ReportError::FirmwareFloorRequired);
-    }
+/// A hardware-gap observation from `hwlatdetect`, carried so PLAT-03 can report it beside the
+/// scheduling maximum while keeping the two visibly distinct.
+#[derive(Debug, Clone)]
+pub struct HwlatObservation {
+    pub max_us: u64,
+    /// The run directory this was observed in. A figure with no named source is not reportable.
+    pub source_run_id: String,
+    /// The conditions it was observed under, in the operator's words: CPU placement, load and
+    /// thermal state. Without these the number cannot be compared to anything.
+    pub conditions: String,
+}
 
-    let kernel_contribution_us = input
-        .observed_max_us
-        .saturating_sub(input.firmware_floor_us);
+/// Renders the PLAT-03 verdict: the observed scheduling maximum against the gate, and separately
+/// any paired `hwlatdetect` observation.
+///
+/// # Why there is no subtraction here
+///
+/// This function used to report `observed_max_us - firmware_floor_us` as "the kernel's
+/// contribution", and plan 01-13 described that difference as "the largest the kernel's
+/// contribution could be". It is not an upper bound, and it is not a lower bound either.
+///
+/// Take a 40 us scheduling maximum caused entirely by kernel activity, during which no firmware
+/// interruption occurred at all. A separate `hwlatdetect` run observes a 22 us hardware gap.
+/// Subtracting gives 18 us, while the kernel's actual contribution to that event was the full
+/// 40 us. The subtraction understates it by half, and `saturating_sub` additionally turns any
+/// hwlat maximum above the scheduling maximum into a flat zero.
+///
+/// The deeper problem is that the two figures are not commensurable. `cyclictest` measures
+/// wakeup latency on the isolated CPUs; `hwlatdetect` counts sampling records whose polling
+/// interval contained a gap, on whatever CPUs it was pointed at, under its own load and thermal
+/// state. Firmware stalls and scheduling delay do not compose additively, and the two are
+/// measured neither on the same CPUs nor at the same time.
+///
+/// So both numbers are printed, each attributed to the run and conditions it came from, and the
+/// reader is told explicitly that they are not combined. Attribution of the residual to a named
+/// cause belongs with a trace that supports it, not with arithmetic.
+///
+/// Recorded as finding 1 of `.planning/phases/01-trustworthy-measurement/01-EXTERNAL-AUDIT.md`.
+pub fn render_plat03_verdict(input: &Plat03Input) -> Result<String, ReportError> {
     let jitter_us = input.p99_us.saturating_sub(input.p50_us);
-    let under_gate = input.observed_max_us <= input.gate_us;
+
+    // At or above the gate is a miss. The project settled on the `samples_at_or_above`
+    // convention on 2026-08-31, and a strict `<` here keeps the verdict consistent with it;
+    // the previous `<=` reported a maximum of exactly the gate value as a pass.
+    let under_gate = input.observed_max_us < input.gate_us;
     let verdict_word = if under_gate {
         format!("under the {} us gate", input.gate_us)
     } else {
@@ -81,11 +106,23 @@ pub fn render_plat03_verdict(input: &Plat03Input) -> Result<String, ReportError>
         "total observed maximum: {} us against the {} us gate\n",
         input.observed_max_us, input.gate_us
     ));
-    out.push_str(&format!(
-        "kernel contribution above the {} us firmware floor: {} us (measured in run {})\n",
-        input.firmware_floor_us, kernel_contribution_us, input.firmware_floor_source_run_id
-    ));
     out.push_str(&format!("jitter (p99 minus p50): {jitter_us} us\n"));
+    match &input.hwlat {
+        Some(h) => {
+            out.push_str(&format!(
+                "independent hwlatdetect maximum: {} us (run {}, conditions: {})\n",
+                h.max_us, h.source_run_id, h.conditions
+            ));
+            out.push_str(
+                "the two figures above are not subtracted: they come from different \
+                 instruments, on different CPUs, under different conditions, and firmware \
+                 stalls do not compose additively with scheduling delay\n",
+            );
+        }
+        None => {
+            out.push_str("independent hwlatdetect maximum: no paired hwlatdetect observation\n")
+        }
+    }
     out.push_str(&format!("verdict: {verdict_word}\n"));
     Ok(out)
 }

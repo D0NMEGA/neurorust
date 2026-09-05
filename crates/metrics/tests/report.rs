@@ -1,7 +1,7 @@
 use nr_histogram::hist::{CyclictestRun, parse_hist_file};
 use nr_manifest::RunManifest;
 use nr_metrics::index::{RunSummary, render_index};
-use nr_metrics::report::{Plat03Input, ReportError, render_plat03_verdict, render_run_report};
+use nr_metrics::report::{HwlatObservation, Plat03Input, render_plat03_verdict, render_run_report};
 
 /// A hand-built manifest, adapted from the reviewed worked example
 /// (`crates/manifest/tests/fixtures/minimal-manifest.json`), covering every RunManifest field
@@ -180,48 +180,66 @@ fn sample_run() -> CyclictestRun {
         .expect("the committed 2026-08-28 fixture parses")
 }
 
-/// render_plat03_verdict with observed max 27 us and firmware floor 22 us renders both "total
-/// observed maximum: 27 us against the 30 us gate" and "kernel contribution above the 22 us
-/// firmware floor: 5 us". With observed max 45 us and firmware floor 22 us, the verdict line
-/// reads "documented limitation" rather than "pass", and both numbers are still shown. A verdict
-/// rendered without a firmware floor value returns Err(FirmwareFloorRequired) rather than
-/// reporting only the total.
+/// PLAT-03 reports the observed maximum against the gate and, separately, any independent
+/// hwlatdetect observation. It does NOT subtract one from the other.
+///
+/// The subtraction this replaces claimed to yield "the largest the kernel's contribution could
+/// be". It does not. A 40 us scheduling maximum caused entirely by kernel activity, with no
+/// firmware interruption during that event, minus a 22 us hwlat maximum observed in a different
+/// run on different CPUs under a different load, yields 18 us and understates the real kernel
+/// contribution by half. An observed hardware gap is neither a fixed delay charged to every
+/// wakeup nor a guaranteed floor under the worst scheduling event, and the two figures come
+/// from different instruments measuring different things. See 01-EXTERNAL-AUDIT.md finding 1.
 #[test]
-fn plat03_report_decomposition() {
+fn plat03_reports_both_figures_without_subtracting_them() {
     let under_gate = render_plat03_verdict(&Plat03Input {
         observed_max_us: 27,
         gate_us: 30,
-        firmware_floor_us: 22,
-        firmware_floor_source_run_id: "2026-08-31-precision3591-firmware-floor-001".to_string(),
+        hwlat: Some(HwlatObservation {
+            max_us: 22,
+            source_run_id: "2026-08-31-precision3591-firmware-floor-001".to_string(),
+            conditions: "P-cores 0-11, 22 logical CPUs loaded, package 93 to 95 C".to_string(),
+        }),
         p99_us: 9,
         p50_us: 2,
     })
-    .expect("a fully populated Plat03Input renders");
+    .expect("renders");
     assert!(
         under_gate.contains("total observed maximum: 27 us against the 30 us gate"),
         "got: {under_gate}"
     );
     assert!(
-        under_gate.contains("kernel contribution above the 22 us firmware floor: 5 us"),
+        under_gate.contains("verdict: under the 30 us gate"),
         "got: {under_gate}"
     );
-    assert!(under_gate.contains("verdict: under the 30 us gate"));
+
+    // The hwlat figure appears, attributed and condition-qualified, but never subtracted.
+    assert!(under_gate.contains("22 us"), "got: {under_gate}");
+    assert!(
+        under_gate.contains("2026-08-31-precision3591-firmware-floor-001"),
+        "got: {under_gate}"
+    );
+    assert!(
+        under_gate.contains("not subtracted"),
+        "the report must say plainly that the two are not combined: {under_gate}"
+    );
+    assert!(
+        !under_gate.contains("kernel contribution"),
+        "the invalid decomposition must be gone: {under_gate}"
+    );
+    // 27 - 22 = 5 must not appear as a derived quantity.
+    assert!(!under_gate.contains(": 5 us"), "got: {under_gate}");
 
     let over_gate = render_plat03_verdict(&Plat03Input {
         observed_max_us: 45,
         gate_us: 30,
-        firmware_floor_us: 22,
-        firmware_floor_source_run_id: "2026-08-31-precision3591-firmware-floor-001".to_string(),
+        hwlat: None,
         p99_us: 9,
         p50_us: 2,
     })
-    .expect("a fully populated Plat03Input renders");
+    .expect("a verdict renders without any hwlat observation");
     assert!(
         over_gate.contains("total observed maximum: 45 us against the 30 us gate"),
-        "got: {over_gate}"
-    );
-    assert!(
-        over_gate.contains("kernel contribution above the 22 us firmware floor: 23 us"),
         "got: {over_gate}"
     );
     assert!(
@@ -232,19 +250,46 @@ fn plat03_report_decomposition() {
         !over_gate.contains("under the 30 us gate"),
         "got: {over_gate}"
     );
+    assert!(
+        over_gate.contains("no paired hwlatdetect observation"),
+        "a missing observation is stated, not silently omitted: {over_gate}"
+    );
+}
 
-    let missing_floor = render_plat03_verdict(&Plat03Input {
-        observed_max_us: 27,
+/// A maximum exactly equal to the gate is NOT under it. The project counts samples at or above
+/// the boundary (`samples_at_or_above`, settled 2026-08-31), so 30 us against a 30 us gate is a
+/// miss. The previous `<=` made exactly-30 read as a pass.
+#[test]
+fn plat03_gate_boundary_is_at_or_above() {
+    let exactly_at_gate = render_plat03_verdict(&Plat03Input {
+        observed_max_us: 30,
         gate_us: 30,
-        firmware_floor_us: 0,
-        firmware_floor_source_run_id: String::new(),
+        hwlat: None,
         p99_us: 9,
         p50_us: 2,
-    });
-    assert!(matches!(
-        missing_floor,
-        Err(ReportError::FirmwareFloorRequired)
-    ));
+    })
+    .expect("renders");
+    assert!(
+        !exactly_at_gate.contains("under the 30 us gate"),
+        "exactly 30 us must not report as under a 30 us gate: {exactly_at_gate}"
+    );
+    assert!(
+        exactly_at_gate.contains("verdict: documented limitation"),
+        "got: {exactly_at_gate}"
+    );
+
+    let just_under = render_plat03_verdict(&Plat03Input {
+        observed_max_us: 29,
+        gate_us: 30,
+        hwlat: None,
+        p99_us: 9,
+        p50_us: 2,
+    })
+    .expect("renders");
+    assert!(
+        just_under.contains("verdict: under the 30 us gate"),
+        "got: {just_under}"
+    );
 }
 
 /// render_run_report emits a fixed-width ASCII histogram with a log scale on the count axis and
