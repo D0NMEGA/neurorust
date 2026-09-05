@@ -122,3 +122,25 @@ fn protocol_is_ascii() {
         "docs/measurement-protocol.md contains a non-ASCII byte at offset {offset:?}"
     );
 }
+
+/// The mechanical guard for the class of defect the audit found three times: a claim
+/// in prose the code does not implement. The 60 C versus 70 C drift (fixed by hand in
+/// commit 137c3c1, with nothing to stop it recurring) is exactly this: the document
+/// and `THERMAL_HEADROOM_CEILING_C` must always state the same number.
+#[test]
+fn protocol_states_the_code_thermal_ceiling() {
+    let expected = format!(
+        "package temp <= {} C",
+        nr_capture::preconditions::THERMAL_HEADROOM_CEILING_C
+    );
+    assert!(
+        PROTOCOL_DOC.contains(&expected),
+        "protocol does not state the code's ceiling: {expected}"
+    );
+    for stale in ["package temp <= 60 C", "60 C or below"] {
+        assert!(
+            !PROTOCOL_DOC.contains(stale),
+            "protocol still states a superseded ceiling: {stale}"
+        );
+    }
+}

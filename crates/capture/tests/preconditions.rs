@@ -6,6 +6,7 @@ use nr_capture::preconditions::{PreconditionSpec, refuse_on_violation, run_all};
 use nr_capture::sources::FixtureFacts;
 use nr_manifest::{
     InstrumentClass, PreconditionCheck, PreconditionResult, PreconditionStatus, RunClass,
+    ThermalProfile,
 };
 
 /// The real D-06/D-14 tuning snapshot from the reference rig (plan 01-02), exactly as the
@@ -34,6 +35,7 @@ fn headline_spec() -> PreconditionSpec {
         instrument_class: InstrumentClass::HeadlineSeries,
         run_class: RunClass::Headline,
         target_cpus: TARGET_CPUS.to_vec(),
+        thermal_profile: ThermalProfile::Normal,
     }
 }
 
@@ -42,16 +44,33 @@ fn investigation_spec() -> PreconditionSpec {
         instrument_class: InstrumentClass::Investigation,
         run_class: RunClass::Investigation,
         target_cpus: TARGET_CPUS.to_vec(),
+        thermal_profile: ThermalProfile::Normal,
     }
 }
 
-/// A D-18 firmware screen. It saturates the machine on purpose, so it is the one run
-/// class that legitimately starts hot.
+/// A D-18 firmware screen that has NOT declared itself thermally exempt. The
+/// exemption now follows the declared profile, not the run class (finding 5,
+/// `01-EXTERNAL-AUDIT.md`), so a plain screen-class run behaves exactly like any
+/// other `Normal`-profile run for this check; see `hot_screen_spec` for the
+/// deliberately-hot D-18 arm.
 fn screen_spec() -> PreconditionSpec {
     PreconditionSpec {
         instrument_class: InstrumentClass::HeadlineSeries,
         run_class: RunClass::Screen,
         target_cpus: TARGET_CPUS.to_vec(),
+        thermal_profile: ThermalProfile::Normal,
+    }
+}
+
+/// A D-18 firmware screen that has declared `--thermal-profile hot-screen`: the one
+/// combination the exemption actually protects. It saturates the machine on purpose,
+/// so it is the one declared profile that legitimately starts hot.
+fn hot_screen_spec() -> PreconditionSpec {
+    PreconditionSpec {
+        instrument_class: InstrumentClass::HeadlineSeries,
+        run_class: RunClass::Screen,
+        target_cpus: TARGET_CPUS.to_vec(),
+        thermal_profile: ThermalProfile::HotScreen,
     }
 }
 
@@ -321,31 +340,92 @@ fn harness_mutates_nothing() {
 /// design: `hwlatdetect` is screening for load-triggered SMIs, and the 2026-08-28
 /// screening this re-run is compared against reported 91 to 93 C whole-machine and 93 to
 /// 95 C P-core-only. `ThermalHeadroomAtStart` exists to stop a *latency* run from
-/// starting thermally throttled, which is a different question, so it must not refuse a
-/// firmware screen for being hot. Discovered the hard way: with the check applied
-/// unconditionally, arm 2 was refused at 78 C and the arms were impossible to take
-/// through the harness at all, even though the 70 C ceiling's own justification table is
-/// built from those very under-load rows.
+/// starting thermally throttled, which is a different question, so a run that has
+/// DECLARED itself a hot screen (`--thermal-profile hot-screen`) must not be refused
+/// for starting hot. Discovered the hard way: with the check applied unconditionally,
+/// arm 2 was refused at 78 C and the arms were impossible to take through the harness
+/// at all, even though the 70 C ceiling's own justification table is built from those
+/// very under-load rows.
+///
+/// The exemption follows the DECLARATION, not the run class (finding 5,
+/// `01-EXTERNAL-AUDIT.md`): it used to key on `RunClass::Screen` alone, which exempted
+/// an unintentionally hot idle screen just as readily as a deliberately saturated one.
 #[test]
-fn thermal_headroom_does_not_refuse_a_firmware_screen() {
-    let hot = RIG_AS_FOUND.replace("thermal.x86_pkg_temp=64000", "thermal.x86_pkg_temp=92000");
+fn hot_screen_profile_exempts_a_hot_start() {
+    let hot = RIG_AS_FOUND.replace("thermal.x86_pkg_temp=64000", "thermal.x86_pkg_temp=88000");
     let facts = FixtureFacts::parse(&hot);
 
-    let screen = thermal_result(&run_all(&facts, &screen_spec()));
+    let result = thermal_result(&run_all(&facts, &hot_screen_spec()));
     assert_eq!(
-        screen.status,
+        result.status,
         PreconditionStatus::NotApplicable,
-        "a screen run must not be refused for starting hot"
+        "a declared hot screen must not be refused for starting hot: {result:#?}"
     );
     assert_eq!(
-        screen.observed, "92.0 C",
+        result.observed, "88.0 C",
         "NotApplicable still records the real observed temperature"
     );
+}
 
-    // The gate stays intact for every class that measures latency.
-    let headline = thermal_result(&run_all(&facts, &headline_spec()));
-    assert_eq!(headline.status, PreconditionStatus::Fail);
-    assert_eq!(headline.observed, "92.0 C");
+/// A `screen`-class run that never declared `--thermal-profile hot-screen` gets no
+/// exemption at all: the class alone used to be sufficient, and an unintentionally hot
+/// idle screen was exempted right along with a deliberately saturated one. This is the
+/// behaviour finding 5 asked for.
+#[test]
+fn normal_profile_refuses_a_hot_screen() {
+    let hot = RIG_AS_FOUND.replace("thermal.x86_pkg_temp=64000", "thermal.x86_pkg_temp=88000");
+    let facts = FixtureFacts::parse(&hot);
+
+    let result = thermal_result(&run_all(&facts, &screen_spec()));
+    assert_eq!(
+        result.status,
+        PreconditionStatus::Fail,
+        "a screen run that never declared hot-screen must not be exempted just for being \
+         --class screen: {result:#?}"
+    );
+    assert_eq!(result.observed, "88.0 C");
+}
+
+/// A declared hot screen is exempt even when the observation itself is cool: the
+/// `HotScreen` arm performs no temperature comparison at all, so applicability is
+/// settled entirely by the declaration, before anything is read.
+#[test]
+fn hot_screen_profile_still_records_a_cool_start() {
+    let facts = FixtureFacts::parse(RIG_AS_FOUND);
+    let result = thermal_result(&run_all(&facts, &hot_screen_spec()));
+    assert_eq!(
+        result.status,
+        PreconditionStatus::NotApplicable,
+        "{result:#?}"
+    );
+    assert_eq!(
+        result.observed, "69.1 C",
+        "NotApplicable still records the real observed temperature, even when it is cool"
+    );
+}
+
+/// The normal profile (every class other than a declared hot screen) behaves exactly
+/// as the unconditional check did before this plan: passes at or below the ceiling,
+/// fails above it.
+#[test]
+fn normal_profile_is_the_default() {
+    let cool = FixtureFacts::parse(RIG_AS_FOUND);
+    let cool_result = thermal_result(&run_all(&cool, &headline_spec()));
+    assert_eq!(
+        cool_result.status,
+        PreconditionStatus::Pass,
+        "{cool_result:#?}"
+    );
+
+    let hot_text = RIG_AS_FOUND.replace("thermal.x86_pkg_temp=64000", "thermal.x86_pkg_temp=92000");
+    let hot = FixtureFacts::parse(&hot_text);
+    let hot_result = thermal_result(&run_all(&hot, &headline_spec()));
+    assert_eq!(
+        hot_result.status,
+        PreconditionStatus::Fail,
+        "{hot_result:#?}"
+    );
+    assert_eq!(hot_result.observed, "92.0 C");
 }
 
 /// A screen run that starts cold still reports a real Pass, not a blanket exemption.
