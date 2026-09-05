@@ -64,7 +64,7 @@ whether it passes or fails (D-06); the run refuses if any of them fails, or, for
 | `KernelIsRealtime` | `1` | Boot a PREEMPT_RT kernel, for example `sudo apt install ubuntu-realtime` on Ubuntu 26.04 LTS. | Reads `/sys/kernel/realtime`. |
 | `RtTuningServiceActive` | `active` | `sudo systemctl enable --now rt-tuning.service` | `systemctl show rt-tuning.service --property=ActiveState`. This confirms the service ran, not that its writes survived; see "The governor operating point". |
 | `OnAcPower` | `AC=1` | Connect AC power. A charging or discharging battery is a documented source of firmware interrupts (`measurements/2026-08-28-precision3591/README.md`'s caveats). | Reads the first populated `online` file among `/sys/class/power_supply/{AC,AC0,ADP0,ADP1}/online`. |
-| `ThermalHeadroomAtStart` | `package temp <= 60 C` | Let the machine idle until every thermal zone cools to 60 C or below before starting the run. | Reads every `/sys/class/thermal/thermal_zone{N}/temp` and takes the maximum. |
+| `ThermalHeadroomAtStart` | `package temp <= 70 C`, and not applicable to a `screen` run | Let the machine idle until every thermal zone cools to 70 C or below before starting the run. A `screen` run is exempt: a firmware screen saturates the machine on purpose, so the check is recorded as not applicable, carrying its real observed temperature, rather than refusing the run. | Reads every `/sys/class/thermal/thermal_zone{N}/temp` and takes the maximum across zones, which is not necessarily the package sensor. |
 | `NoPackageManagerActivity` | `no apt, dpkg, unattended-upgrade or snapd process` | `sudo systemctl stop unattended-upgrades.service`, and let any `apt`/`dpkg`/`snapd` operation already in progress finish. | Scans `/proc/*/comm` for exactly these four process names. |
 | `TracersQuiescent` | `nop` for a `headline-series` run; not applicable for an `investigation` run | `echo nop \| sudo tee /sys/kernel/tracing/current_tracer` | Reads `/sys/kernel/tracing/current_tracer`. |
 
@@ -231,13 +231,24 @@ directly:
 - `measurements/2026-09-02-precision3591-calibration-contaminated` (900s, SSH activity
   plus an active GDM greeter on seat0)
 
-The contaminated run recorded FEWER CAL/TLB/RES/device-IRQ counts on the isolated cores
-than the clean run, while producing a worst-case latency 50 times higher (78 us clean
-vs 3856 us contaminated). This kernel command line's own `irqaffinity=0-5,12-21` keeps
-interrupts off the isolated cores (6-11) by design, so a global stall (for example
-`stop_machine()`, or a system-wide TLB shootdown) reaches every isolated thread without
-ever registering as per-core interrupt traffic. A threshold derived from these counters
-would be blind to exactly the contamination it exists to catch.
+The two runs do not separate on the CAL/TLB/RES/device-IRQ counters at any usable
+magnitude, while producing a worst-case latency 50 times higher (78 us clean vs 3856 us
+contaminated).
+
+An earlier version of this section said the contaminated run recorded FEWER counts than
+the clean run. That was wrong. Summing each arm's recorded per-CPU deltas over the
+isolated cores and normalising by the recorded durations gives, per run hour: CAL 6 clean
+vs 48 contaminated, TLB 6 vs 24, RES 55 vs 96, device IRQ 1127 vs 844. Only device IRQs
+invert, and CAL is higher on the contaminated arm even before normalising. The earlier
+reading compared raw totals across a 4x duration difference (3600 s against 900 s).
+
+The counters are still not a usable detector, for a better reason: the magnitudes are
+implausible. One to two CAL IPIs per isolated CPU per hour, against roughly 137,000 on
+the contaminated 2026-08-28 baseline. Whatever the snapshots are counting is not the
+interference the D-15 design assumed, and two runs of unequal duration are not a
+calibration set. The previously offered `irqaffinity=0-5,12-21` explanation is withdrawn:
+that parameter sets a default affinity mask for device IRQs and does not suppress
+CAL/TLB/RES accounting on the cores those IPIs are delivered to.
 
 What separates the two runs instead is the tail of the latency distribution, not its
 bulk: p50, p95, p99 and p99.9 are nearly identical between them, but the global maximum

@@ -407,9 +407,12 @@ pub enum ContaminationVerdict {
 /// `crates/capture/src/interference.rs` for how each field is computed and why the
 /// interference counters below were found insufficient on their own: the D-17
 /// calibration pair (`measurements/2026-09-01-precision3591-calibration-clean` and
-/// `measurements/2026-09-02-precision3591-calibration-contaminated`) showed the
-/// contaminated run with FEWER interrupts than the clean one, while producing a worst
-/// case 50x higher.
+/// `measurements/2026-09-02-precision3591-calibration-contaminated`) did not separate on
+/// the interference counters at any usable magnitude, while producing a worst case 50x
+/// higher. An earlier version of this note said the contaminated run recorded FEWER
+/// interrupts; that was wrong, and is corrected in `nr_capture::interference`'s module
+/// documentation. Only device IRQs invert; per run hour CAL, TLB and RES are all higher
+/// on the contaminated arm.
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct TailMetrics {

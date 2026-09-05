@@ -24,14 +24,39 @@
 //! **D-24 addendum (2026-09-02): the counters above are not a sufficient detector.**
 //! The D-17 calibration pair (`measurements/2026-09-01-precision3591-calibration-clean`,
 //! 3600s, vs `measurements/2026-09-02-precision3591-calibration-contaminated`, 900s,
-//! taken under identical tuning and differing only in contamination) showed the
-//! contaminated arm with FEWER CAL/TLB/RES/device-IRQ counts than the clean arm, while
-//! producing a worst case 50x higher (78 us clean vs 3856 us contaminated). Likely
-//! cause: this kernel command line's own `irqaffinity=0-5,12-21` keeps interrupts off
-//! the isolated cores (6-11) by design, so a global stall (for example
-//! `stop_machine()`, or a system-wide TLB shootdown) reaches every isolated thread
-//! without ever registering as per-core interrupt traffic. A threshold derived from
-//! these counters would be blind to exactly the contamination it exists to catch.
+//! differing in contamination and also in duration) does not separate on these counters
+//! at any usable magnitude, while producing a worst case 50x higher (78 us clean vs
+//! 3856 us contaminated).
+//!
+//! **Corrected 2026-09-04.** This note previously claimed the contaminated arm showed
+//! FEWER CAL/TLB/RES/device-IRQ counts than the clean arm. That is wrong, and an
+//! external audit caught it. Summing each arm's recorded per-CPU deltas over the
+//! isolated cores and normalising by the recorded durations:
+//!
+//! | Counter    | Clean, 3600s | Contaminated, 900s | Clean/hour | Contaminated/hour |
+//! |------------|-------------:|-------------------:|-----------:|------------------:|
+//! | CAL        |            6 |                 12 |          6 |                48 |
+//! | TLB        |            6 |                  6 |          6 |                24 |
+//! | RES        |           55 |                 24 |         55 |                96 |
+//! | Device IRQ |         1127 |                211 |       1127 |               844 |
+//!
+//! Only device IRQs invert. CAL is higher on the contaminated arm even before
+//! normalising. The earlier reading compared raw totals across a 4x duration
+//! difference and drew the opposite conclusion from the data.
+//!
+//! The counters are still not a usable detector, but for a different and more
+//! interesting reason: the magnitudes are absurd. One to two CAL IPIs per isolated CPU
+//! over an hour, against the roughly 137,000 the 2026-08-28 evidence led the project to
+//! expect on a contaminated run. Whatever these snapshots are counting, it is not the
+//! interference the D-15 design assumed, and two observations of unequal duration are
+//! not a calibration set in any case. Treat them as diagnostics, not as a classifier
+//! input, until that discrepancy is explained.
+//!
+//! The previously offered explanation, that `irqaffinity=0-5,12-21` keeps a global
+//! stall from registering as per-core interrupt traffic, is withdrawn: `irqaffinity`
+//! sets a default affinity mask for device IRQs and is not a mechanism that suppresses
+//! CAL/TLB/RES IPI accounting on the cores those IPIs are delivered to. It was a
+//! plausible story rather than a tested one.
 //!
 //! What separates the two runs instead is the tail of the latency distribution, not
 //! its bulk: p50/p95/p99/p99.9 are nearly identical between them, but the global

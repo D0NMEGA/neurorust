@@ -834,7 +834,7 @@
       ]
     },
     "TailMetrics": {
-      "description": "D-24: the tail-based contamination metrics, computed from a run's own cyclictest\nhistogram rather than from `/proc/interrupts`. See\n`crates/capture/src/interference.rs` for how each field is computed and why the\ninterference counters below were found insufficient on their own: the D-17\ncalibration pair (`measurements/2026-09-01-precision3591-calibration-clean` and\n`measurements/2026-09-02-precision3591-calibration-contaminated`) showed the\ncontaminated run with FEWER interrupts than the clean one, while producing a worst\ncase 50x higher.",
+      "description": "D-24: the tail-based contamination metrics, computed from a run's own cyclictest\nhistogram rather than from `/proc/interrupts`. See\n`crates/capture/src/interference.rs` for how each field is computed and why the\ninterference counters below were found insufficient on their own: the D-17\ncalibration pair (`measurements/2026-09-01-precision3591-calibration-clean` and\n`measurements/2026-09-02-precision3591-calibration-contaminated`) did not separate on\nthe interference counters at any usable magnitude, while producing a worst case 50x\nhigher. An earlier version of this note said the contaminated run recorded FEWER\ninterrupts; that was wrong, and is corrected in `nr_capture::interference`'s module\ndocumentation. Only device IRQs invert; per run hour CAL, TLB and RES are all higher\non the contaminated arm.",
       "type": "object",
       "properties": {
         "overflow_rate_per_s": {

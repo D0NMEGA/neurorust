@@ -89,3 +89,43 @@ originating plan; noted here for a future plan or maintenance pass to pick up.
   date prefix) so the snapshot asserts the parts of the report that are
   actually deterministic. Re-run `cargo test -p nr-cli --test run_pipeline`
   after the fix and `cargo insta accept` (or hand-edit) the one changed line.
+
+## From 01-11 (discovered while taking the D-18 arms through the new root entry point)
+
+- **`scripts/nr-run-measurement` cannot launch a capture interactively as
+  written.** It calls `systemd-run` with no delay, so the transient unit starts
+  within milliseconds and `nrmeasure run` evaluates its preconditions while the
+  launching SSH connection is still established. `NoActiveSshSessions` expects
+  `0` and observes at least `1`, so the run is refused every time. Confirmed
+  directly: a dry-run launched from an open SSH session reported
+  `NoActiveSshSessions: observed "2", expected "0" (Fail)` with the other 14
+  preconditions passing. This is not a precondition bug; the gate is correct,
+  because SSH traffic broadcasts TLB shootdown IPIs to the isolated cores and is
+  what made the 2026-08-28 baseline unpublishable. The script simply has no way
+  to get out of its own way.
+  Worked around in this plan by wrapping each launch in a detached
+  `setsid` script that sleeps 30 seconds before invoking the entry point, so the
+  launching connection is gone by the time the check runs. That wrapper lives in
+  `/tmp` on the rig and is deliberately not committed; it is scaffolding, not a
+  design.
+  Note this does NOT affect plan 01-14's weekly timer, which is the case the
+  script was really written for: systemd fires the unit with nobody connected,
+  so there is no session to wait out.
+  Suggested fix for whoever next touches the script (most naturally plan 01-14,
+  which owns `deploy/systemd/`): either accept an explicit `--start-delay
+  <seconds>` and pass it through as `systemd-run --on-active=<n>s`, or make the
+  delay unconditional with a stated default. If `--on-active` is used, the
+  "already running" guard must also check `nr-measurement.timer`, not just
+  `nr-measurement.service`, because a pending timer leaves the service inactive.
+
+- **A logind session can outlive its TCP connection and linger for days.**
+  Session 40 on the rig dated from 2026-08-31 and was still listed `Active=yes`
+  by `loginctl` on 2026-09-04 with no established connection behind it. It does
+  not affect `NoActiveSshSessions`, which counts established TCP connections via
+  `ss` rather than logind sessions, and it is not counted by
+  `NoActiveLoginSessions` either because that check requires `Seat=seat0` and a
+  remote session carries no seat. Harmless for the gates, but it makes
+  `loginctl list-sessions` misleading when diagnosing what is holding a
+  connection open. Diagnose with `ss -Htn state established '( sport = :22 )'`
+  and match peer addresses; `loginctl show-session <id> -p RemoteHost -p
+  Timestamp` then identifies which is which.
