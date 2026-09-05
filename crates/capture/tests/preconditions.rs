@@ -417,3 +417,126 @@ fn thermal_record_without_a_pre_run_reading_leaves_the_end_absent() {
     assert_eq!(pkg.temp_c_start, 64.0);
     assert_eq!(pkg.temp_c_end, None);
 }
+
+fn deep_cstates_result(results: &[PreconditionResult]) -> PreconditionResult {
+    results
+        .iter()
+        .find(|r| r.check == PreconditionCheck::DeepCstatesDisabled)
+        .expect("DeepCstatesDisabled result present")
+        .clone()
+}
+
+/// A fixture where cpu7 (one of the target CPUs) has C6 registered and enabled, while
+/// every other target CPU (like cpu0's own tree in `RIG_AS_FOUND`) registers no C6 or
+/// C10 at all. The old check read cpu0's cpuidle tree alone and would have reported
+/// `Pass`, even though cpu0 is not one of the CPUs the run isolates. Finding 8 of
+/// `01-EXTERNAL-AUDIT.md`.
+#[test]
+fn deep_cstates_checks_every_target_cpu() {
+    let text = format!(
+        "{RIG_AS_FOUND}\n\
+         /sys/devices/system/cpu/cpu7/cpuidle/state0/name=C6\n\
+         /sys/devices/system/cpu/cpu7/cpuidle/state0/disable=0\n"
+    );
+    let facts = FixtureFacts::parse(&text);
+    let result = deep_cstates_result(&run_all(&facts, &headline_spec()));
+    assert_eq!(result.status, PreconditionStatus::Fail, "{result:#?}");
+    assert!(
+        result.observed.contains("cpu7"),
+        "observed should name cpu7: {}",
+        result.observed
+    );
+}
+
+/// Every target CPU appears in the observed string by name once any of them disagrees,
+/// so a reader can see which CPU was actually read rather than trusting a summary.
+#[test]
+fn deep_cstates_reports_per_cpu_observation() {
+    let text = format!(
+        "{RIG_AS_FOUND}\n\
+         /sys/devices/system/cpu/cpu7/cpuidle/state0/name=C6\n\
+         /sys/devices/system/cpu/cpu7/cpuidle/state0/disable=0\n"
+    );
+    let facts = FixtureFacts::parse(&text);
+    let result = deep_cstates_result(&run_all(&facts, &headline_spec()));
+    for cpu in TARGET_CPUS {
+        assert!(
+            result.observed.contains(&format!("cpu{cpu}")),
+            "observed should name cpu{cpu}: {}",
+            result.observed
+        );
+    }
+}
+
+/// No target CPU registers C6 or C10 at all (the real `intel_idle.max_cstate=1`
+/// rationale `RIG_AS_FOUND` already reflects for cpu0), so every target CPU passes by
+/// absence, and the observed string still names every CPU checked, collapsed to a
+/// range since every one of them agrees.
+#[test]
+fn deep_cstates_absent_states_still_pass() {
+    let facts = FixtureFacts::parse(RIG_AS_FOUND);
+    let result = deep_cstates_result(&run_all(&facts, &headline_spec()));
+    assert_eq!(result.status, PreconditionStatus::Pass, "{result:#?}");
+    assert_eq!(
+        result.observed,
+        "C6 not present, C10 not present on cpus 6-11"
+    );
+}
+
+fn tracer_result(results: &[PreconditionResult]) -> PreconditionResult {
+    results
+        .iter()
+        .find(|r| r.check == PreconditionCheck::TracersQuiescent)
+        .expect("TracersQuiescent result present")
+        .clone()
+}
+
+/// `current_tracer=nop` alone (RIG_AS_FOUND's own value) used to satisfy
+/// `TracersQuiescent`, even with event tracing armed through the independent
+/// `events/enable` control. Finding 8 of `01-EXTERNAL-AUDIT.md`.
+#[test]
+fn tracers_quiescent_fails_on_enabled_events() {
+    let facts = FixtureFacts::parse(RIG_AS_FOUND)
+        .with("/sys/kernel/tracing/events/enable", "1")
+        .with("/sys/kernel/tracing/set_event", "")
+        .with("/sys/kernel/tracing/tracing_on", "0");
+    let result = tracer_result(&run_all(&facts, &headline_spec()));
+    assert_eq!(result.status, PreconditionStatus::Fail, "{result:#?}");
+}
+
+#[test]
+fn tracers_quiescent_fails_on_set_event() {
+    let facts = FixtureFacts::parse(RIG_AS_FOUND)
+        .with("/sys/kernel/tracing/events/enable", "0")
+        .with("/sys/kernel/tracing/set_event", "sched:sched_switch")
+        .with("/sys/kernel/tracing/tracing_on", "0");
+    let result = tracer_result(&run_all(&facts, &headline_spec()));
+    assert_eq!(result.status, PreconditionStatus::Fail, "{result:#?}");
+}
+
+#[test]
+fn tracers_quiescent_fails_on_tracing_on() {
+    let facts = FixtureFacts::parse(RIG_AS_FOUND)
+        .with("/sys/kernel/tracing/events/enable", "0")
+        .with("/sys/kernel/tracing/set_event", "")
+        .with("/sys/kernel/tracing/tracing_on", "1");
+    let result = tracer_result(&run_all(&facts, &headline_spec()));
+    assert_eq!(result.status, PreconditionStatus::Fail, "{result:#?}");
+}
+
+/// The observed string names the offending control by path, not only that something
+/// somewhere is armed.
+#[test]
+fn tracers_quiescent_reports_which_control_is_armed() {
+    let facts = FixtureFacts::parse(RIG_AS_FOUND)
+        .with("/sys/kernel/tracing/events/enable", "1")
+        .with("/sys/kernel/tracing/set_event", "")
+        .with("/sys/kernel/tracing/tracing_on", "0");
+    let result = tracer_result(&run_all(&facts, &headline_spec()));
+    assert_eq!(result.status, PreconditionStatus::Fail, "{result:#?}");
+    assert!(
+        result.observed.contains("events/enable=1"),
+        "observed should name the armed control: {}",
+        result.observed
+    );
+}
