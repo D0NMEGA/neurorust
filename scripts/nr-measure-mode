@@ -66,6 +66,17 @@ on)
     # `round-robin` migrates the thread across tracing_cpumask each window.
     # See docs/rig/firmware-floor-rt-vs-stock.md.
     echo round-robin > /sys/kernel/tracing/hwlat_detector/mode 2>/dev/null
+    # Reset the mask too. hwlatdetect writes tracing_cpumask when given --cpu-list and
+    # never restores it, so without this an unrestricted run silently inherits the last
+    # restricted run's mask and samples fewer CPUs than its own output claims. Putting
+    # the rig into protocol state means putting this into a known state, not the state
+    # the previous capture happened to leave.
+    #
+    # nproc --all, not nproc: plain nproc reports only the CPUs in the caller's affinity
+    # mask, and isolcpus=6-11 removes those six from it. It returns 16 here, which would
+    # build a 0xffff mask covering CPUs 0-15 and silently drop 16-21 while looking
+    # deliberate. Observed on 2026-09-05 before this comment existed.
+    printf '%x\n' $(( (1 << $(nproc --all)) - 1 )) > /sys/kernel/tracing/tracing_cpumask 2>/dev/null
     systemctl set-default multi-user.target >/dev/null 2>&1
     # set-default only changes what the NEXT boot does. Without isolate, gdm keeps
     # running and DisplayManagerInactive/NoGraphicalSession still fail, while status
@@ -91,7 +102,7 @@ off)
     echo none > /sys/kernel/tracing/hwlat_detector/mode 2>/dev/null
     # hwlatdetect writes tracing_cpumask when given --cpu-list and never restores it,
     # so a later run inherits the previous run's mask. Put it back to every CPU.
-    printf '%x\n' $(( (1 << $(nproc)) - 1 )) > /sys/kernel/tracing/tracing_cpumask 2>/dev/null
+    printf '%x\n' $(( (1 << $(nproc --all)) - 1 )) > /sys/kernel/tracing/tracing_cpumask 2>/dev/null
     systemctl isolate graphical.target >/dev/null 2>&1
     echo "measurement mode OFF, desktop configuration restored"
     "$0" status
