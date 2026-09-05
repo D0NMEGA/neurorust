@@ -5,6 +5,7 @@
 //! and contamination verdict.
 
 pub mod environment;
+pub mod firmware;
 pub mod hwnoise;
 pub mod interference;
 pub mod preconditions;
