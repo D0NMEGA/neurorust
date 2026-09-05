@@ -89,6 +89,12 @@ originating plan; noted here for a future plan or maintenance pass to pick up.
   date prefix) so the snapshot asserts the parts of the report that are
   actually deterministic. Re-run `cargo test -p nr-cli --test run_pipeline`
   after the fix and `cargo insta accept` (or hand-edit) the one changed line.
+  **CLOSED, commit `8db689a` (fix(01-07): redact the wall-clock date from the
+  run-report snapshot).** `redact_report()` now calls `redact_leading_date()`
+  on the `run id:` line, which strips exactly a leading `YYYY-MM-DD` and
+  leaves the rest of the id intact. Verified 2026-09-05 (plan 01-16):
+  `cargo test -p nr-cli --test run_pipeline` passes, `full_run_report_matches_
+  snapshot` included, independent of the current wall-clock date.
 
 ## From 01-11 (discovered while taking the D-18 arms through the new root entry point)
 
@@ -182,6 +188,12 @@ audit record and the fix can be read together.
   The exemption currently applies to any `Screen` run and is decided after observing that the
   temperature exceeded the ceiling, so an unintentionally hot idle screen is exempted too.
   Declare a hot-screen measurement profile up front and key the exemption on that instead.
+  **Documentation half CLOSED, commit `137c3c1`** (fix(01-11): correct the recorded reason
+  the interference counters were abandoned): `docs/measurement-protocol.md`'s
+  `ThermalHeadroomAtStart` row now reads `package temp <= 70 C`, matching the code's actual
+  70 C ceiling; `grep -c '60 C' docs/measurement-protocol.md` reports 0. **The other half
+  remains open**: the exemption is still keyed on `RunClass::Screen` alone rather than a
+  declared hot-screen profile, and is owned by plan 01-18.
 
 - **Findings 9 and 10, open, both in unexecuted plans.** Plan 01-12 assigns the ~3.8 ms
   maximum to the isolated events rather than the sustained burst, an association the captures
@@ -205,6 +217,13 @@ audit record and the fix can be read together.
   this was caught. Requires one interactive sudo session on the rig to re-install the script,
   so it is queued rather than fixed in place. Until then a hung capture still needs the
   operator's password to clear.
+  **Repository half CLOSED, commit `2b7a581`** (fix(01-11): let hwlatdetect reach the
+  isolated cores, and stop misreading its exit code): `scripts/nr-run-measurement` in this
+  repository now passes `--property=TimeoutStartSec="$RUNTIME_MAX"`, not `RuntimeMaxSec`;
+  `grep -c TimeoutStartSec scripts/nr-run-measurement` reports 3 (the property plus two
+  explanatory comment lines added by the same commit). **The rig still runs the old,
+  pre-`TimeoutStartSec` installed copy**; re-installing all four scripts (including this
+  one) is plan 01-22 task 1, per STATE.md's "Rig root access" blocker.
 
 - **`hwlatdetect` exits 1 when it finds latency above the hard limit, and the harness reports
   that as a tool failure.** `warn_on_tool_failure` printed `warning: hwlatdetect exited with
