@@ -54,7 +54,12 @@ if [ -n "$jsonfile" ]; then
   # captured in crates/histogram/tests/fixtures/probe-cyclictest-60s.json. The
   # per-thread max values here match $REAL_HIST's own footer exactly
   # (# Max Latencies: 03785 03679 03787 03693 03806 03726), so
-  # nr_histogram::json::reconcile accepts the pairing.
+  # nr_histogram::json::reconcile accepts the pairing. `cycles` is likewise the
+  # real per-thread sample total from $REAL_HIST (binned counts plus that
+  # thread's own overflow count from "# Histogram Overflows:"), not a rounded
+  # 3000000: 01-19 task 3 made reconcile() check sample count as well as
+  # maxima, and a flat, wrong cycles value now fails the pairing it used to
+  # pass silently (finding 6 of 01-EXTERNAL-AUDIT.md).
   cat > "$jsonfile" <<'JSON'
 {
   "file_version": 1,
@@ -74,12 +79,12 @@ if [ -n "$jsonfile" ]; then
   "num_threads": 6,
   "resolution_in_ns": 0,
   "thread": {
-    "0": {"histogram": {"1": 1}, "cycles": 3000000, "min": 1, "max": 3785, "avg": 2.0, "cpu": 6, "node": 0},
-    "1": {"histogram": {"1": 1}, "cycles": 3000000, "min": 1, "max": 3679, "avg": 2.0, "cpu": 7, "node": 0},
-    "2": {"histogram": {"1": 1}, "cycles": 3000000, "min": 1, "max": 3787, "avg": 2.0, "cpu": 8, "node": 0},
-    "3": {"histogram": {"1": 1}, "cycles": 3000000, "min": 1, "max": 3693, "avg": 2.0, "cpu": 9, "node": 0},
-    "4": {"histogram": {"1": 1}, "cycles": 3000000, "min": 1, "max": 3806, "avg": 2.0, "cpu": 10, "node": 0},
-    "5": {"histogram": {"1": 1}, "cycles": 3000000, "min": 1, "max": 3726, "avg": 2.0, "cpu": 11, "node": 0}
+    "0": {"histogram": {"1": 1}, "cycles": 2999329, "min": 1, "max": 3785, "avg": 2.0, "cpu": 6, "node": 0},
+    "1": {"histogram": {"1": 1}, "cycles": 2999297, "min": 1, "max": 3679, "avg": 2.0, "cpu": 7, "node": 0},
+    "2": {"histogram": {"1": 1}, "cycles": 2999302, "min": 1, "max": 3787, "avg": 2.0, "cpu": 8, "node": 0},
+    "3": {"histogram": {"1": 1}, "cycles": 2999303, "min": 1, "max": 3693, "avg": 2.0, "cpu": 9, "node": 0},
+    "4": {"histogram": {"1": 1}, "cycles": 2999313, "min": 1, "max": 3806, "avg": 2.0, "cpu": 10, "node": 0},
+    "5": {"histogram": {"1": 1}, "cycles": 2999300, "min": 1, "max": 3726, "avg": 2.0, "cpu": 11, "node": 0}
   }
 }
 JSON

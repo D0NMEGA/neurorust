@@ -1,4 +1,4 @@
-use nr_histogram::hist::parse_hist;
+use nr_histogram::hist::{HistError, parse_hist};
 use nr_histogram::json::{CyclictestSummary, reconcile};
 
 const PROBE_JSON: &str = include_str!(concat!(
@@ -8,6 +8,18 @@ const PROBE_JSON: &str = include_str!(concat!(
 const PROBE_H: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/tests/fixtures/probe-cyclictest-h-60s.hist"
+));
+
+/// The real, committed D-17 calibration-clean pair, reconciled as-is (never edited): the second
+/// named test in this file proves `reconcile` accepts real harness output, not only synthetic
+/// fixtures.
+const CALIBRATION_CLEAN_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../measurements/2026-09-01-precision3591-calibration-clean/cyclictest.json"
+));
+const CALIBRATION_CLEAN_HIST: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../measurements/2026-09-01-precision3591-calibration-clean/cyclictest.hist"
 ));
 
 #[test]
@@ -87,4 +99,32 @@ fn reconcile_disagreement_is_an_error() {
     // Corrupt one thread's reported maximum so the two files no longer describe the same run.
     summary.thread.get_mut("0").unwrap().max += 1;
     assert!(reconcile(&summary, &run).is_err());
+}
+
+/// Two files can agree on thread count and on every per-thread maximum while disagreeing on
+/// how many samples were taken; finding 6 of `01-EXTERNAL-AUDIT.md`. This test corrupts only
+/// `cycles`, leaving `max` untouched, so it fails only the sample-count check.
+#[test]
+fn reconcile_rejects_sample_count_disagreement() {
+    let mut summary: CyclictestSummary = serde_json::from_str(PROBE_JSON).unwrap();
+    let run = parse_hist(PROBE_H, None).unwrap();
+
+    assert!(reconcile(&summary, &run).is_ok());
+
+    summary.thread.get_mut("0").unwrap().cycles += 1;
+    match reconcile(&summary, &run) {
+        Err(HistError::SummaryDisagreement { field, .. }) => {
+            assert_eq!(field, "sample count");
+        }
+        other => panic!("expected a sample count SummaryDisagreement, got {other:?}"),
+    }
+}
+
+/// `reconcile` accepts the real, unedited D-17 calibration-clean pair: a positive control
+/// proving the sample-count check does not false-positive on genuine harness output.
+#[test]
+fn reconcile_accepts_the_real_committed_pair() {
+    let summary: CyclictestSummary = serde_json::from_str(CALIBRATION_CLEAN_JSON).unwrap();
+    let run = parse_hist(CALIBRATION_CLEAN_HIST, None).unwrap();
+    assert!(reconcile(&summary, &run).is_ok());
 }

@@ -80,6 +80,12 @@ pub fn parse_json_file(path: &Path) -> Result<CyclictestSummary, HistError> {
 /// Cross-check a --json summary against the .hist file from the same run.
 /// Both come from the same cyclictest invocation, so a disagreement means one of the two
 /// files was truncated, edited, or paired with the wrong run.
+///
+/// Checks thread count, every per-thread maximum, and every per-thread sample count. The first
+/// two alone are not enough: two files can agree on thread count and on every per-thread
+/// maximum while disagreeing on how many samples were taken, and the sample count is the
+/// denominator under every percentile and every over-gate fraction this project publishes.
+/// Finding 6 of `01-EXTERNAL-AUDIT.md`.
 pub fn reconcile(summary: &CyclictestSummary, run: &CyclictestRun) -> Result<(), HistError> {
     let json_threads = summary.num_threads as usize;
     if json_threads != run.threads {
@@ -109,5 +115,42 @@ pub fn reconcile(summary: &CyclictestSummary, run: &CyclictestRun) -> Result<(),
         }
     }
 
+    for (i, &hist_samples) in samples_per_thread(run).iter().enumerate() {
+        let key = i.to_string();
+        let json_thread = summary
+            .thread
+            .get(&key)
+            .ok_or(HistError::SummaryDisagreement {
+                field: "thread index",
+                json: format!("thread {key} absent from --json"),
+                hist: format!("thread {key} present in .hist"),
+            })?;
+        if json_thread.cycles != hist_samples {
+            return Err(HistError::SummaryDisagreement {
+                field: "sample count",
+                json: json_thread.cycles.to_string(),
+                hist: hist_samples.to_string(),
+            });
+        }
+    }
+
     Ok(())
+}
+
+/// Per-thread total sample count: binned samples plus the separately reported overflow count,
+/// matching what a `--json` capture's `thread[N].cycles` counts. `CyclictestRun` carries no
+/// single field for this; it is derived from `bins` (bin_us -> per-thread counts) and
+/// `overflows` (per-thread overflow counts), the same two fields the maxima check above already
+/// sources its per-thread data from.
+fn samples_per_thread(run: &CyclictestRun) -> Vec<u64> {
+    let mut counts = vec![0u64; run.threads];
+    for thread_counts in run.bins.values() {
+        for (count, sum) in thread_counts.iter().zip(counts.iter_mut()) {
+            *sum += count;
+        }
+    }
+    for (overflow, sum) in run.overflows.iter().zip(counts.iter_mut()) {
+        *sum += overflow;
+    }
+    counts
 }

@@ -52,9 +52,12 @@ worst-case bound under adversarial thermal conditions, not as the expected opera
 
 - Battery was charging (84-93%) during all runs. Charge controllers are a known SMI source.
 - 15 minutes is not 24 hours. The acceptance gates call for day-long soaks.
-- Detector validity was confirmed: at `--threshold=1` the tuned idle machine reported 6
-  events with a 7 us max, so the zero-above-10us result is a real measurement rather than a
-  dead instrument.
+- Detector validity was checked at the time with a `--threshold=1` run that reported 6 events
+  with a 7 us maximum on the tuned idle machine. That capture was not saved and is not in this repository,
+  so the observation is recorded here as an unverifiable note rather than as evidence. The
+  zero-above-10us result rests on the committed 10 us captures alone.
+- The `--threshold=1` detector-validity run above is worth retaking with a saved capture;
+  plan 01-23 (re-taking the firmware screens on the isolated cores) is its owner.
 
 ## Disk preparation (2026-08-28)
 
