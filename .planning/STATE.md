@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Checkpoint: 01-22 tasks 1-2 awaiting operator interactive sudo on the rig"
-last_updated: "2026-09-05T22:20:09.375Z"
+stopped_at: Completed 01-22-PLAN.md
+last_updated: "2026-09-05T23:05:50.385Z"
 last_activity: 2026-09-05
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 23
-  completed_plans: 15
-  percent: 65
+  completed_plans: 16
+  percent: 70
 ---
 
 # Project State
@@ -26,13 +26,13 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 01 (trustworthy-measurement) — EXECUTING
-Plan: 15 of 23 done; wave 11 (01-22) in progress - task 1 dev-host work committed (07c93ee),
-  tasks 1 step 5, 2 and 3 blocked at a checkpoint pending the operator's interactive sudo
-  session on the rig
-Status: Blocked at checkpoint:human-action, awaiting operator
+Plan: 16 of 23 done; wave 11 (01-22) complete. Next: wave 12 (01-20-PLAN.md, the rtla hwnoise
+  parser and SMI manifest fields), which consumes the probes and FINDINGS.md this plan
+  committed.
+Status: Ready to execute
 Last activity: 2026-09-05
 
-Progress: [███████░░░] 65%
+Progress: [███████░░░] 70%
 
 ## Performance Metrics
 
@@ -68,6 +68,7 @@ Progress: [███████░░░] 65%
 | Phase 01 P19 | 38min | 3 tasks | 11 files |
 | Phase 01 P17 | 95min | 3 tasks | 21 files |
 | Phase 01 P18 | 45min | 3 tasks | 12 files |
+| Phase 01 P22 | 46min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -133,6 +134,10 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-18: interference::verdict()'s own VerdictOutcome.reason is overwritten with the fixture-usage explanation whenever any fixture drove the run, then reused verbatim as RunManifest.exclusion_reason, so the two can never disagree about why a fixture-driven run's deltas are zero.
 - [Phase 01]: 01-18: state advance-plan's counter itself was numerically correct this time (15 matches the real SUMMARY.md count on disk), but its Current Position/Session Continuity prose still named the prior plan (01-17) and the just-completed wave (10) as pending; hand-corrected both to name 01-18 and wave 11 (01-22), matching the precedent from 01-16/01-17/01-19.
 - [Phase 01]: nr-recon and nr-probe no_turbo sysfs read was already corrected to the cpu/ path directly on the rig, out of band, sometime after the 01-02 recon filed the defect; both scripts were pulled back verbatim rather than re-editing a path that was already right. stress-ng 0.20.01-1 is also already installed on the rig (used for the 01-11 session 2 D-18 arms), so task 2 only needs msr-tools. nr-run-measurement PATH/absolute-path/write-bit hardening and nr-measure-mode three added tracing writes are committed (07c93ee); install to the rig, msr-tools install, and both probes remain gated on the operator interactive sudo session (checkpoint returned).
+- [Phase 01]: 01-22: install.sh's sudoers-cleanup loop generalized from one file the plan anticipated (nr-run-measurement) to two (nr-recon, nr-run-measurement), matching the rig's real hand-installed split; removal runs only after the replacement file is validated and installed.
+- [Phase 01]: 01-22: nr-recon/nr-probe's no_turbo path was already corrected on the rig out of band after the 01-02 recon filed the defect; both scripts vendored as-is rather than re-edited, confirmed by grep before commit.
+- [Phase 01]: 01-22: requirements-completed left empty for PLAT-02, following 01-09/01-18 precedent - PLAT-02 means a human followed the clean protocol on the rig end to end, which this plan's sudoers/probe infrastructure enables but does not itself perform.
+- [Phase 01]: 01-22: rtla hwnoise's per-CPU Runtime column, not the wall-clock duration header, is the real per-CPU exposure figure (59 periods x 750000us = 44.25s of Runtime inside a 60s wall-clock probe); plan 01-20 must parse Runtime directly.
 
 ### Pending Todos
 
@@ -147,12 +152,11 @@ None yet.
 - Rig boots untuned: every CPU governor reads powersave despite rt-tuning.service reporting active/enabled (power-profiles-daemon wins a boot-time race, see docs/rig/recon-2026-08-31/FINDINGS.md). Any plan that runs the real measurement protocol must fix this or rely on nr-capture's own precondition check; it must not trust rt-tuning.service's ActiveState.
 - The D-18 firmware floor does not exist for the isolated cores. `hwlatdetect` cannot sample more than one CPU on this kernel (tracer `mode` is `none` and `isolcpus=6-11` keeps its thread off 6-11), so all 32 events across three RT arms named CPU 5 and the 2026-08-28 P-core arm's 13 events all named CPU 0. Replacement instrument decided (D-27): `rtla hwnoise -c 6-11 -H 0-5` plus `rdmsr -p <cpu> 0x34`. Plans 01-20 through 01-23 build it and re-take the screens.
 - External-audit findings status (of the original six): 6 CLOSED (01-16, 01-19), 7 CLOSED (01-17), 5 CLOSED (documentation half in 01-11's 137c3c1, exemption-scoping half in 01-18), 8 CLOSED (01-18). Still open: finding 3 (partial; assigned to 01-21 and 01-23), and findings 9 and 10, both in unexecuted plans (9 to 01-12, 10 to 01-14).
-- Plan 01-22 checkpoint: task 1 dev-host work (nr-recon/nr-probe vendored, nr-measure-mode/nr-run-measurement hardened, deploy/sudoers/nr-measurement + install.sh) is committed at 07c93ee. Remaining work all needs the operator interactive sudo on precision3591-rig: task 1 step 5 (git pull, sudo ./deploy/sudoers/install.sh, verify grants/perms/diff, confirm no RuntimeMaxSec warning), task 2 (sudo apt install msr-tools, rdmsr 0x34 probe, rtla hwnoise probe), and task 3 (FINDINGS.md + deferred-items.md) which depends on task 2 output. Exact commands are in the 01-22 checkpoint return; resume with a fresh executor once the operator reports both resume-signal strings.
 
 ## Session Continuity
 
-Last session: 2026-09-05T22:20:09.373Z
-Stopped at: Checkpoint: 01-22 tasks 1-2 awaiting operator interactive sudo on the rig
-Resume file: .planning/phases/01-trustworthy-measurement/01-22-PLAN.md
+Last session: 2026-09-05T23:05:50.384Z
+Stopped at: Completed 01-22-PLAN.md
+Resume file: None
 
-Next: `/donny-execute-phase 1` (wave 11: plan 01-22)
+Next: `/donny-execute-phase 1` (wave 12: plan 01-20)
