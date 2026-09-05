@@ -13,7 +13,7 @@
 use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
-use nr_manifest::{GitShaSource, PreconditionStatus, RunManifest};
+use nr_manifest::{ArtifactKind, GitShaSource, PreconditionStatus, RunManifest};
 
 const CLEAN_FACTS: &str = include_str!("../../capture/tests/fixtures/probe-sysfs-tuning.txt");
 const VIOLATED_FACTS: &str = include_str!("../../capture/tests/fixtures/violated-sysfs-tuning.txt");
@@ -133,6 +133,10 @@ fn fake_hwlatdetect_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fake-hwlatdetect.sh")
 }
 
+fn fake_rtla_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fake-rtla.sh")
+}
+
 fn thresholds_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/contamination-thresholds.json")
 }
@@ -141,6 +145,7 @@ fn base_run_command(measurements_root: &Path) -> Command {
     let mut cmd = Command::cargo_bin("nrmeasure").expect("nrmeasure binary is built");
     cmd.env("NRMEASURE_CYCLICTEST", fake_cyclictest_path())
         .env("NRMEASURE_HWLATDETECT", fake_hwlatdetect_path())
+        .env("NRMEASURE_RTLA", fake_rtla_path())
         .arg("run")
         .args(["--rig-slug", "precision3591"])
         .args(["--cpus", "6-11"])
@@ -1437,5 +1442,213 @@ fn parsing_is_outside_every_measurement_window() {
         "the sum of the windows' elapsed_seconds ({total_window_seconds}) must be strictly less \
          than the whole-run wall clock ({whole_run_seconds}s), proving parsing and snapshotting \
          fall outside every measurement window"
+    );
+}
+
+// ---------------------------------------------------------------------------------
+// rtla hwnoise: the D-27 replacement for hwlatdetect on the isolated cores. One osnoise
+// sampling thread per requested CPU, rather than hwlatdetect's single non-migrating thread
+// that isolcpus keeps off cpus 6-11 entirely. Plan 01-21.
+// ---------------------------------------------------------------------------------
+
+/// Runs the pipeline with `--with-hwnoise` against the committed 2026-09-05 probe (served by
+/// `fake-rtla.sh`) and returns the run directory and parsed manifest.
+fn run_hwnoise_pipeline(temp_root: &Path) -> (PathBuf, RunManifest) {
+    let facts_path = write_fixture(temp_root, "facts.txt", &tuned_facts_text());
+    let interrupts_path = write_fixture(temp_root, "interrupts.txt", INTERRUPTS);
+    let measurements_root = temp_root.join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+
+    let output = base_run_command(&measurements_root)
+        .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
+        .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+        .args(["--class", "recon"])
+        .arg("--with-hwnoise")
+        .args(["--hwnoise-cpus", "6-11"])
+        .args(["--hwnoise-duration", "60"])
+        .output()
+        .expect("nrmeasure runs");
+
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let entries: Vec<_> = std::fs::read_dir(&measurements_root)
+        .expect("read_dir")
+        .filter_map(|entry| entry.ok())
+        .collect();
+    assert_eq!(entries.len(), 1, "exactly one run directory is written");
+    let run_dir = entries[0].path();
+    let manifest: RunManifest = serde_json::from_str(
+        &std::fs::read_to_string(run_dir.join("manifest.json")).expect("read manifest.json"),
+    )
+    .expect("manifest.json parses");
+    (run_dir, manifest)
+}
+
+/// `--dry-run` prints the exact declared invocation, built by the same function the real
+/// execution path calls, so the two can never drift apart.
+#[test]
+fn hwnoise_argv_matches_the_declared_invocation() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let facts_path = write_fixture(temp.path(), "facts.txt", &tuned_facts_text());
+    let measurements_root = temp.path().join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+
+    let output = base_run_command(&measurements_root)
+        .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
+        .args(["--class", "recon"])
+        .arg("--with-hwnoise")
+        .args(["--hwnoise-cpus", "6-11"])
+        .args(["--hwnoise-housekeeping", "0-5"])
+        .args(["--hwnoise-duration", "900"])
+        .arg("--dry-run")
+        .output()
+        .expect("nrmeasure runs");
+
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("would run: rtla hwnoise -c 6-11 -H 0-5 -P f:99 -d 900s"),
+        "expected the declared invocation in dry-run output: {stdout}"
+    );
+}
+
+/// The run directory contains `rtla-hwnoise.txt`, listed in the manifest artifacts with kind
+/// `rtla-hwnoise` and a matching blake3.
+#[test]
+fn hwnoise_capture_is_placed_and_checksummed() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let (run_dir, manifest) = run_hwnoise_pipeline(temp.path());
+
+    let capture_path = run_dir.join("rtla-hwnoise.txt");
+    assert!(capture_path.is_file(), "rtla-hwnoise.txt must be written");
+
+    let artifact = manifest
+        .artifacts
+        .iter()
+        .find(|a| a.path == "rtla-hwnoise.txt")
+        .expect("rtla-hwnoise.txt must be a recorded artifact");
+    assert_eq!(artifact.kind, ArtifactKind::RtlaHwnoise);
+
+    let expected_blake3 = nr_manifest::blake3_file(&capture_path).expect("hash the capture");
+    assert_eq!(artifact.blake3, expected_blake3);
+}
+
+/// The manifest's `firmware_screens[0]` names the requested CPU list and the CPUs that
+/// actually produced rows; the committed probe covers every one of cpus 6-11.
+#[test]
+fn hwnoise_screen_records_requested_and_observed_cpus() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let (_run_dir, manifest) = run_hwnoise_pipeline(temp.path());
+
+    assert_eq!(
+        manifest.firmware_screens.len(),
+        1,
+        "exactly one firmware screen ran: {:?}",
+        manifest.firmware_screens
+    );
+    let screen = &manifest.firmware_screens[0];
+    assert_eq!(screen.instrument, "rtla-hwnoise");
+    assert_eq!(screen.requested_cpus, vec![6, 7, 8, 9, 10, 11]);
+    assert_eq!(screen.observed_cpus, vec![6, 7, 8, 9, 10, 11]);
+    assert_eq!(
+        screen.max_us,
+        Some(1),
+        "the probe's final Max Single is 1us on every cpu"
+    );
+    assert!(
+        !screen.per_cpu_exposure_seconds.is_empty(),
+        "runtime-derived exposure must be populated from the probe's Runtime column"
+    );
+}
+
+/// Passing both `--with-hwnoise` and `--with-hwlatdetect` exits non-zero with a message
+/// naming both flags, and writes nothing.
+#[test]
+fn hwnoise_and_hwlatdetect_are_mutually_exclusive() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements_root = temp.path().join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+
+    let output = base_run_command(&measurements_root)
+        .args(["--class", "recon"])
+        .arg("--with-hwnoise")
+        .arg("--with-hwlatdetect")
+        .output()
+        .expect("nrmeasure runs");
+
+    assert!(!output.status.success(), "the combination must be refused");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--with-hwnoise") && stderr.contains("--with-hwlatdetect"),
+        "stderr should name both flags: {stderr}"
+    );
+    assert_eq!(
+        std::fs::read_dir(&measurements_root)
+            .expect("read_dir")
+            .count(),
+        0,
+        "no run directory may be written when the flags conflict"
+    );
+}
+
+/// The manifest carries an `InstrumentWindow` whose `instrument` is `rtla-hwnoise`,
+/// bracketed separately from cyclictest's own window.
+#[test]
+fn hwnoise_gets_its_own_interference_window() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let (_run_dir, manifest) = run_hwnoise_pipeline(temp.path());
+
+    let windows = &manifest.interference.windows;
+    assert_eq!(
+        windows.len(),
+        2,
+        "cyclictest and rtla hwnoise must each get their own window: {windows:?}"
+    );
+    assert_eq!(windows[0].instrument, "cyclictest");
+    assert_eq!(windows[1].instrument, "rtla-hwnoise");
+}
+
+/// A requested CPU absent from the observed list (sampled but silent, or never sampled at
+/// all) prints a warning naming it on stderr, without failing the run.
+#[test]
+fn hwnoise_warns_on_uncovered_requested_cpus() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let facts_path = write_fixture(temp.path(), "facts.txt", &tuned_facts_text());
+    let interrupts_path = write_fixture(temp.path(), "interrupts.txt", INTERRUPTS);
+    let measurements_root = temp.path().join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+
+    // The committed probe only ever names cpus 6-11; requesting 12 alongside them asks for
+    // one this fixture cannot cover.
+    let output = base_run_command(&measurements_root)
+        .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
+        .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+        .args(["--class", "recon"])
+        .arg("--with-hwnoise")
+        .args(["--hwnoise-cpus", "6-12"])
+        .args(["--hwnoise-duration", "60"])
+        .output()
+        .expect("nrmeasure runs");
+
+    assert!(
+        output.status.success(),
+        "an uncovered cpu is a warning, not a failure: stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("12"),
+        "stderr should name the uncovered cpu 12: {stderr}"
     );
 }

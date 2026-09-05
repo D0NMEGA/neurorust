@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use clap::{Args as ClapArgs, ValueEnum};
 use nr_capture::sources::{FixtureFacts, SystemFacts, parse_cpu_list};
-use nr_capture::{environment, interference, preconditions};
+use nr_capture::{environment, hwnoise, interference, preconditions};
 use nr_histogram::hist::{CyclictestRun, parse_hist_file};
 use nr_histogram::json::{parse_json_file, reconcile};
 use nr_manifest::{
@@ -38,7 +38,7 @@ use nr_metrics::report::render_run_report;
 use time::OffsetDateTime;
 
 use crate::rundir::{self, RunDir};
-use crate::tools::{self, CYCLICTEST_PATH_ENV, HWLATDETECT_PATH_ENV};
+use crate::tools::{self, CYCLICTEST_PATH_ENV, HWLATDETECT_PATH_ENV, RTLA_PATH_ENV};
 
 /// A fixture-backed facts source is for tests only. A run that would feed the
 /// headline series must read the real machine or it is not a measurement.
@@ -161,8 +161,37 @@ pub struct Args {
     /// `--cpu-list`), e.g. `0-11` for a P-core-only D-18 arm. Ignored unless
     /// `--with-hwlatdetect` is also given. Default (unset) samples every CPU, hwlatdetect's
     /// own default.
+    ///
+    /// `hwlatdetect`'s tracer runs a single non-migrating thread that `isolcpus` keeps off
+    /// the isolated cores entirely on this kernel, so no `--cpu-list` value makes it able to
+    /// characterise cpus 6 to 11; see `docs/rig/firmware-floor-rt-vs-stock.md`. Use
+    /// `--with-hwnoise` for a figure about those cores.
     #[arg(long)]
     pub hwlatdetect_cpu_list: Option<String>,
+
+    /// Take a firmware screen with `rtla hwnoise` after cyclictest. One osnoise sampling
+    /// thread per CPU in --hwnoise-cpus, which is why this differs from --with-hwlatdetect:
+    /// hwlatdetect's tracer runs a single non-migrating thread that isolcpus keeps off the
+    /// isolated cores entirely. See docs/rig/firmware-floor-rt-vs-stock.md. Mutually
+    /// exclusive with `--with-hwlatdetect`.
+    #[arg(long)]
+    pub with_hwnoise: bool,
+
+    /// The CPUs rtla hwnoise samples, one thread each, e.g. 6-11. Defaults to --cpus.
+    #[arg(long)]
+    pub hwnoise_cpus: Option<String>,
+
+    /// Where rtla's own control threads run, kept off the measured cores, e.g. 0-5.
+    #[arg(long, default_value = "0-5")]
+    pub hwnoise_housekeeping: String,
+
+    /// rtla hwnoise session duration in seconds.
+    #[arg(long, default_value_t = 900)]
+    pub hwnoise_duration: u64,
+
+    /// rtla's -P priority spec. f:99 is SCHED_FIFO 99, matching the cyclictest priority.
+    #[arg(long, default_value = "f:99")]
+    pub hwnoise_priority: String,
 
     /// Optional cyclictest breaktrace threshold in microseconds; also adds
     /// --tracemark.
@@ -220,6 +249,7 @@ struct Overrides {
     interrupts_fixture_path: Option<PathBuf>,
     cyclictest_path: PathBuf,
     hwlatdetect_path: PathBuf,
+    rtla_path: PathBuf,
 }
 
 impl Overrides {
@@ -231,6 +261,7 @@ impl Overrides {
                 .map(PathBuf::from),
             cyclictest_path: tools::resolve_tool_path(CYCLICTEST_PATH_ENV, "cyclictest"),
             hwlatdetect_path: tools::resolve_tool_path(HWLATDETECT_PATH_ENV, "hwlatdetect"),
+            rtla_path: tools::resolve_tool_path(RTLA_PATH_ENV, "rtla"),
         }
     }
 }
@@ -337,6 +368,17 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         );
     }
 
+    // Two firmware instruments in one run would either interleave or serialise, and either
+    // way the second one's window is measured under conditions the first one created (the
+    // same reason cyclictest and hwlatdetect never run concurrently). The message names both
+    // flags so an operator taking two runs instead knows exactly what to split.
+    if args.with_hwnoise && args.with_hwlatdetect {
+        anyhow::bail!(
+            "--with-hwnoise and --with-hwlatdetect are mutually exclusive: a run takes at \
+             most one firmware screen. Take two runs instead."
+        );
+    }
+
     if overrides.facts_fixture_path.is_some()
         && matches!(
             run_class,
@@ -404,6 +446,19 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         Some(
             tools::resolve_and_verify("hwlatdetect", hwlatdetect_path, &["--version"])
                 .context("hwlatdetect was requested with --with-hwlatdetect")?,
+        )
+    } else {
+        None
+    };
+
+    // rtla has no --version flag; its build number appears in `rtla hwnoise --help`'s first
+    // line instead (docs/rig/recon-2026-09-05/FINDINGS.md), so that is what this project
+    // probes for a version string.
+    let rtla_path = &overrides.rtla_path;
+    let rtla_version = if args.with_hwnoise {
+        Some(
+            tools::resolve_and_verify("rtla", rtla_path, &["hwnoise", "--help"])
+                .context("rtla is required to take a firmware screen with --with-hwnoise")?,
         )
     } else {
         None
@@ -529,6 +584,10 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         // finalization below can name which argv element became which artifact
         // without re-deriving either.
         let mut placed_paths: Vec<(String, &'static str)> = Vec::new();
+        // Every firmware screen this run takes, in execution order. At most one entry today
+        // (--with-hwnoise and --with-hwlatdetect's own hwlatdetect.txt artifact are mutually
+        // exclusive), but a Vec because a manifest may carry more than one over time.
+        let mut firmware_screens: Vec<nr_manifest::FirmwareScreen> = Vec::new();
 
         // Step 5: execute cyclictest, writing its output directly into the run
         // directory. There is no scratch directory left to write into: the run
@@ -635,6 +694,122 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
                 delta: window_delta(&hwlatdetect_before, &hwlatdetect_after),
                 before: hwlatdetect_before,
                 after: hwlatdetect_after,
+            });
+        } else if args.with_hwnoise {
+            let version = rtla_version
+                .clone()
+                .expect("captured above when with_hwnoise is set");
+            let hwnoise_cpus_str = args
+                .hwnoise_cpus
+                .clone()
+                .unwrap_or_else(|| args.cpus.clone());
+            let hwnoise_cpus = parse_cpu_list(&hwnoise_cpus_str);
+            let hwnoise_argv = build_hwnoise_argv(&args);
+            let hwnoise_before =
+                take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())
+                    .context("failed to snapshot interference before rtla hwnoise")
+                    .stage(Stage::Verdict, &tool_invocations)?;
+            let hwnoise_start = Instant::now();
+            let hwnoise_output = tools::run_tool("rtla", rtla_path, &version, hwnoise_argv)
+                .context("failed to execute rtla hwnoise")
+                .stage(Stage::ToolSpawn, &tool_invocations)?;
+            let hwnoise_elapsed = hwnoise_start.elapsed();
+            let hwnoise_after =
+                take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())
+                    .context("failed to snapshot interference after rtla hwnoise")
+                    .stage(Stage::Verdict, &tool_invocations)?;
+
+            warn_on_tool_failure(&hwnoise_output);
+            let rtla_full_argv = hwnoise_output.invocation.argv.clone();
+            tool_invocations.push(hwnoise_output.invocation);
+            if let Some(record) = capture_stderr_sidecar(
+                &run_dir.path,
+                "rtla-hwnoise",
+                &hwnoise_output.stderr,
+                &mut run_bytes,
+            )
+            .stage(Stage::ToolExit, &tool_invocations)?
+            {
+                artifacts.push(record);
+            }
+
+            let hwnoise_path = run_dir.path.join("rtla-hwnoise.txt");
+            std::fs::write(&hwnoise_path, &hwnoise_output.stdout)
+                .context("failed to write rtla-hwnoise.txt")
+                .stage(Stage::ToolExit, &tool_invocations)?;
+            artifacts.push(
+                place_artifact(
+                    &hwnoise_path,
+                    &run_dir.path,
+                    "rtla-hwnoise.txt",
+                    ArtifactKind::RtlaHwnoise,
+                    &mut run_bytes,
+                )
+                .stage(Stage::ToolExit, &tool_invocations)?,
+            );
+            placed_paths.push((hwnoise_path.display().to_string(), "rtla-hwnoise.txt"));
+            windows.push(nr_manifest::InstrumentWindow {
+                instrument: "rtla-hwnoise".to_string(),
+                elapsed_seconds: hwnoise_elapsed.as_secs_f64(),
+                requested_seconds: Some(args.hwnoise_duration),
+                delta: window_delta(&hwnoise_before, &hwnoise_after),
+                before: hwnoise_before,
+                after: hwnoise_after,
+            });
+
+            // The capture is never discarded on a parse failure (Stage::Parse rewrites
+            // ATTEMPT.json with the raw output preserved, usable_for_numerical_analysis:
+            // false; see the Stage::Parse handling below for cyclictest's own captures).
+            // This is that same path, not a second one.
+            let hwnoise_text = String::from_utf8_lossy(&hwnoise_output.stdout).into_owned();
+            let parsed = hwnoise::parse_hwnoise(&hwnoise_text, &hwnoise_cpus)
+                .context("failed to parse rtla hwnoise's output")
+                .stage(Stage::Parse, &tool_invocations)?;
+
+            if !parsed.missing_cpus.is_empty() {
+                eprintln!(
+                    "warning: rtla hwnoise produced no rows for cpu(s) {}: sampled but \
+                     observed nothing, or was never actually sampled; see \
+                     docs/rig/firmware-floor-rt-vs-stock.md",
+                    parsed
+                        .missing_cpus
+                        .iter()
+                        .map(u32::to_string)
+                        .collect::<Vec<_>>()
+                        .join(",")
+                );
+            }
+
+            let observed_rows: Vec<&hwnoise::HwnoiseRow> = parsed
+                .rows
+                .iter()
+                .filter(|row| parsed.observed_cpus.contains(&row.cpu))
+                .collect();
+            let max_us = observed_rows.iter().map(|row| row.max_single_us).max();
+            let events_recorded: u64 = observed_rows.iter().map(|row| row.hw_count).sum();
+            let per_cpu_exposure_seconds = observed_rows
+                .iter()
+                .map(|row| nr_manifest::CpuExposure {
+                    cpu: row.cpu,
+                    seconds: row.runtime_us as f64 / 1_000_000.0,
+                })
+                .collect();
+
+            firmware_screens.push(nr_manifest::FirmwareScreen {
+                instrument: "rtla-hwnoise".to_string(),
+                tool_version: version,
+                argv: rtla_full_argv
+                    .iter()
+                    .map(|arg| redact_home_prefix(arg))
+                    .collect(),
+                requested_cpus: hwnoise_cpus,
+                observed_cpus: parsed.observed_cpus,
+                per_cpu_exposure_seconds,
+                max_us,
+                max_population: "the largest Max Single value (one-shot hardware-noise event) \
+                    across the observed CPUs' final rtla hwnoise rows"
+                    .to_string(),
+                events_recorded,
             });
         }
 
@@ -810,9 +985,7 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
             interference: outcome.pair,
             tools: tool_invocations,
             artifacts,
-            // No firmware screen is driven by `nrmeasure run` yet (plan 01-21); a run this
-            // harness produces today took none.
-            firmware_screens: Vec::new(),
+            firmware_screens,
             smi_counts: None,
             absent_fields: env_snapshot.absent_fields,
             excluded_from_series,
@@ -956,6 +1129,7 @@ fn artifact_kind_for_filename(name: &str) -> ArtifactKind {
         "cyclictest.hist" => ArtifactKind::CyclictestHist,
         "cyclictest.json" => ArtifactKind::CyclictestJson,
         "hwlatdetect.txt" => ArtifactKind::HwlatdetectText,
+        "rtla-hwnoise.txt" => ArtifactKind::RtlaHwnoise,
         _ => ArtifactKind::Other,
     }
 }
@@ -1113,6 +1287,10 @@ fn print_dry_run(args: &Args, thread_count: usize) {
         let hwlatdetect_argv = build_hwlatdetect_argv(args);
         println!("would run: hwlatdetect {}", hwlatdetect_argv.join(" "));
     }
+    if args.with_hwnoise {
+        let hwnoise_argv = build_hwnoise_argv(args);
+        println!("would run: rtla {}", hwnoise_argv.join(" "));
+    }
 }
 
 /// The exact hwlatdetect invocation this command builds, shared between the real
@@ -1125,6 +1303,29 @@ fn build_hwlatdetect_argv(args: &Args) -> Vec<String> {
         argv.push(format!("--cpu-list={cpu_list}"));
     }
     argv
+}
+
+/// The exact `rtla hwnoise` invocation this command builds, shared between the real
+/// execution path and `print_dry_run` so the two can never drift apart (the same pattern
+/// `build_hwlatdetect_argv` follows). `"hwnoise"` is `rtla`'s own subcommand, not the
+/// program name recorded separately in `ToolInvocation`; `tools::run_tool("rtla", ...)`
+/// prepends that, so the fully recorded argv reads `["rtla", "hwnoise", "-c", ...]`.
+fn build_hwnoise_argv(args: &Args) -> Vec<String> {
+    let cpus = args
+        .hwnoise_cpus
+        .clone()
+        .unwrap_or_else(|| args.cpus.clone());
+    vec![
+        "hwnoise".to_string(),
+        "-c".to_string(),
+        cpus,
+        "-H".to_string(),
+        args.hwnoise_housekeeping.clone(),
+        "-P".to_string(),
+        args.hwnoise_priority.clone(),
+        "-d".to_string(),
+        format!("{}s", args.hwnoise_duration),
+    ]
 }
 
 /// The exact cyclictest invocation this command builds. `--distance=0` keeps every
@@ -1619,6 +1820,11 @@ VERSION=\"26.04.1 LTS\"
             with_hwlatdetect: false,
             hwlatdetect_duration: 900,
             hwlatdetect_cpu_list: None,
+            with_hwnoise: false,
+            hwnoise_cpus: None,
+            hwnoise_housekeeping: "0-5".to_string(),
+            hwnoise_duration: 900,
+            hwnoise_priority: "f:99".to_string(),
             breaktrace: None,
             measurements_root,
             thresholds: PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1702,6 +1908,7 @@ VERSION=\"26.04.1 LTS\"
             interrupts_fixture_path,
             cyclictest_path,
             hwlatdetect_path: PathBuf::from("hwlatdetect"),
+            rtla_path: PathBuf::from("rtla"),
         }
     }
 

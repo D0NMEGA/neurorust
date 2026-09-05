@@ -23,6 +23,11 @@ pub const CYCLICTEST_PATH_ENV: &str = "NRMEASURE_CYCLICTEST";
 /// [`CYCLICTEST_PATH_ENV`].
 pub const HWLATDETECT_PATH_ENV: &str = "NRMEASURE_HWLATDETECT";
 
+/// Overrides the resolved path to `rtla`. Same test-only purpose as
+/// [`CYCLICTEST_PATH_ENV`]: `crates/cli/tests/run_pipeline.rs` points this at a fake
+/// `rtla` shell script so the `--with-hwnoise` pipeline runs on a dev host with no rig.
+pub const RTLA_PATH_ENV: &str = "NRMEASURE_RTLA";
+
 #[derive(Debug, Error)]
 pub enum ToolError {
     #[error("{name} not found at {path}: {source}", path = .path.display())]
