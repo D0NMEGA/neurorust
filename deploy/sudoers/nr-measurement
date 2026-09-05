@@ -1,0 +1,14 @@
+# neurorust rig measurement grants.
+#
+# Each entry is a fixed absolute path to a root-owned, root-writable-only script.
+# No entry grants a bare command with operator-supplied arguments: nr-recon, nr-probe
+# and nr-measure-mode take no arguments at all, and nr-run-measurement pins every path
+# it writes to (--measurements-root and --thresholds) and refuses to pass an override.
+#
+# Install with deploy/sudoers/install.sh, which validates with visudo -c before
+# activating the file. Never edit /etc/sudoers.d/nr-measurement by hand.
+
+d0nmega ALL=(root) NOPASSWD: /usr/local/sbin/nr-recon
+d0nmega ALL=(root) NOPASSWD: /usr/local/sbin/nr-probe
+d0nmega ALL=(root) NOPASSWD: /usr/local/sbin/nr-measure-mode
+d0nmega ALL=(root) NOPASSWD: /usr/local/sbin/nr-run-measurement

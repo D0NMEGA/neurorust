@@ -1,0 +1,64 @@
+#!/bin/bash
+# nr-recon - fixed, read-only dump of the root-gated facts the neurorust
+# measurement plans need (phase 1, plan 01-02).
+#
+# Takes no arguments by design: the command list is fixed so the NOPASSWD
+# sudoers rule granting it cannot be repurposed to read arbitrary paths.
+set -u
+
+if [ "$#" -ne 0 ]; then
+    echo "nr-recon: takes no arguments" >&2
+    exit 2
+fi
+
+TR=/sys/kernel/tracing
+[ -d "$TR" ] || TR=/sys/kernel/debug/tracing
+
+echo "=== tracefs mount ==="
+echo "$TR"
+
+echo "=== available_tracers ==="
+cat "$TR/available_tracers" 2>/dev/null || echo "(unavailable)"
+
+echo "=== current_tracer ==="
+cat "$TR/current_tracer" 2>/dev/null || echo "(unavailable)"
+
+echo "=== timerlat / osnoise tracer dirs ==="
+for d in timerlat osnoise; do
+    if [ -d "$TR/$d" ]; then echo "$d: present"; else echo "$d: absent"; fi
+done
+
+echo "=== kernel tracer config symbols ==="
+CFG="/boot/config-$(uname -r)"
+if [ -r "$CFG" ]; then
+    grep -E 'CONFIG_(TIMERLAT|OSNOISE|HWLAT|PREEMPTIRQ|FUNCTION)_?[A-Z_]*=' "$CFG" || echo "(no matches)"
+else
+    echo "(no readable $CFG)"
+fi
+
+echo "=== intel_pstate no_turbo ==="
+cat /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || echo "(unavailable)"
+
+echo "=== cpuidle states ==="
+for c in /sys/devices/system/cpu/cpu*/cpuidle; do
+    [ -d "$c" ] || continue
+    cpu=$(printf '%s' "$c" | sed 's#.*/cpu\([0-9]*\)/cpuidle#\1#')
+    for s in "$c"/state*; do
+        [ -d "$s" ] || continue
+        printf 'cpu%s %s name=%s disable=%s\n' \
+            "$cpu" "$(basename "$s")" \
+            "$(cat "$s/name" 2>/dev/null)" \
+            "$(cat "$s/disable" 2>/dev/null)"
+    done
+done
+
+echo "=== scaling governors ==="
+for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+    [ -r "$g" ] || continue
+    printf '%s = %s\n' "$g" "$(cat "$g" 2>/dev/null)"
+done
+
+echo "=== rt-tuning.service ==="
+systemctl show rt-tuning.service \
+    --property=LoadState,ActiveState,SubState,UnitFileState 2>/dev/null \
+    || echo "(unavailable)"

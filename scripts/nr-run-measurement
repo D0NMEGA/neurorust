@@ -27,6 +27,13 @@
 # permission to take a measurement, not permission to write anywhere as root.
 set -euo pipefail
 
+# A fixed PATH for a root script running under NOPASSWD sudo. sudo's own
+# secure_path would normally supply this, but that setting lives in a file
+# this repository does not control; this script pins its own instead of
+# depending on it.
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
 BIN=/home/d0nmega/neurorust/target/release/nrmeasure
 MEASUREMENTS_ROOT=/home/d0nmega/neurorust/measurements
 THRESHOLDS=/home/d0nmega/neurorust/config/contamination-thresholds.json
@@ -52,10 +59,28 @@ if [ ! -x "$BIN" ]; then
     exit 2
 fi
 
+# Refuse to exec a binary anyone but root can write. This script runs as root
+# under NOPASSWD sudo, so a group- or world-writable build directory would
+# otherwise turn "permission to take a measurement" into a root shell for any
+# process on the machine that can write to $BIN. This does not stop the
+# operator from replacing their own build output, and it is not meant to.
+BIN_MODE=$(stat -c '%a' "$BIN")
+if [ $(( (8#$BIN_MODE) & 8#022 )) -ne 0 ]; then
+    echo "nr-run-measurement: refusing to exec $BIN: mode $BIN_MODE is group- or world-writable" >&2
+    echo "  fix: chmod go-w $BIN" >&2
+    exit 2
+fi
+
+# Record which build actually ran. This does not prevent a substitution, but it
+# makes one visible after the fact in the journal.
+echo "nr-run-measurement: exec $BIN"
+echo "  sha256: $(sha256sum "$BIN" | cut -d' ' -f1)"
+echo "  mode:   $(stat -c '%a %U:%G' "$BIN")"
+
 # A second concurrent capture would contaminate the first, so a live unit of this
 # name is a refusal rather than something to work around. --collect reaps the
 # unit once it finishes, including on failure, so the name is free again after.
-if systemctl is-active --quiet "$UNIT.service"; then
+if /usr/bin/systemctl is-active --quiet "$UNIT.service"; then
     echo "nr-run-measurement: $UNIT.service is already running; refusing to start a second capture." >&2
     echo "  Watch it with: journalctl -fu $UNIT" >&2
     exit 3
@@ -107,7 +132,7 @@ echo "  runtime bound: ${RUNTIME_MAX}s (measurement ${DURATION}s + hwlatdetect $
 echo "  watch:  journalctl -fu $UNIT"
 echo "  status: systemctl status $UNIT"
 
-exec systemd-run \
+exec /usr/bin/systemd-run \
     --unit="$UNIT" \
     --collect \
     --property=Type=oneshot \

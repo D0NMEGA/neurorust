@@ -1,0 +1,72 @@
+#!/bin/bash
+# nr-probe - fixed 60 second cyclictest format probes for neurorust plan 01-02.
+#
+# These are NOT measurements. They exist only to pin down cyclictest's output
+# formats (-h vs -H, and the --json schema) so the parser in plan 01-04 can be
+# written against real output. No number from these files may be published.
+#
+# Takes no arguments by design: every cyclictest flag is hardcoded so the
+# NOPASSWD sudoers rule granting this cannot be used to run arbitrary
+# real-time workloads.
+set -u
+
+if [ "$#" -ne 0 ]; then
+    echo "nr-probe: takes no arguments" >&2
+    exit 2
+fi
+
+OUT=/tmp/nr-probe
+OWNER=d0nmega
+rm -rf "$OUT"
+mkdir -p "$OUT"
+cd "$OUT"
+
+echo "=== probe 1: plain histogram (-h) with --json ==="
+cyclictest --mainaffinity=0,1 --affinity=6-11 --threads=6 --mlockall \
+    --policy=fifo --priority=99 --interval=200 --distance=0 \
+    --histogram=400 --histfile=probe-cyclictest-h-60s.hist \
+    --json=probe-cyclictest-60s.json --duration=60 \
+    > probe-cyclictest-h-60s.stdout 2>&1
+echo "exit=$?"
+
+echo "=== probe 2: histofall (-H) ==="
+cyclictest --mainaffinity=0,1 --affinity=6-11 --threads=6 --mlockall \
+    --policy=fifo --priority=99 --interval=200 --distance=0 \
+    --histofall=400 --histfile=probe-cyclictest-histofall-60s.hist \
+    --duration=60 \
+    > probe-cyclictest-histofall-60s.stdout 2>&1
+echo "exit=$?"
+
+echo "=== /proc/interrupts ==="
+cat /proc/interrupts > probe-proc-interrupts.txt
+
+echo "=== sysfs tuning snapshot ==="
+{
+    for c in /sys/devices/system/cpu/cpu[0-9]*; do
+        n="${c##*/cpu}"
+        echo "cpu${n}.governor=$(cat "$c/cpufreq/scaling_governor" 2>/dev/null || echo unavailable)"
+        echo "cpu${n}.energy_performance_preference=$(cat "$c/cpufreq/energy_performance_preference" 2>/dev/null || echo unavailable)"
+    done
+    echo "intel_pstate.no_turbo=$(cat /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || echo unavailable)"
+    for s in /sys/devices/system/cpu/cpu0/cpuidle/state*; do
+        [ -d "$s" ] || continue
+        echo "cstate.$(cat "$s/name" 2>/dev/null)=disable:$(cat "$s/disable" 2>/dev/null)"
+    done
+    echo "kernel.realtime=$(cat /sys/kernel/realtime 2>/dev/null || echo unavailable)"
+    echo "systemd.default_target=$(systemctl get-default 2>/dev/null || echo unavailable)"
+    echo "tracing.current_tracer=$(cat /sys/kernel/tracing/current_tracer 2>/dev/null || echo unavailable)"
+    echo "power.ac_online=$(cat /sys/class/power_supply/AC*/online 2>/dev/null | head -1 || echo unavailable)"
+    echo "power.battery_status=$(cat /sys/class/power_supply/BAT*/status 2>/dev/null | head -1 || echo unavailable)"
+    echo "power.battery_capacity=$(cat /sys/class/power_supply/BAT*/capacity 2>/dev/null | head -1 || echo unavailable)"
+    for z in /sys/class/thermal/thermal_zone*; do
+        [ -d "$z" ] || continue
+        echo "thermal.$(cat "$z/type" 2>/dev/null)=$(cat "$z/temp" 2>/dev/null)"
+    done
+} > probe-sysfs-tuning.txt
+
+echo "=== tracing dir listing ==="
+ls /sys/kernel/tracing/ > probe-tracing-dir.txt 2>&1
+
+chown -R "$OWNER":"$OWNER" "$OUT"
+echo "PROBE_COMPLETE $OUT"
+ls -l "$OUT"
