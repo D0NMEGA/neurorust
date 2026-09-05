@@ -29,9 +29,10 @@ use nr_capture::{environment, interference, preconditions};
 use nr_histogram::hist::{CyclictestRun, parse_hist_file};
 use nr_histogram::json::{parse_json_file, reconcile};
 use nr_manifest::{
-    ArtifactKind, ArtifactPathMapping, ArtifactRecord, ContaminationVerdict, GitShaSource,
-    HarnessInfo, InstrumentClass, PreconditionResult, PreconditionStatus, ProvenanceTier, RunClass,
-    RunManifest, StorageLocation, ToolInvocation,
+    ArtifactKind, ArtifactPathMapping, ArtifactRecord, AttemptFailure, AttemptRecord,
+    AttemptStatus, ContaminationVerdict, GitShaSource, HarnessInfo, InstrumentClass,
+    PreconditionResult, PreconditionStatus, ProvenanceTier, RequestedRun, RunClass, RunManifest,
+    StorageLocation, ToolInvocation,
 };
 use nr_metrics::report::render_run_report;
 use time::OffsetDateTime;
@@ -210,6 +211,71 @@ pub fn run(args: Args) -> Result<i32> {
     execute(args, &Overrides::from_env())
 }
 
+/// Where in the pipeline an attempt failed, recorded in `ATTEMPT.json` verbatim.
+/// Exhaustive: every fallible step from the first tool spawn to the final manifest
+/// write is attributed to exactly one of these seven. Finding 7 of
+/// `01-EXTERNAL-AUDIT.md`.
+#[derive(Clone, Copy, Debug)]
+enum Stage {
+    /// A tool's process could not be spawned at all (`tools::run_tool` itself
+    /// returned `Err`).
+    ToolSpawn,
+    /// Turning a tool's own output into something on disk once it has exited:
+    /// writing its stderr sidecar, writing hwlatdetect's raw stdout, or
+    /// checksumming a capture that is already sitting in the run directory. Also
+    /// covers the interference snapshot bracketing each tool, since that snapshot
+    /// exists solely to feed the verdict below.
+    ToolExit,
+    Parse,
+    Reconcile,
+    Verdict,
+    EnvironmentSnapshot,
+    ManifestWrite,
+}
+
+impl Stage {
+    fn as_str(self) -> &'static str {
+        match self {
+            Stage::ToolSpawn => "tool-spawn",
+            Stage::ToolExit => "tool-exit",
+            Stage::Parse => "parse",
+            Stage::Reconcile => "reconcile",
+            Stage::Verdict => "verdict",
+            Stage::EnvironmentSnapshot => "environment-snapshot",
+            Stage::ManifestWrite => "manifest-write",
+        }
+    }
+}
+
+/// Carries which [`Stage`] failed, the underlying error, and every tool invocation
+/// recorded so far, so the caller can rewrite `ATTEMPT.json` with a named stage
+/// and an accurate `tools` list rather than a bare message.
+struct StagedError {
+    stage: Stage,
+    error: anyhow::Error,
+    tools: Vec<ToolInvocation>,
+}
+
+/// Attaches a [`Stage`] (and a snapshot of the tools invoked so far) to a fallible
+/// step's `Result`, for `?`-based propagation out of the staged pipeline closure in
+/// [`execute`].
+trait StageExt<T> {
+    fn stage(self, stage: Stage, tools: &[ToolInvocation]) -> Result<T, StagedError>;
+}
+
+impl<T, E> StageExt<T> for Result<T, E>
+where
+    E: Into<anyhow::Error>,
+{
+    fn stage(self, stage: Stage, tools: &[ToolInvocation]) -> Result<T, StagedError> {
+        self.map_err(|error| StagedError {
+            stage,
+            error: error.into(),
+            tools: tools.to_vec(),
+        })
+    }
+}
+
 fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
     let run_class: RunClass = args.class.into();
     let instrument_class: InstrumentClass = args.instrument.into();
@@ -322,79 +388,16 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         None => None,
     };
 
-    // Step 3: the before interference snapshot, and the pre-run thermal reading.
-    let before = take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())?;
-    // Taken here, before either instrument runs, so the manifest's temp_c_start is genuinely
-    // the start. The D-14 snapshot at step 8 runs after both instruments finish and supplies
-    // temp_c_end; reading the zones only there put the end temperature in the start field.
-    let thermal_start = nr_capture::sources::discover_thermal_zones_c(facts.as_ref());
-
-    // Step 4: execute cyclictest.
-    let scratch = tempfile::tempdir().context("failed to create a scratch directory")?;
-    let hist_path = scratch.path().join("cyclictest.hist");
-    let json_path = scratch.path().join("cyclictest.json");
-
-    let cyclictest_argv = build_cyclictest_argv(
-        &args,
-        target_cpus.len(),
-        &hist_path.display().to_string(),
-        &json_path.display().to_string(),
-    );
-    let cyclictest_output = tools::run_tool(
-        "cyclictest",
-        cyclictest_path,
-        &cyclictest_version,
-        cyclictest_argv,
-    )
-    .context("failed to execute cyclictest")?;
-    warn_on_tool_failure(&cyclictest_output);
-    let mut tool_invocations = vec![cyclictest_output.invocation];
-
-    // Step 5: execute hwlatdetect next, never concurrently, if requested (D-09).
-    let mut hwlatdetect_raw: Option<Vec<u8>> = None;
-    if args.with_hwlatdetect {
-        let version = hwlatdetect_version.expect("captured above when with_hwlatdetect is set");
-        let hwlatdetect_argv = build_hwlatdetect_argv(&args);
-        let hwlatdetect_output =
-            tools::run_tool("hwlatdetect", hwlatdetect_path, &version, hwlatdetect_argv)
-                .context("failed to execute hwlatdetect")?;
-        warn_on_tool_failure(&hwlatdetect_output);
-        hwlatdetect_raw = Some(hwlatdetect_output.stdout);
-        tool_invocations.push(hwlatdetect_output.invocation);
-    }
-
-    // Step 6: parse the raw captures and reconcile them. Moved ahead of the D-15/D-24
-    // verdict below (it used to follow it): D-24's tail metrics need the parsed
-    // histogram, and nothing in between depends on the other's output, so parsing
-    // here costs nothing.
-    let cyclictest_run: CyclictestRun = parse_hist_file(&hist_path, Some(args.histogram_max))
-        .context("failed to parse cyclictest's .hist output")?;
-    if json_path.is_file() {
-        let summary =
-            parse_json_file(&json_path).context("failed to parse cyclictest's --json output")?;
-        reconcile(&summary, &cyclictest_run)
-            .context("cyclictest --json and .hist disagree; refusing a mismatched pairing")?;
-    }
-
-    // Step 7: the after interference snapshot and the D-15/D-24 verdict.
-    let after = take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())?;
-    // `thresholds` was loaded in step 1, before the measurement ran.
-    let outcome = interference::verdict(
-        before,
-        after,
-        &cyclictest_run,
-        &thresholds,
-        Duration::from_secs(args.duration),
-    )
-    .context("failed to compute the D-15/D-24 contamination verdict")?;
-
-    // Step 8: the D-14 environment snapshot.
-    let env_snapshot = environment::snapshot(facts.as_ref(), &args.rig_slug, Some(&thermal_start))
-        .context("failed to capture the environment snapshot")?;
-
-    let utc_end = OffsetDateTime::now_utc();
-
-    // Step 9: create the run directory and place the raw captures in unmodified.
+    // Step 3: create the run directory and its ATTEMPT.json immediately, before
+    // either instrument runs. Nothing in the directory name depends on the
+    // measurement. This used to happen only after parsing, reconciliation and the
+    // contamination verdict had all succeeded (step 9 below, historically), with
+    // raw output sitting in a scratch `TempDir` (tempfile's `tempdir()` helper)
+    // until then: any failure among those steps dropped it and deleted the
+    // capture, leaving an hour of rig time surviving only as a line on stderr.
+    // Finding 7 of `01-EXTERNAL-AUDIT.md`. There is no code path left, from here
+    // on, that can discard a capture: every failure below rewrites ATTEMPT.json
+    // instead.
     let run_dir = RunDir::create(
         &args.measurements_root,
         &args.rig_slug,
@@ -403,136 +406,343 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
     )
     .context("failed to create the run directory")?;
 
-    let mut run_bytes = 0u64;
-    let mut artifacts = Vec::new();
-    // Paired with each placed artifact's scratch path, so the argv finalization
-    // below can name which argv element became which artifact without
-    // re-deriving either.
-    let mut placed_scratch_paths: Vec<(String, &'static str)> = Vec::new();
+    // Computed once and reused for every ATTEMPT.json write and the eventual
+    // manifest: neither changes mid-run, and recomputing harness_info() again
+    // later would re-hash the executable for no reason.
+    let harness = harness_info();
+    let requested = RequestedRun {
+        run_class: run_class.clone(),
+        instrument_class: instrument_class.clone(),
+        cpus: args.cpus.clone(),
+        main_cpus: args.main_cpus.clone(),
+        duration_seconds: args.duration,
+        with_hwlatdetect: args.with_hwlatdetect,
+        hwlatdetect_duration_seconds: args.with_hwlatdetect.then_some(args.hwlatdetect_duration),
+    };
 
-    artifacts.push(place_artifact(
-        &hist_path,
+    write_attempt(
         &run_dir.path,
-        "cyclictest.hist",
-        ArtifactKind::CyclictestHist,
-        &mut run_bytes,
-    )?);
-    placed_scratch_paths.push((hist_path.display().to_string(), "cyclictest.hist"));
+        &AttemptRecord {
+            schema_version: nr_manifest::ATTEMPT_SCHEMA_VERSION,
+            run_id: run_dir.run_id.clone(),
+            utc_start,
+            utc_end: None,
+            status: AttemptStatus::InProgress,
+            harness: harness.clone(),
+            requested: requested.clone(),
+            tools: Vec::new(),
+            preserved: Vec::new(),
+            failure: None,
+            usable_for_numerical_analysis: false,
+        },
+    )
+    .context("failed to write the initial ATTEMPT.json")?;
 
-    if json_path.is_file() {
-        artifacts.push(place_artifact(
-            &json_path,
-            &run_dir.path,
-            "cyclictest.json",
-            ArtifactKind::CyclictestJson,
-            &mut run_bytes,
-        )?);
-        placed_scratch_paths.push((json_path.display().to_string(), "cyclictest.json"));
-    }
-    if let Some(raw) = &hwlatdetect_raw {
-        let hwlat_path = scratch.path().join("hwlatdetect.txt");
-        std::fs::write(&hwlat_path, raw).context("failed to stage the hwlatdetect capture")?;
-        artifacts.push(place_artifact(
-            &hwlat_path,
-            &run_dir.path,
-            "hwlatdetect.txt",
-            ArtifactKind::HwlatdetectText,
-            &mut run_bytes,
-        )?);
-        placed_scratch_paths.push((hwlat_path.display().to_string(), "hwlatdetect.txt"));
-    }
-    write_hist_tsv(&run_dir.path, &cyclictest_run)?;
+    // Step 4: the before interference snapshot, and the pre-run thermal reading.
+    let before = take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())?;
+    // Taken here, before either instrument runs, so the manifest's temp_c_start is genuinely
+    // the start. The D-14 snapshot at step 8 runs after both instruments finish and supplies
+    // temp_c_end; reading the zones only there put the end temperature in the start field.
+    let thermal_start = nr_capture::sources::discover_thermal_zones_c(facts.as_ref());
 
-    // The argv is recorded exactly as it was executed (finding 6 of
-    // 01-EXTERNAL-AUDIT.md: relativizing it against the run directory matched
-    // nothing, because the tools actually wrote into a scratch tempdir under
-    // /tmp, not the run directory). artifact_paths maps each output-file path in
-    // argv to the committed artifact it became, matched by substring rather than
-    // exact element equality because cyclictest's paths arrive as
-    // `--histfile=<path>`, one argument, not two. A home directory prefix in
-    // either is redacted (T-1-06); the scratch /tmp paths themselves are left
-    // verbatim, since they are process-lifetime temporary names that identify
-    // nobody.
-    let tool_invocations: Vec<ToolInvocation> = tool_invocations
-        .into_iter()
-        .map(|invocation| {
-            let artifact_paths = placed_scratch_paths
-                .iter()
-                .filter(|(scratch_path, _)| {
-                    invocation
-                        .argv
-                        .iter()
-                        .any(|arg| arg.contains(scratch_path.as_str()))
-                })
-                .map(|(scratch_path, artifact_name)| ArtifactPathMapping {
-                    executed_path: redact_home_prefix(scratch_path),
-                    artifact_path: artifact_name.to_string(),
-                })
-                .collect();
-            let argv = invocation
-                .argv
-                .iter()
-                .map(|arg| redact_home_prefix(arg))
-                .collect();
-            ToolInvocation {
-                argv,
-                artifact_paths,
-                ..invocation
-            }
-        })
-        .collect();
+    // Every fallible step from here (the first tool spawn) through the manifest
+    // write is staged: on an `Err`, the match below rewrites ATTEMPT.json with the
+    // failing stage, the verbatim error, every tool invoked so far, and
+    // usable_for_numerical_analysis: false, then returns a non-zero exit code. The
+    // directory is never deleted and manifest.json is never written on this path.
+    let attempt_result: Result<(RunManifest, CyclictestRun), StagedError> = (|| {
+        let mut tool_invocations: Vec<ToolInvocation> = Vec::new();
+        let mut artifacts: Vec<ArtifactRecord> = Vec::new();
+        let mut run_bytes = 0u64;
+        // Paired with each placed artifact's executed path, so the argv
+        // finalization below can name which argv element became which artifact
+        // without re-deriving either.
+        let mut placed_paths: Vec<(String, &'static str)> = Vec::new();
 
-    // D-17: a run taken with --allow-precondition-violation is always excluded
-    // from the series, unconditionally overriding whatever determine_exclusion
-    // would otherwise compute from tool exit codes or the contamination
-    // verdict. This is not a default the operator can turn off.
-    let (excluded_from_series, exclusion_reason) = if args.allow_precondition_violation {
-        (true, Some(precondition_waiver_reason(&results)))
-    } else {
-        determine_exclusion(
-            &tool_invocations,
-            &outcome.pair.verdict,
-            outcome.reason.as_deref(),
-            outcome.pair.thresholds_provisional.unwrap_or(false),
+        // Step 5: execute cyclictest, writing its output directly into the run
+        // directory. There is no scratch directory left to write into: the run
+        // directory already exists, and nothing needs protecting from it.
+        let hist_path = run_dir.path.join("cyclictest.hist");
+        let json_path = run_dir.path.join("cyclictest.json");
+        let cyclictest_argv = build_cyclictest_argv(
+            &args,
+            target_cpus.len(),
+            &hist_path.display().to_string(),
+            &json_path.display().to_string(),
+        );
+        let cyclictest_output = tools::run_tool(
+            "cyclictest",
+            cyclictest_path,
+            &cyclictest_version,
+            cyclictest_argv,
         )
+        .context("failed to execute cyclictest")
+        .stage(Stage::ToolSpawn, &tool_invocations)?;
+        warn_on_tool_failure(&cyclictest_output);
+        tool_invocations.push(cyclictest_output.invocation);
+        if let Some(record) = capture_stderr_sidecar(
+            &run_dir.path,
+            "cyclictest",
+            &cyclictest_output.stderr,
+            &mut run_bytes,
+        )
+        .stage(Stage::ToolExit, &tool_invocations)?
+        {
+            artifacts.push(record);
+        }
+
+        // Step 6: execute hwlatdetect next, never concurrently, if requested (D-09).
+        if args.with_hwlatdetect {
+            let version = hwlatdetect_version.expect("captured above when with_hwlatdetect is set");
+            let hwlatdetect_argv = build_hwlatdetect_argv(&args);
+            let hwlatdetect_output =
+                tools::run_tool("hwlatdetect", hwlatdetect_path, &version, hwlatdetect_argv)
+                    .context("failed to execute hwlatdetect")
+                    .stage(Stage::ToolSpawn, &tool_invocations)?;
+            warn_on_tool_failure(&hwlatdetect_output);
+            tool_invocations.push(hwlatdetect_output.invocation);
+            if let Some(record) = capture_stderr_sidecar(
+                &run_dir.path,
+                "hwlatdetect",
+                &hwlatdetect_output.stderr,
+                &mut run_bytes,
+            )
+            .stage(Stage::ToolExit, &tool_invocations)?
+            {
+                artifacts.push(record);
+            }
+
+            let hwlat_path = run_dir.path.join("hwlatdetect.txt");
+            std::fs::write(&hwlat_path, &hwlatdetect_output.stdout)
+                .context("failed to write hwlatdetect.txt")
+                .stage(Stage::ToolExit, &tool_invocations)?;
+            artifacts.push(
+                place_artifact(
+                    &hwlat_path,
+                    &run_dir.path,
+                    "hwlatdetect.txt",
+                    ArtifactKind::HwlatdetectText,
+                    &mut run_bytes,
+                )
+                .stage(Stage::ToolExit, &tool_invocations)?,
+            );
+            placed_paths.push((hwlat_path.display().to_string(), "hwlatdetect.txt"));
+        }
+
+        // Checksum cyclictest's own captures now that both instruments (if two
+        // were requested) have run to completion.
+        artifacts.push(
+            place_artifact(
+                &hist_path,
+                &run_dir.path,
+                "cyclictest.hist",
+                ArtifactKind::CyclictestHist,
+                &mut run_bytes,
+            )
+            .stage(Stage::ToolExit, &tool_invocations)?,
+        );
+        placed_paths.push((hist_path.display().to_string(), "cyclictest.hist"));
+        if json_path.is_file() {
+            artifacts.push(
+                place_artifact(
+                    &json_path,
+                    &run_dir.path,
+                    "cyclictest.json",
+                    ArtifactKind::CyclictestJson,
+                    &mut run_bytes,
+                )
+                .stage(Stage::ToolExit, &tool_invocations)?,
+            );
+            placed_paths.push((json_path.display().to_string(), "cyclictest.json"));
+        }
+
+        // Step 7: parse the raw captures and reconcile them. Ahead of the D-15/D-24
+        // verdict below (it used to follow it): D-24's tail metrics need the parsed
+        // histogram, and nothing in between depends on the other's output, so
+        // parsing here costs nothing.
+        let cyclictest_run: CyclictestRun = parse_hist_file(&hist_path, Some(args.histogram_max))
+            .context("failed to parse cyclictest's .hist output")
+            .stage(Stage::Parse, &tool_invocations)?;
+        if json_path.is_file() {
+            let summary = parse_json_file(&json_path)
+                .context("failed to parse cyclictest's --json output")
+                .stage(Stage::Parse, &tool_invocations)?;
+            reconcile(&summary, &cyclictest_run)
+                .context("cyclictest --json and .hist disagree; refusing a mismatched pairing")
+                .stage(Stage::Reconcile, &tool_invocations)?;
+        }
+        write_hist_tsv(&run_dir.path, &cyclictest_run)
+            .stage(Stage::ManifestWrite, &tool_invocations)?;
+
+        // Step 8: the after interference snapshot and the D-15/D-24 verdict.
+        let after = take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())
+            .context("failed to snapshot interference after the measurement")
+            .stage(Stage::Verdict, &tool_invocations)?;
+        // `thresholds` was loaded in step 1, before the measurement ran.
+        let outcome = interference::verdict(
+            before,
+            after,
+            &cyclictest_run,
+            &thresholds,
+            Duration::from_secs(args.duration),
+        )
+        .context("failed to compute the D-15/D-24 contamination verdict")
+        .stage(Stage::Verdict, &tool_invocations)?;
+
+        // Step 9: the D-14 environment snapshot.
+        let env_snapshot =
+            environment::snapshot(facts.as_ref(), &args.rig_slug, Some(&thermal_start))
+                .context("failed to capture the environment snapshot")
+                .stage(Stage::EnvironmentSnapshot, &tool_invocations)?;
+
+        let utc_end = OffsetDateTime::now_utc();
+
+        // The argv is recorded exactly as it was executed (finding 6 of
+        // 01-EXTERNAL-AUDIT.md: relativizing it against the run directory matched
+        // nothing, because the tools used to write into a scratch tempdir under
+        // /tmp, not the run directory). artifact_paths maps each output-file path
+        // in argv to the committed artifact it became, matched by substring rather
+        // than exact element equality because cyclictest's paths arrive as
+        // `--histfile=<path>`, one argument, not two. A home directory prefix in
+        // either is redacted (T-1-06).
+        let tool_invocations: Vec<ToolInvocation> = tool_invocations
+            .into_iter()
+            .map(|invocation| {
+                let artifact_paths = placed_paths
+                    .iter()
+                    .filter(|(executed_path, _)| {
+                        invocation
+                            .argv
+                            .iter()
+                            .any(|arg| arg.contains(executed_path.as_str()))
+                    })
+                    .map(|(executed_path, artifact_name)| ArtifactPathMapping {
+                        executed_path: redact_home_prefix(executed_path),
+                        artifact_path: artifact_name.to_string(),
+                    })
+                    .collect();
+                let argv = invocation
+                    .argv
+                    .iter()
+                    .map(|arg| redact_home_prefix(arg))
+                    .collect();
+                ToolInvocation {
+                    argv,
+                    artifact_paths,
+                    ..invocation
+                }
+            })
+            .collect();
+
+        // D-17: a run taken with --allow-precondition-violation is always excluded
+        // from the series, unconditionally overriding whatever determine_exclusion
+        // would otherwise compute from tool exit codes or the contamination
+        // verdict. This is not a default the operator can turn off.
+        let (excluded_from_series, exclusion_reason) = if args.allow_precondition_violation {
+            (true, Some(precondition_waiver_reason(&results)))
+        } else {
+            determine_exclusion(
+                &tool_invocations,
+                &outcome.pair.verdict,
+                outcome.reason.as_deref(),
+                outcome.pair.thresholds_provisional.unwrap_or(false),
+            )
+        };
+
+        // Step 10: assemble, validate and write manifest.json (written last).
+        rundir::refuse_if_manifest_exists(&run_dir.path)
+            .context("run directory was populated between creation and the final write")
+            .stage(Stage::ManifestWrite, &tool_invocations)?;
+
+        let manifest = RunManifest {
+            schema_version: nr_manifest::SCHEMA_VERSION,
+            provenance_tier: ProvenanceTier::HarnessGenerated,
+            run_id: run_dir.run_id.clone(),
+            run_class,
+            instrument_class,
+            utc_start,
+            utc_end,
+            harness: harness.clone(),
+            host: env_snapshot.host,
+            kernel: env_snapshot.kernel,
+            os: env_snapshot.os,
+            tuning: env_snapshot.tuning,
+            power: env_snapshot.power,
+            network: env_snapshot.network,
+            preconditions: results,
+            interference: outcome.pair,
+            tools: tool_invocations,
+            artifacts,
+            absent_fields: env_snapshot.absent_fields,
+            excluded_from_series,
+            exclusion_reason,
+            notes: args.note.clone(),
+        };
+
+        nr_manifest::validate(&run_dir.path, &manifest)
+            .map_err(|errors| {
+                anyhow::anyhow!("generated manifest failed its own validation: {errors:?}")
+            })
+            .stage(Stage::ManifestWrite, &manifest.tools)?;
+        let manifest_json = serde_json::to_string_pretty(&manifest)
+            .context("failed to serialise the manifest")
+            .stage(Stage::ManifestWrite, &manifest.tools)?;
+        std::fs::write(run_dir.path.join("manifest.json"), manifest_json)
+            .context("failed to write manifest.json")
+            .stage(Stage::ManifestWrite, &manifest.tools)?;
+
+        Ok((manifest, cyclictest_run))
+    })();
+
+    let (manifest, cyclictest_run) = match attempt_result {
+        Ok(pair) => pair,
+        Err(staged) => {
+            eprintln!("error: {:#}", staged.error);
+            write_attempt(
+                &run_dir.path,
+                &AttemptRecord {
+                    schema_version: nr_manifest::ATTEMPT_SCHEMA_VERSION,
+                    run_id: run_dir.run_id.clone(),
+                    utc_start,
+                    utc_end: Some(OffsetDateTime::now_utc()),
+                    status: AttemptStatus::Failed,
+                    harness,
+                    requested,
+                    preserved: scan_preserved_files(&run_dir.path),
+                    tools: staged.tools,
+                    failure: Some(AttemptFailure {
+                        stage: staged.stage.as_str().to_string(),
+                        message: format!("{:#}", staged.error),
+                    }),
+                    usable_for_numerical_analysis: false,
+                },
+            )
+            .context("failed to write the failed ATTEMPT.json")?;
+            return Ok(1);
+        }
     };
 
-    // Step 10: assemble, validate and write manifest.json (written last).
-    rundir::refuse_if_manifest_exists(&run_dir.path)
-        .context("run directory was populated between creation and the final write")?;
-
-    let manifest = RunManifest {
-        schema_version: nr_manifest::SCHEMA_VERSION,
-        provenance_tier: ProvenanceTier::HarnessGenerated,
-        run_id: run_dir.run_id.clone(),
-        run_class,
-        instrument_class,
-        utc_start,
-        utc_end,
-        harness: harness_info(),
-        host: env_snapshot.host,
-        kernel: env_snapshot.kernel,
-        os: env_snapshot.os,
-        tuning: env_snapshot.tuning,
-        power: env_snapshot.power,
-        network: env_snapshot.network,
-        preconditions: results,
-        interference: outcome.pair,
-        tools: tool_invocations,
-        artifacts,
-        absent_fields: env_snapshot.absent_fields,
-        excluded_from_series,
-        exclusion_reason,
-        notes: args.note,
-    };
-
-    nr_manifest::validate(&run_dir.path, &manifest).map_err(|errors| {
-        anyhow::anyhow!("generated manifest failed its own validation: {errors:?}")
-    })?;
-    let manifest_json =
-        serde_json::to_string_pretty(&manifest).context("failed to serialise the manifest")?;
-    std::fs::write(run_dir.path.join("manifest.json"), manifest_json)
-        .context("failed to write manifest.json")?;
+    // The attempt succeeded and manifest.json is on disk: rewrite ATTEMPT.json as
+    // completed before doing anything else, so a failure rendering REPORT.md below
+    // (which is regenerable and not required for the directory to verify) cannot
+    // leave the attempt record looking unfinished.
+    write_attempt(
+        &run_dir.path,
+        &AttemptRecord {
+            schema_version: nr_manifest::ATTEMPT_SCHEMA_VERSION,
+            run_id: run_dir.run_id.clone(),
+            utc_start,
+            utc_end: Some(manifest.utc_end),
+            status: AttemptStatus::Completed,
+            harness: manifest.harness.clone(),
+            requested,
+            tools: manifest.tools.clone(),
+            preserved: manifest.artifacts.clone(),
+            failure: None,
+            usable_for_numerical_analysis: true,
+        },
+    )
+    .context("failed to write the completed ATTEMPT.json")?;
 
     // Step 11: render and write REPORT.md, generated from the manifest that was
     // just written, never hand-maintained.
@@ -544,6 +754,103 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
     print_summary(&run_dir, &cyclictest_run, &manifest)?;
 
     Ok(0)
+}
+
+/// Serialises and writes `run_dir/ATTEMPT.json`, overwriting whatever was there
+/// before. Called once when the attempt starts (`status: in-progress`), and again
+/// on every exit path (`completed` or `failed`), so the file on disk is always the
+/// record of the attempt's current state, never a stale snapshot from an earlier
+/// call.
+fn write_attempt(run_dir: &Path, record: &AttemptRecord) -> Result<()> {
+    let json = serde_json::to_string_pretty(record).context("failed to serialise ATTEMPT.json")?;
+    std::fs::write(run_dir.join("ATTEMPT.json"), json).context("failed to write ATTEMPT.json")
+}
+
+/// Every regular file directly inside `run_dir`, excluding `ATTEMPT.json` itself and
+/// any `manifest.json` (a failed attempt must never carry one), checksummed and
+/// classified by name. Populates a failed attempt's `preserved` array: whatever
+/// exists on disk at the moment of failure is preserved evidence, regardless of
+/// which step produced it, so this is a directory scan rather than an incrementally
+/// tracked list. A file that cannot be stat'd or hashed (a symlink race, in
+/// practice unreachable here) is silently skipped rather than failing the whole
+/// failure-reporting path a second time.
+fn scan_preserved_files(run_dir: &Path) -> Vec<ArtifactRecord> {
+    let Ok(entries) = std::fs::read_dir(run_dir) else {
+        return Vec::new();
+    };
+
+    let mut paths: Vec<PathBuf> = entries
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file())
+        .collect();
+    paths.sort();
+
+    paths
+        .into_iter()
+        .filter_map(|path| {
+            let name = path.file_name()?.to_string_lossy().into_owned();
+            if name == "ATTEMPT.json" || name == "manifest.json" {
+                return None;
+            }
+            let bytes = std::fs::metadata(&path).ok()?.len();
+            let blake3 = nr_manifest::blake3_file(&path).ok()?;
+            Some(ArtifactRecord {
+                kind: artifact_kind_for_filename(&name),
+                path: name,
+                bytes,
+                blake3,
+                stored: StorageLocation::InRepo,
+            })
+        })
+        .collect()
+}
+
+/// Maps a run directory's fixed, harness-chosen file names to the artifact kind
+/// they represent. Anything else (a `<tool>.stderr.txt` sidecar, or a file this
+/// function does not recognise) is `ArtifactKind::Other`.
+fn artifact_kind_for_filename(name: &str) -> ArtifactKind {
+    match name {
+        "cyclictest.hist" => ArtifactKind::CyclictestHist,
+        "cyclictest.json" => ArtifactKind::CyclictestJson,
+        "hwlatdetect.txt" => ArtifactKind::HwlatdetectText,
+        _ => ArtifactKind::Other,
+    }
+}
+
+/// Writes `stderr` to `<tool_name>.stderr.txt` inside the run directory when it is
+/// non-empty, and returns the resulting [`ArtifactRecord`] so it can be folded into
+/// `manifest.artifacts` on success (and, on a failure, it is discovered again by
+/// [`scan_preserved_files`], independent of this return value). `None` when
+/// `stderr` is empty: an empty sidecar file would be one more file to account for
+/// and carries no evidence. T-1-62: stderr is captured verbatim and can contain
+/// paths from the invoking environment; `redact_home_prefix` is applied to argv
+/// elsewhere, but stderr text itself is free-form tool output with no fixed
+/// structure to redact against, so it is committed as-is, matching how `hist.tsv`
+/// and the raw captures are already committed verbatim.
+fn capture_stderr_sidecar(
+    run_dir: &Path,
+    tool_name: &str,
+    stderr: &[u8],
+    run_bytes_so_far: &mut u64,
+) -> Result<Option<ArtifactRecord>> {
+    if stderr.is_empty() {
+        return Ok(None);
+    }
+    let file_name = format!("{tool_name}.stderr.txt");
+    let dest = run_dir.join(&file_name);
+    std::fs::write(&dest, stderr).with_context(|| format!("failed to write {file_name}"))?;
+    let bytes = stderr.len() as u64;
+    let blake3 = nr_manifest::blake3_file(&dest)
+        .map_err(|source| anyhow::anyhow!("failed to checksum {file_name}: {source}"))?;
+    *run_bytes_so_far += bytes;
+    Ok(Some(ArtifactRecord {
+        path: file_name,
+        bytes,
+        blake3,
+        kind: ArtifactKind::Other,
+        stored: StorageLocation::InRepo,
+    }))
 }
 
 fn print_summary(run_dir: &RunDir, run: &CyclictestRun, manifest: &RunManifest) -> Result<()> {
@@ -829,10 +1136,15 @@ fn redact_home_prefix_in_path(value: &str) -> String {
     }
 }
 
-/// Copies `src` into `run_dir` under `target_name`, checksums it, and records
-/// whether it stayed in-repo or exceeded the size policy (`rundir::
-/// exceeds_in_repo_limit`). D-12: the placed copy is byte-identical to what the
-/// tool emitted; only the checksum is computed on top of it, nothing is rewritten.
+/// Checksums `src` and records whether it stayed in-repo or exceeded the size
+/// policy (`rundir::exceeds_in_repo_limit`). Copies `src` into `run_dir` under
+/// `target_name` first, unless the two are already the same file: every caller in
+/// this module now writes a tool's output directly into the run directory (there is
+/// no scratch directory left to copy out of), so `src` and `run_dir.join(target_name)`
+/// are the same path on every real call, and the case is handled explicitly rather
+/// than relying on `std::fs::copy`'s platform-dependent behaviour when source and
+/// destination coincide. D-12: the file's bytes are never rewritten, only
+/// checksummed on top of it.
 fn place_artifact(
     src: &Path,
     run_dir: &Path,
@@ -868,8 +1180,10 @@ fn place_artifact(
     }
 
     let dest = run_dir.join(target_name);
-    std::fs::copy(src, &dest)
-        .with_context(|| format!("failed to place {target_name} into the run directory"))?;
+    if src != dest {
+        std::fs::copy(src, &dest)
+            .with_context(|| format!("failed to place {target_name} into the run directory"))?;
+    }
     *run_bytes_so_far += bytes;
 
     Ok(ArtifactRecord {
@@ -1148,7 +1462,7 @@ VERSION=\"26.04.1 LTS\"
 
     #[test]
     fn refusal_writes_nothing() {
-        let scratch = tempfile::tempdir().expect("tempdir");
+        let scratch = tempfile::TempDir::new().expect("tempdir");
         let facts_path = write_fixture(scratch.path(), "facts.txt", VIOLATED_FACTS);
         let fake_cyclictest = write_fake_cyclictest(scratch.path());
         let measurements_root = scratch.path().join("measurements");
@@ -1174,7 +1488,7 @@ VERSION=\"26.04.1 LTS\"
 
     #[test]
     fn raw_capture_is_byte_identical() {
-        let scratch = tempfile::tempdir().expect("tempdir");
+        let scratch = tempfile::TempDir::new().expect("tempdir");
         let facts_path = write_fixture(scratch.path(), "facts.txt", &tuned_facts_text());
         let interrupts_path = write_fixture(scratch.path(), "interrupts.txt", INTERRUPTS);
         let fake_cyclictest = write_fake_cyclictest(scratch.path());

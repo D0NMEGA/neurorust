@@ -1,0 +1,372 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AttemptRecord",
+  "description": "The durable record of one execution of `nrmeasure run`, written before the first\ninstrument is spawned and updated on every exit path.",
+  "type": "object",
+  "properties": {
+    "failure": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AttemptFailure"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "harness": {
+      "$ref": "#/$defs/HarnessInfo"
+    },
+    "preserved": {
+      "description": "Every file kept from this attempt, checksummed. On a failure this is the\npartial output and the captured stderr; on success it is the same set the\nmanifest lists.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ArtifactRecord"
+      }
+    },
+    "requested": {
+      "description": "What the operator asked for: run class, instrument class, CPU list, and each\ninstrument's requested duration. Recorded up front so a failed attempt still\nsays what it was trying to do.",
+      "$ref": "#/$defs/RequestedRun"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "status": {
+      "$ref": "#/$defs/AttemptStatus"
+    },
+    "tools": {
+      "description": "Every tool that was spawned, with its exit code, as far as execution got.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ToolInvocation"
+      }
+    },
+    "usable_for_numerical_analysis": {
+      "description": "False whenever the numbers could not be produced. A reader must be able to\ntell a run that measured nothing from a run that measured zero.",
+      "type": "boolean"
+    },
+    "utc_end": {
+      "description": "`None` while `status` is `in-progress`.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "utc_start": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "utc_start",
+    "status",
+    "harness",
+    "requested",
+    "tools",
+    "preserved",
+    "usable_for_numerical_analysis"
+  ],
+  "$defs": {
+    "ArtifactKind": {
+      "type": "string",
+      "enum": [
+        "cyclictest-hist",
+        "cyclictest-json",
+        "hwlatdetect-text",
+        "ftrace-markers",
+        "rtla-timerlat",
+        "other"
+      ]
+    },
+    "ArtifactPathMapping": {
+      "description": "Maps a path that appeared in an executed argv to the artifact it became in the run\ndirectory.\n\nThe argv is recorded exactly as executed, which means it names the scratch directory\nthe tool actually wrote into (`/tmp/.tmpEb5CdX/cyclictest.hist`) and that directory is\ngone by the time anyone reads the manifest. Rewriting the argv to point at the\ncommitted file was tried and was worse: it produced a command line that was never run,\nand because the rewrite matched against the run directory while the tool wrote into\n`/tmp`, it silently did nothing at all. Finding 6 of `01-EXTERNAL-AUDIT.md`.",
+      "type": "object",
+      "properties": {
+        "artifact_path": {
+          "description": "The matching entry in this manifest's own `artifacts` array, e.g. `cyclictest.hist`.",
+          "type": "string"
+        },
+        "executed_path": {
+          "description": "The path exactly as it appeared in `argv`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "executed_path",
+        "artifact_path"
+      ]
+    },
+    "ArtifactRecord": {
+      "description": "One raw capture, checksummed (D-12). `path` is validated by `validate::validate`\nagainst traversal and absolute paths before it is ever joined to a run directory\n(ASVS V12, T-1-16).",
+      "type": "object",
+      "properties": {
+        "blake3": {
+          "description": "Lowercase hex blake3 digest.",
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/ArtifactKind"
+        },
+        "path": {
+          "description": "Relative to the run directory. No `..`, no leading `/`.",
+          "type": "string"
+        },
+        "stored": {
+          "$ref": "#/$defs/StorageLocation"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "bytes",
+        "blake3",
+        "kind",
+        "stored"
+      ]
+    },
+    "AttemptFailure": {
+      "description": "Where in the pipeline an attempt failed and why, recorded verbatim rather than\ninferred after the fact.",
+      "type": "object",
+      "properties": {
+        "message": {
+          "description": "The error as reported, verbatim (including its full `anyhow` context chain).",
+          "type": "string"
+        },
+        "stage": {
+          "description": "Which step failed, one of: `tool-spawn`, `tool-exit`, `parse`, `reconcile`,\n`verdict`, `environment-snapshot`, `manifest-write`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "message"
+      ]
+    },
+    "AttemptStatus": {
+      "description": "The lifecycle of one [`AttemptRecord`]. `InProgress` is a strict-verification\nfailure by design (`crates/cli/src/cmd/verify.rs`, T-1-60): a run that never\nfinished is not a committable state.",
+      "type": "string",
+      "enum": [
+        "in-progress",
+        "completed",
+        "failed"
+      ]
+    },
+    "GitShaSource": {
+      "description": "How [`HarnessInfo::git_sha`] was obtained.",
+      "type": "string",
+      "enum": [
+        "build-time",
+        "unavailable"
+      ]
+    },
+    "HarnessInfo": {
+      "description": "Ties a manifest to the exact harness build that produced it (T-1-10).",
+      "type": "object",
+      "properties": {
+        "executable_blake3": {
+          "description": "Lowercase hex blake3 of the executable that produced this manifest, read from\n`std::env::current_exe()`. The only field here that identifies the binary\nitself rather than a checkout. Deliberately NOT paired with the executable's\nabsolute path: on the reference rig that path is a home directory\n(`/home/<user>/neurorust/target/release/nrmeasure`), manifests are published,\nand the blake3 plus byte count identify the binary without naming anyone's\nhome directory (T-1-06).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executable_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "git_dirty": {
+          "description": "Whether the working tree was dirty when the binary was built. Meaningful only\nwhen `git_sha_source` is `build-time`.",
+          "type": "boolean"
+        },
+        "git_sha": {
+          "description": "The commit the binary was BUILT from, embedded at compile time by\n`crates/cli/build.rs`. Never re-derived from the working directory at run\ntime: a stale executable running inside a newer checkout would otherwise\ninherit that checkout's identity, and a run launched by systemd-run with no\nworking directory inside the checkout would record \"unknown\". Both happened;\nsee finding 6 of `01-EXTERNAL-AUDIT.md`.",
+          "type": "string"
+        },
+        "git_sha_source": {
+          "description": "How `git_sha` was obtained. Absent on manifests written before this field\nexisted. `Unavailable` means the build could not read git at all, and\n`git_dirty` says nothing in that case.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GitShaSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "invoked_from_git_sha": {
+          "description": "The commit of the checkout the harness was INVOKED from, when one could be\nread. Recorded separately from `git_sha` so a stale executable running inside\na newer checkout is visible rather than disguised. Absent when the process had\nno git checkout as its working directory, which is the normal case under\nsystemd-run.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "description": "`env!(\"CARGO_PKG_VERSION\")`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "git_sha",
+        "git_dirty"
+      ]
+    },
+    "InstrumentClass": {
+      "description": "RESEARCH.md pattern 2: an investigation run carries its own tracer overhead and\nmust never feed the headline series, independently of `RunClass`.",
+      "type": "string",
+      "enum": [
+        "headline-series",
+        "investigation"
+      ]
+    },
+    "RequestedRun": {
+      "description": "What the operator asked `nrmeasure run` to do, captured before any instrument\nstarts so a failed attempt still says what it was trying to measure.",
+      "type": "object",
+      "properties": {
+        "cpus": {
+          "description": "The measurement CPU list, e.g. `\"6-11\"`.",
+          "type": "string"
+        },
+        "duration_seconds": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "hwlatdetect_duration_seconds": {
+          "description": "`Some` only when `with_hwlatdetect` is true.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "instrument_class": {
+          "$ref": "#/$defs/InstrumentClass"
+        },
+        "main_cpus": {
+          "description": "The cyclictest main thread affinity, e.g. `\"0,1\"`.",
+          "type": "string"
+        },
+        "run_class": {
+          "$ref": "#/$defs/RunClass"
+        },
+        "with_hwlatdetect": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "run_class",
+        "instrument_class",
+        "cpus",
+        "main_cpus",
+        "duration_seconds",
+        "with_hwlatdetect"
+      ]
+    },
+    "RunClass": {
+      "description": "D-10 run cadence tag. Kept distinct so run classes are never averaged together.",
+      "type": "string",
+      "enum": [
+        "recon",
+        "screen",
+        "calibration-clean",
+        "calibration-contaminated",
+        "investigation",
+        "headline",
+        "weekly",
+        "soak"
+      ]
+    },
+    "StorageLocation": {
+      "description": "Where an artifact's bytes actually live. D-12: raw captures stay byte-identical to\nwhat the tool emitted, so this only ever points at a file, never embeds one.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "in-repo"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "external": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "url"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "external"
+          ]
+        }
+      ]
+    },
+    "ToolInvocation": {
+      "description": "One external tool the harness shelled out to, e.g. `cyclictest`.",
+      "type": "object",
+      "properties": {
+        "argv": {
+          "description": "The exact argument vector as executed, for reproduction. A previous\nconvention rewrote any output-file path to be relative to the run\ndirectory; that rewrite ran against the wrong directory (the tool\nactually wrote into a scratch `tempfile::tempdir()`, not the final run\ndirectory), silently did nothing, and left every committed manifest's\nargv naming a `/tmp` directory that no longer exists (finding 6 of\n`01-EXTERNAL-AUDIT.md`). `argv` is now recorded byte for byte as\nexecuted; use `artifact_paths` to map a path in `argv` to the artifact\nit became. A home directory prefix in any element is replaced by the\nliteral token `[redacted]` (T-1-06), following the same visible\nconvention as `KernelInfo::redact_cmdline`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "artifact_paths": {
+          "description": "Every path in `argv` that became a committed artifact, paired with the\nartifact's name in this manifest. Empty for a tool that wrote no file\n(`hwlatdetect` writes its report to stdout). Defaults to empty so\nmanifests written before this field existed keep parsing.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ArtifactPathMapping"
+          }
+        },
+        "exit_code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "description": "As reported by the tool itself.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "argv",
+        "exit_code"
+      ]
+    }
+  }
+}

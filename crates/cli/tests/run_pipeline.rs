@@ -816,20 +816,21 @@ fn argv_redacts_a_home_directory_prefix() {
     let temp = tempfile::tempdir().expect("tempdir");
     let facts_path = write_fixture(temp.path(), "facts.txt", &tuned_facts_text());
     let interrupts_path = write_fixture(temp.path(), "interrupts.txt", INTERRUPTS);
-    let measurements_root = temp.path().join("measurements");
-    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
 
-    // A directory shaped like a real home directory, forced as both $HOME and
-    // $TMPDIR for the subprocess, so the scratch tempdir() it creates for
-    // cyclictest's own output actually lands under it.
+    // A directory shaped like a real home directory, forced as $HOME for the
+    // subprocess. The run directory (and therefore every path the tools write
+    // into, now that they write straight into it rather than a scratch tempdir)
+    // is rooted under it here, matching the real exposure: every rig invocation
+    // of scripts/nr-run-measurement passes
+    // --measurements-root /home/<user>/neurorust/measurements.
     let fake_home = temp.path().join("home-precision3591-fake");
-    std::fs::create_dir_all(&fake_home).expect("mkdir fake home");
+    let measurements_root = fake_home.join("neurorust").join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
 
     let output = base_run_command(&measurements_root)
         .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
         .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
         .env("HOME", &fake_home)
-        .env("TMPDIR", &fake_home)
         .args(["--class", "recon"])
         .output()
         .expect("nrmeasure runs");
@@ -1101,7 +1102,10 @@ fn preserved_artifacts_carry_checksums() {
         .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
         .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
         .env("FAKE_CYCLICTEST_BAD_HIST", "1")
-        .env("FAKE_CYCLICTEST_STDERR", "cyclictest: another fabricated warning")
+        .env(
+            "FAKE_CYCLICTEST_STDERR",
+            "cyclictest: another fabricated warning",
+        )
         .args(["--class", "recon"])
         .output()
         .expect("nrmeasure runs");
