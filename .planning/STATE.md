@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-19-PLAN.md
-last_updated: "2026-09-05T17:20:09.681Z"
+stopped_at: Completed 01-17-PLAN.md
+last_updated: "2026-09-05T18:25:56.930Z"
 last_activity: 2026-09-05
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 23
-  completed_plans: 13
-  percent: 57
+  completed_plans: 14
+  percent: 61
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 01 (trustworthy-measurement) — EXECUTING
-Plan: 13 of 23 done (01-19 just finished); wave 8 complete, wave 9 continues with 01-17
-Status: Executing Phase 01
-Last activity: 2026-09-05 -- 01-19 finished (PASS)
+Plan: 14 of 23 done (01-17 just finished); waves 8-9 complete, wave 10 is 01-18
+Status: Ready to execute
+Last activity: 2026-09-05
 
-Progress: [██████░░░░] 57%
+Progress: [██████░░░░] 61%
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [██████░░░░] 57%
 | Phase 01 P10 | 23min | 3 tasks | 6 files |
 | Phase 01 P16 | 32min | 3 tasks | 14 files |
 | Phase 01 P19 | 38min | 3 tasks | 11 files |
+| Phase 01 P17 | 95min | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -120,6 +121,10 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-16: state advance-plan's Current Position counter is a naive sequential index unaware of wave-based/replanned execution; it set Plan to 2 of 23 after completing 01-16 (the 12th plan). Hand-corrected the Current Position and Session Continuity body lines to name 01-16 and 01-19, matching the precedent already logged for the same class of tooling gap in 01-02/01-03.
 - [Phase 01]: 01-19: Split tasks 1 and 2 into genuinely independent commits by temporarily stripping task 2's additions back out of the shared verify.rs, verifying task 1 alone, committing, then restoring task 2's code and verifying+committing it separately, since git's hunk-based staging could not cleanly separate two tasks intermixed in the same function.
 - [Phase 01]: 01-19: reconcile's new sample-count check immediately caught a real, previously invisible defect in fake-cyclictest.sh (flat 3000000 cycles per thread never matched the real committed .hist's true per-thread totals of ~2999300); corrected to the real computed values and re-pinned the one dependent snapshot.
+- [Phase 01]: 01-17: Kept RunSummary.provenance_tier non-optional but made verdict: Option<ContaminationVerdict>, since a failed attempt is genuinely harness-generated but never reaches verdict computation.
+- [Phase 01]: 01-17: Verified by direct source read that interference::verdict()'s run_duration parameter feeds both the per-hour counter normalisation and overflow_rate_per_s, contradicting the plan's own executor note that D-24 tail metrics do not use this denominator; forced two snapshot re-pins.
+- [Phase 01]: 01-17: Added redact_stderr/current_hostname as a dedicated follow-up commit (not amended into task 1) after a post-implementation self-review caught a real gap against threat T-1-62 (mitigate disposition), which the initial implementation had explicitly and incorrectly decided to skip.
+- [Phase 01]: 01-17: state advance-plan's naive sequential counter again mis-set Current Position (13->14 of 23 without naming which plan); hand-corrected Current Position and Session Continuity to name 01-17, matching the precedent from 01-16/01-19.
 
 ### Pending Todos
 
@@ -138,8 +143,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-05T17:20:03.158Z
-Stopped at: Completed 01-19-PLAN.md
-Resume file: .planning/phases/01-trustworthy-measurement/01-17-PLAN.md
+Last session: 2026-09-05T18:25:56.928Z
+Stopped at: Completed 01-17-PLAN.md
+Resume file: .planning/phases/01-trustworthy-measurement/01-18-PLAN.md
 
-Next: `/donny-execute-phase 1` (wave 9: plan 01-17)
+Next: `/donny-execute-phase 1` (wave 10: plan 01-18)
