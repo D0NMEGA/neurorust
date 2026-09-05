@@ -62,8 +62,14 @@ on)
     # this rig exists to characterise. That is not a theory: on 2026-09-05 all 17 events
     # across two D-18 arms named CPU 5, including the arm that passed --cpu-list 0-11,
     # and the 2026-08-28 baseline's P-core arm put all 13 of its events on CPU 0.
-    # hwlatdetect itself never writes this file, so nothing else was going to set it.
-    # `round-robin` migrates the thread across tracing_cpumask each window.
+    # This does NOT fix hwlatdetect. Its startup clears current_tracer, which resets the
+    # mode to none before it selects hwlat, and the kernel rejects a mode write once
+    # current_tracer is hwlat. Measured on 2026-09-05: round-robin immediately before a
+    # run, none twice during it, and a third arm's events still all on CPU 5. Sampling the
+    # isolated cores needs the hwlat tracer driven directly rather than through
+    # hwlatdetect. The write is kept because it is the correct protocol state for any
+    # instrument that does drive the tracer directly, and `status` prints the live value so
+    # the difference is visible rather than assumed.
     # See docs/rig/firmware-floor-rt-vs-stock.md.
     echo round-robin > /sys/kernel/tracing/hwlat_detector/mode 2>/dev/null
     # Reset the mask too. hwlatdetect writes tracing_cpumask when given --cpu-list and

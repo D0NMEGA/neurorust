@@ -1,0 +1,759 @@
+{
+  "schema_version": 1,
+  "provenance_tier": "harness-generated",
+  "run_id": "2026-09-05-precision3591-screen-03",
+  "run_class": "screen",
+  "instrument_class": "headline-series",
+  "utc_start": "2026-09-05T05:52:11.262809488Z",
+  "utc_end": "2026-09-05T06:08:11.759550855Z",
+  "harness": {
+    "version": "0.1.0",
+    "git_sha": "unknown",
+    "git_dirty": false
+  },
+  "host": {
+    "rig_slug": "precision3591",
+    "system_vendor": "Dell Inc.",
+    "system_model": "Precision 3591",
+    "bios_version": "1.23.0",
+    "bios_release_date": "04/24/2026",
+    "cpu_model": "Intel(R) Core(TM) Ultra 9 185H",
+    "microcode": "0x28",
+    "logical_cpus": 22,
+    "physical_cores": 16,
+    "sockets": 1,
+    "p_cores": "",
+    "e_cores": "",
+    "memory_gb": 30
+  },
+  "kernel": {
+    "release": "7.0.0-30-realtime",
+    "version_string": "#30.1-Ubuntu SMP PREEMPT_RT Fri Aug  7 13:54:26 UTC 2026",
+    "is_realtime": true,
+    "preempt_model": "PREEMPT_RT",
+    "cmdline": "BOOT_IMAGE=/boot/vmlinuz-7.0.0-30-realtime root=[redacted] ro quiet splash isolcpus=6-11 nohz_full=6-11 rcu_nocbs=6-11 irqaffinity=0-5,12-21 intel_idle.max_cstate=1 processor.max_cstate=1 nosoftlockup nowatchdog nmi_watchdog=0 tsc=reliable skew_tick=1 crashkernel=2G-4G:320M,4G-32G:512M,32G-64G:1024M,64G-128G:2048M,128G-:4096M",
+    "isolcpus": "6-11",
+    "nohz_full": "6-11",
+    "rcu_nocbs": "6-11",
+    "irqaffinity": "0-5,12-21"
+  },
+  "os": {
+    "distro": "Ubuntu",
+    "version": "26.04.1 LTS (Resolute Raccoon)",
+    "session_kind": "installed",
+    "systemd_default_target": "multi-user.target",
+    "display_manager_active": false
+  },
+  "tuning": {
+    "per_cpu_governor": [
+      {
+        "cpu": 0,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 1,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 2,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 3,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 4,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 5,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 6,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 7,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 8,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 9,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 10,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 11,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 12,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 13,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 14,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 15,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 16,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 17,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 18,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 19,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 20,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 21,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      }
+    ],
+    "no_turbo": true,
+    "cstates": [
+      {
+        "cpu": 0,
+        "name": "POLL",
+        "disabled": false
+      },
+      {
+        "cpu": 0,
+        "name": "C1E",
+        "disabled": false
+      }
+    ],
+    "rt_tuning_service": {
+      "unit": "rt-tuning.service",
+      "active_state": "active",
+      "sub_state": "exited",
+      "unit_file_state": "enabled"
+    }
+  },
+  "power": {
+    "ac_online": true,
+    "battery_status": "Not charging",
+    "battery_percent": 100,
+    "thermal_zones": [
+      {
+        "name": "TCPU",
+        "temp_c_start": 87.05,
+        "temp_c_end": 89.05
+      },
+      {
+        "name": "TCPU_PCI",
+        "temp_c_start": 88.0,
+        "temp_c_end": 89.0
+      },
+      {
+        "name": "INT3400 Thermal",
+        "temp_c_start": 20.0,
+        "temp_c_end": 20.0
+      },
+      {
+        "name": "SEN1",
+        "temp_c_start": 36.05,
+        "temp_c_end": 37.05
+      },
+      {
+        "name": "SEN2",
+        "temp_c_start": 55.05,
+        "temp_c_end": 56.05
+      },
+      {
+        "name": "SEN3",
+        "temp_c_start": 54.05,
+        "temp_c_end": 55.05
+      },
+      {
+        "name": "SEN4",
+        "temp_c_start": 38.05,
+        "temp_c_end": 39.05
+      },
+      {
+        "name": "SEN5",
+        "temp_c_start": 55.05,
+        "temp_c_end": 56.05
+      },
+      {
+        "name": "SEN6",
+        "temp_c_start": 60.05,
+        "temp_c_end": 61.05
+      },
+      {
+        "name": "SEN7",
+        "temp_c_start": 25.05,
+        "temp_c_end": 25.05
+      },
+      {
+        "name": "x86_pkg_temp",
+        "temp_c_start": 88.0,
+        "temp_c_end": 89.0
+      },
+      {
+        "name": "iwlwifi_1",
+        "temp_c_start": 39.0,
+        "temp_c_end": 40.0
+      }
+    ],
+    "package_temp_c_max": 89.05
+  },
+  "network": {
+    "wired_iface": "enp0s31f6",
+    "wired_driver": "e1000e",
+    "wired_state": "down",
+    "ptp_capabilities": "hardware-clock-present",
+    "wifi_iface": "wlp0s20f3",
+    "wifi_driver": "iwlwifi",
+    "wifi_state": "up"
+  },
+  "preconditions": [
+    {
+      "check": "no-active-ssh-sessions",
+      "status": "pass",
+      "observed": "0",
+      "expected": "0"
+    },
+    {
+      "check": "systemd-default-target-is-multi-user",
+      "status": "pass",
+      "observed": "multi-user.target",
+      "expected": "multi-user.target"
+    },
+    {
+      "check": "display-manager-inactive",
+      "status": "pass",
+      "observed": "gdm.service=inactive, sddm.service=inactive, lightdm.service=inactive",
+      "expected": "inactive"
+    },
+    {
+      "check": "no-graphical-session",
+      "status": "pass",
+      "observed": "0",
+      "expected": "0"
+    },
+    {
+      "check": "no-active-login-sessions",
+      "status": "pass",
+      "observed": "none",
+      "expected": "no local console login session"
+    },
+    {
+      "check": "governor-is-performance-on-all-cpus",
+      "status": "pass",
+      "observed": "performance on 22 CPUs",
+      "expected": "performance on all CPUs"
+    },
+    {
+      "check": "no-turbo-enabled",
+      "status": "pass",
+      "observed": "1",
+      "expected": "1"
+    },
+    {
+      "check": "deep-cstates-disabled",
+      "status": "pass",
+      "observed": "C6 not present, C10 not present",
+      "expected": "C6 disabled, C10 disabled"
+    },
+    {
+      "check": "isolcpus-covers-target-cpus",
+      "status": "pass",
+      "observed": "6-11",
+      "expected": "6-11"
+    },
+    {
+      "check": "kernel-is-realtime",
+      "status": "pass",
+      "observed": "1",
+      "expected": "1"
+    },
+    {
+      "check": "rt-tuning-service-active",
+      "status": "pass",
+      "observed": "active",
+      "expected": "active"
+    },
+    {
+      "check": "on-ac-power",
+      "status": "pass",
+      "observed": "AC=1",
+      "expected": "AC=1"
+    },
+    {
+      "check": "thermal-headroom-at-start",
+      "status": "not-applicable",
+      "observed": "89.0 C",
+      "expected": "package temp <= 70 C"
+    },
+    {
+      "check": "no-package-manager-activity",
+      "status": "pass",
+      "observed": "none",
+      "expected": "no apt, dpkg, unattended-upgrade or snapd process"
+    },
+    {
+      "check": "tracers-quiescent",
+      "status": "pass",
+      "observed": "nop",
+      "expected": "nop"
+    }
+  ],
+  "interference": {
+    "before": {
+      "isolated_cpus": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "cal_ipis": [
+        {
+          "cpu": 6,
+          "count": 27574
+        },
+        {
+          "cpu": 7,
+          "count": 27447
+        },
+        {
+          "cpu": 8,
+          "count": 27473
+        },
+        {
+          "cpu": 9,
+          "count": 27452
+        },
+        {
+          "cpu": 10,
+          "count": 27451
+        },
+        {
+          "cpu": 11,
+          "count": 27872
+        }
+      ],
+      "tlb_ipis": [
+        {
+          "cpu": 6,
+          "count": 10
+        },
+        {
+          "cpu": 7,
+          "count": 10
+        },
+        {
+          "cpu": 8,
+          "count": 10
+        },
+        {
+          "cpu": 9,
+          "count": 10
+        },
+        {
+          "cpu": 10,
+          "count": 10
+        },
+        {
+          "cpu": 11,
+          "count": 10
+        }
+      ],
+      "context_switches": [
+        {
+          "cpu": 6,
+          "count": 125583
+        },
+        {
+          "cpu": 7,
+          "count": 118664
+        },
+        {
+          "cpu": 8,
+          "count": 141285
+        },
+        {
+          "cpu": 9,
+          "count": 117427
+        },
+        {
+          "cpu": 10,
+          "count": 120989
+        },
+        {
+          "cpu": 11,
+          "count": 136949
+        }
+      ],
+      "irqs": [
+        {
+          "cpu": 6,
+          "count": 25670
+        },
+        {
+          "cpu": 7,
+          "count": 59497
+        },
+        {
+          "cpu": 8,
+          "count": 23814
+        },
+        {
+          "cpu": 9,
+          "count": 41252
+        },
+        {
+          "cpu": 10,
+          "count": 16400
+        },
+        {
+          "cpu": 11,
+          "count": 10120
+        }
+      ]
+    },
+    "after": {
+      "isolated_cpus": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "cal_ipis": [
+        {
+          "cpu": 6,
+          "count": 27594
+        },
+        {
+          "cpu": 7,
+          "count": 27449
+        },
+        {
+          "cpu": 8,
+          "count": 27475
+        },
+        {
+          "cpu": 9,
+          "count": 27454
+        },
+        {
+          "cpu": 10,
+          "count": 27453
+        },
+        {
+          "cpu": 11,
+          "count": 27874
+        }
+      ],
+      "tlb_ipis": [
+        {
+          "cpu": 6,
+          "count": 11
+        },
+        {
+          "cpu": 7,
+          "count": 11
+        },
+        {
+          "cpu": 8,
+          "count": 11
+        },
+        {
+          "cpu": 9,
+          "count": 11
+        },
+        {
+          "cpu": 10,
+          "count": 11
+        },
+        {
+          "cpu": 11,
+          "count": 11
+        }
+      ],
+      "context_switches": [
+        {
+          "cpu": 6,
+          "count": 191281
+        },
+        {
+          "cpu": 7,
+          "count": 179871
+        },
+        {
+          "cpu": 8,
+          "count": 203575
+        },
+        {
+          "cpu": 9,
+          "count": 171654
+        },
+        {
+          "cpu": 10,
+          "count": 197928
+        },
+        {
+          "cpu": 11,
+          "count": 197537
+        }
+      ],
+      "irqs": [
+        {
+          "cpu": 6,
+          "count": 25727
+        },
+        {
+          "cpu": 7,
+          "count": 59509
+        },
+        {
+          "cpu": 8,
+          "count": 23831
+        },
+        {
+          "cpu": 9,
+          "count": 41255
+        },
+        {
+          "cpu": 10,
+          "count": 16412
+        },
+        {
+          "cpu": 11,
+          "count": 10125
+        }
+      ]
+    },
+    "delta": {
+      "cal_ipis": [
+        {
+          "cpu": 6,
+          "count": 20
+        },
+        {
+          "cpu": 7,
+          "count": 2
+        },
+        {
+          "cpu": 8,
+          "count": 2
+        },
+        {
+          "cpu": 9,
+          "count": 2
+        },
+        {
+          "cpu": 10,
+          "count": 2
+        },
+        {
+          "cpu": 11,
+          "count": 2
+        }
+      ],
+      "tlb_ipis": [
+        {
+          "cpu": 6,
+          "count": 1
+        },
+        {
+          "cpu": 7,
+          "count": 1
+        },
+        {
+          "cpu": 8,
+          "count": 1
+        },
+        {
+          "cpu": 9,
+          "count": 1
+        },
+        {
+          "cpu": 10,
+          "count": 1
+        },
+        {
+          "cpu": 11,
+          "count": 1
+        }
+      ],
+      "context_switches": [
+        {
+          "cpu": 6,
+          "count": 65698
+        },
+        {
+          "cpu": 7,
+          "count": 61207
+        },
+        {
+          "cpu": 8,
+          "count": 62290
+        },
+        {
+          "cpu": 9,
+          "count": 54227
+        },
+        {
+          "cpu": 10,
+          "count": 76939
+        },
+        {
+          "cpu": 11,
+          "count": 60588
+        }
+      ],
+      "irqs": [
+        {
+          "cpu": 6,
+          "count": 57
+        },
+        {
+          "cpu": 7,
+          "count": 12
+        },
+        {
+          "cpu": 8,
+          "count": 17
+        },
+        {
+          "cpu": 9,
+          "count": 3
+        },
+        {
+          "cpu": 10,
+          "count": 12
+        },
+        {
+          "cpu": 11,
+          "count": 5
+        }
+      ]
+    },
+    "tail_metrics": {
+      "tail_excursion_ratio": 7.9,
+      "thread_max_spread": 0.620253164556962,
+      "overflow_rate_per_s": 0.0
+    },
+    "thresholds_provisional": true,
+    "verdict": "clean"
+  },
+  "tools": [
+    {
+      "name": "cyclictest",
+      "version": "cyclictest V 2.80",
+      "argv": [
+        "cyclictest",
+        "--mainaffinity=0,1",
+        "--affinity=6-11",
+        "--threads=6",
+        "--mlockall",
+        "--policy=fifo",
+        "--priority=99",
+        "--interval=200",
+        "--distance=0",
+        "--histogram=400",
+        "--histfile=/tmp/.tmpCjxeHY/cyclictest.hist",
+        "--json=/tmp/.tmpCjxeHY/cyclictest.json",
+        "--duration=60"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "hwlatdetect",
+      "version": "usage: hwlatdetect [-h] [--duration DURATION] [--threshold THRESHOLD]",
+      "argv": [
+        "hwlatdetect",
+        "--duration=900"
+      ],
+      "exit_code": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "cyclictest.hist",
+      "bytes": 2405,
+      "blake3": "25f0162436f6b004882e0a50c5c48a60c4219d9e9cd05fb6a70c26ec38675ef3",
+      "kind": "cyclictest-hist",
+      "stored": "in-repo"
+    },
+    {
+      "path": "cyclictest.json",
+      "bytes": 4461,
+      "blake3": "eed01e17aa6c4b83a19cc63abb3006fd0bba345822ecb5936b5a7e41bdd64bea",
+      "kind": "cyclictest-json",
+      "stored": "in-repo"
+    },
+    {
+      "path": "hwlatdetect.txt",
+      "bytes": 1147,
+      "blake3": "9a1d3557db83e2443ee1b6fde6ce04674696de4c766c5a53744a1a0e2e671ed8",
+      "kind": "hwlatdetect-text",
+      "stored": "in-repo"
+    }
+  ],
+  "absent_fields": [
+    {
+      "field_path": "host.p_cores",
+      "reason": "neither cpu_capacity nor cpuinfo_max_freq readable for every CPU"
+    },
+    {
+      "field_path": "host.e_cores",
+      "reason": "neither cpu_capacity nor cpuinfo_max_freq readable for every CPU"
+    }
+  ],
+  "excluded_from_series": true,
+  "exclusion_reason": "contamination verdict Clean was reached against provisional (D-24, not yet calibrated) thresholds; see config/contamination-thresholds.json",
+  "notes": "D-18 arm2rr: installed PREEMPT_RT 7.0.0-30-realtime, tuned (governor performance, no_turbo=1, deep C-states off, multi-user.target), isolcpus=6-11. Load: 22 stress-ng matrixprod workers, one pinned per logical CPU 0-21, package 87 C at capture start. hwlatdetect 900s. Descriptive characterisation of this installed configuration; NOT a controlled comparison against the 2026-08-28 live-USB stock-kernel screening, which differed in kernel build, root medium, isolcpus, C-state policy and battery state."
+}

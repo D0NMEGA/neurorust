@@ -57,9 +57,11 @@ The mechanism, confirmed by reading the rig:
 
 The bracketed value is the active one, so the mode is `none`. In that mode the tracer does not
 migrate its kernel thread; the thread samples whichever CPU the scheduler has it on.
-`hwlatdetect` never changes this: its field map covers `width`, `window`, `tracing_on`,
-`tracing_thresh` and `tracing_cpumask` only (`/usr/sbin/hwlatdetect` lines 236 to 240), so the
-mode is whatever the machine already had.
+`hwlatdetect` exposes no option to set this: its field map covers `width`, `window`,
+`tracing_on`, `tracing_thresh` and `tracing_cpumask` only (`/usr/sbin/hwlatdetect` lines 236 to
+240). It does not leave the mode alone either, as the section below records: its startup clears
+`current_tracer`, which resets the mode to `none` even when it was set to something else
+beforehand.
 
 `isolcpus=6-11` removes those CPUs from the scheduler's automatic placement. That is the same
 mechanism that left cores 6-11 at 100% idle under `stress-ng --cpu 22` until each worker was
@@ -144,16 +146,40 @@ any protocol deviations. An `hwlatdetect` observation may be reported beside it,
 its run and its conditions, and labelled as a hardware-gap diagnostic. It may not be subtracted
 from anything.
 
-## What would fix the measurement
+## Setting the mode was tried, and hwlatdetect prevents it
 
-Set `hwlat_detector/mode` before sampling. `round-robin` migrates the thread across
-`tracing_cpumask` each window; `per-cpu` runs a thread on every CPU in the mask. Either would
-let the isolated cores be sampled, and `per-cpu` would give per-CPU exposure rather than
-dividing one thread's polling time across the set. `hwlatdetect` does not expose the mode, so
-this needs either a direct write to the tracing filesystem before the run or a small addition
-to the harness.
+The obvious fix is to set `hwlat_detector/mode` to `round-robin` or `per-cpu` before sampling,
+so the tracer migrates across `tracing_cpumask` instead of staying put. That was implemented in
+`nr-measure-mode on` and it does not work, because `hwlatdetect` undoes it.
 
-Whichever is chosen, re-take the loaded arms and confirm from the raw output that events name
-CPUs 6-11 before treating any figure as a floor for the isolated cores. Verifying the CPU
-distribution of the events, rather than only the maximum, should be a standing check: it is the
-step that would have caught this in the 2026-08-28 screening.
+The kernel accepts a mode change only while `current_tracer` is not `hwlat`. Measured directly:
+
+    tracer=nop, write round-robin            -> round-robin
+    then set current_tracer=hwlat            -> round-robin   (survives)
+    write round-robin while tracer=hwlat     -> none          (rejected, resets)
+    write round-robin with tracing_on=0      -> none          (still rejected)
+
+So the only working order is: set the mode, then select the tracer. `hwlatdetect` clears the
+tracer as part of its own startup, which resets the mode to `none` before it selects `hwlat`,
+and it exposes no option to set the mode itself. Confirmed end to end on 2026-09-05: the mode
+read `round-robin` immediately before a run and `none` twice during it.
+
+A third arm was taken after the mode was set (`measurements/2026-09-05-precision3591-screen-03`,
+900 s, all 22 CPUs loaded, package 87 C). All 15 of its events named CPU 5, the same as the
+other two.
+
+Measuring the isolated cores therefore needs the hwlat tracer driven directly, writing
+`current_tracer`, `hwlat_detector/mode`, `window`, `width` and `tracing_thresh`, enabling
+`tracing_on`, and reading the trace buffer, rather than shelling out to `hwlatdetect`. That is
+a new instrument in the harness, not a correction to this one, so it is recorded rather than
+attempted here. `per-cpu` mode would additionally give each CPU its own sampling thread and
+therefore real per-CPU exposure, instead of dividing one thread's polling time across the set.
+
+Until that exists, no `hwlatdetect` figure from this rig characterises CPUs 6-11, and none
+should be published as if it did.
+
+Whatever instrument is used, confirm from the raw output that events name CPUs 6-11 before
+treating any figure as a floor for the isolated cores. Checking the CPU distribution of the
+events, rather than only the maximum, should be a standing check: it is the step that would
+have caught this in the 2026-08-28 screening, where the information was present in the raw
+capture all along.

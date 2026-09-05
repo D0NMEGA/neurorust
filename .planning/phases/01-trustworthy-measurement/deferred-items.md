@@ -227,3 +227,30 @@ audit record and the fix can be read together.
   meanings, and the second would mean an unrestricted `hwlatdetect` run on this rig says
   nothing whatsoever about the isolated cores. Arm 3, which passes `--hwlatdetect-cpu-list
   0-11` and therefore writes the mask explicitly, is the experiment that separates them.
+
+## From 01-11 (the hwlatdetect coverage defect, 2026-09-05)
+
+- **`hwlatdetect` cannot sample more than one CPU on this kernel, and no option it exposes
+  changes that.** The hwlat tracer's `mode` governs whether its kernel thread migrates.
+  `none`, the value on this rig, means it does not: it samples whichever CPU the scheduler
+  has it on, and `isolcpus=6-11` guarantees that is never one of the isolated cores. Setting
+  the mode beforehand does not survive: measured on 2026-09-05, `round-robin` immediately
+  before a run and `none` twice during it. The kernel accepts a mode write only while
+  `current_tracer` is not `hwlat`, and `hwlatdetect`'s startup clears the tracer, resetting
+  the mode before it selects `hwlat`. Writing the mode while the tracer is selected is
+  silently rejected and leaves `none`, with or without `tracing_on=0`.
+  Consequence: three D-18 arms, 32 events between them, every one on CPU 5. Nothing in this
+  repository characterises firmware latency on CPUs 6-11, including the 2026-08-28 baseline,
+  whose P-core arm put all 13 of its events on CPU 0.
+  The fix is a new instrument: drive the hwlat tracer directly (write `current_tracer`,
+  `hwlat_detector/mode`, `window`, `width`, `tracing_thresh`, enable `tracing_on`, read the
+  trace buffer) instead of shelling out to `hwlatdetect`. `per-cpu` mode would additionally
+  give each CPU its own sampling thread and therefore real per-CPU exposure rather than one
+  thread's polling time divided across the set. This is new capability work and belongs in
+  its own plan, not in 01-11.
+
+- **Standing check to add wherever an hwlatdetect figure is consumed: assert the CPU
+  distribution of the events, not just the maximum.** The information that would have caught
+  this was present in the 2026-08-28 raw capture from the day it was taken. A test that reads
+  the committed `hwlatdetect.txt` files and asserts which CPUs appear would have failed on
+  the baseline immediately.
