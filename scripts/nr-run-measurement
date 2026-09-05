@@ -61,7 +61,7 @@ if systemctl is-active --quiet "$UNIT.service"; then
     exit 3
 fi
 
-# Bound the unit's runtime so a capture that never returns cannot wedge the rig.
+# Bound the unit's start phase so a capture that never returns cannot wedge the rig.
 #
 # This is not hypothetical. On 2026-09-04 a D-18 arm was launched with
 # `--duration 0`, which the runbook meant as "hwlatdetect only" but which
@@ -76,6 +76,13 @@ fi
 # fixed margin for tool startup, the two interference snapshots, the environment
 # snapshot and artifact checksumming. It is a backstop, not a schedule: a healthy
 # run finishes far inside it.
+#
+# TimeoutStartSec, not RuntimeMaxSec. The first version of this used RuntimeMaxSec and
+# did nothing at all; systemd said so in the journal on every run:
+# "RuntimeMaxSec= has no effect in combination with Type=oneshot. Ignoring." For a
+# oneshot unit the whole run is the start phase, so TimeoutStartSec is the bound that
+# applies. Caught only because systemd prints that warning; check for its absence when
+# changing this.
 DURATION=0
 HWLAT_DURATION=0
 prev=""
@@ -104,7 +111,7 @@ exec systemd-run \
     --unit="$UNIT" \
     --collect \
     --property=Type=oneshot \
-    --property=RuntimeMaxSec="$RUNTIME_MAX" \
+    --property=TimeoutStartSec="$RUNTIME_MAX" \
     --property=StandardOutput=journal \
     --property=StandardError=journal \
     "$BIN" "$@" \

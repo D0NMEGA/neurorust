@@ -541,8 +541,31 @@ fn print_summary(run_dir: &RunDir, run: &CyclictestRun, manifest: &RunManifest) 
 /// abort the write (the manifest records it, see [`determine_exclusion`]), but the
 /// tool's own stderr is surfaced immediately so the operator does not have to go
 /// digging for it.
+/// Whether a nonzero exit actually means the tool failed.
+///
+/// `hwlatdetect` exits with `(maxlatency > hardlimit)` and defaults `hardlimit` to the
+/// latency threshold when `--hardlimit` is not passed (`/usr/sbin/hwlatdetect` lines 458 and
+/// 549). A firmware screen that observes anything above the threshold therefore exits 1 by
+/// design, having run to completion and written a full capture. That is the finding the screen
+/// exists to produce, not an error.
+///
+/// Treating it as a failure excluded both D-18 arms on 2026-09-05 with the reason "hwlatdetect
+/// exited with code 1", which reads as a broken capture. Those manifests are published and
+/// D-12 forbids editing them, so the wrong reason stands in
+/// `measurements/2026-09-05-precision3591-screen{,-02}` and is explained in
+/// `docs/rig/firmware-floor-rt-vs-stock.md`.
+///
+/// Any other nonzero exit from `hwlatdetect`, and any nonzero exit from any other tool, is
+/// still a failure: `cyclictest` has no such convention.
+fn is_tool_failure(tool: &ToolInvocation) -> bool {
+    match (tool.name.as_str(), tool.exit_code) {
+        ("hwlatdetect", 1) => false,
+        (_, code) => code != 0,
+    }
+}
+
 fn warn_on_tool_failure(output: &tools::ToolOutput) {
-    if output.invocation.exit_code != 0 {
+    if is_tool_failure(&output.invocation) {
         eprintln!(
             "warning: {} exited with code {}",
             output.invocation.name, output.invocation.exit_code
@@ -797,7 +820,7 @@ fn determine_exclusion(
     verdict_reason: Option<&str>,
     thresholds_provisional: bool,
 ) -> (bool, Option<String>) {
-    if let Some(failed) = tool_invocations.iter().find(|tool| tool.exit_code != 0) {
+    if let Some(failed) = tool_invocations.iter().find(|tool| is_tool_failure(tool)) {
         return (
             true,
             Some(format!(
@@ -1113,5 +1136,58 @@ VERSION=\"26.04.1 LTS\"
             build_hwlatdetect_argv(&args),
             vec!["--duration=600", "--cpu-list=0-11"]
         );
+    }
+
+    fn invocation(name: &str, exit_code: i32) -> ToolInvocation {
+        ToolInvocation {
+            name: name.to_string(),
+            version: "test".to_string(),
+            argv: vec![],
+            exit_code,
+        }
+    }
+
+    /// hwlatdetect exits with `(maxlatency > hardlimit)` and defaults `hardlimit` to the
+    /// threshold, so a screen that observes anything above the threshold exits 1 by design.
+    /// Treating that as a tool failure excluded both D-18 arms on 2026-09-05 with the reason
+    /// "hwlatdetect exited with code 1", which reads as a broken capture rather than the
+    /// finding it is. Those two manifests are published and D-12 forbids editing them; this
+    /// stops it recurring.
+    #[test]
+    fn hwlatdetect_exit_one_is_a_finding_not_a_failure() {
+        let (excluded, reason) = determine_exclusion(
+            &[invocation("cyclictest", 0), invocation("hwlatdetect", 1)],
+            &ContaminationVerdict::Clean,
+            None,
+            false,
+        );
+        assert!(
+            !excluded,
+            "exit 1 from hwlatdetect must not exclude the run: {reason:?}"
+        );
+        assert_eq!(reason, None);
+    }
+
+    /// Any other nonzero exit from hwlatdetect is still a real failure, and every nonzero
+    /// exit from any other tool remains one.
+    #[test]
+    fn other_nonzero_exits_still_exclude() {
+        let (excluded, reason) = determine_exclusion(
+            &[invocation("hwlatdetect", 2)],
+            &ContaminationVerdict::Clean,
+            None,
+            false,
+        );
+        assert!(excluded);
+        assert!(reason.unwrap().contains("hwlatdetect exited with code 2"));
+
+        let (excluded, reason) = determine_exclusion(
+            &[invocation("cyclictest", 1)],
+            &ContaminationVerdict::Clean,
+            None,
+            false,
+        );
+        assert!(excluded, "cyclictest has no such convention");
+        assert!(reason.unwrap().contains("cyclictest exited with code 1"));
     }
 }
