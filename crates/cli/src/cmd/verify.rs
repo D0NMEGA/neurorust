@@ -11,7 +11,9 @@
 //!      `probe-`. This is the T-1-05 mitigation: scoped by what a file *is*, not only by
 //!      where it sits, so moving a figure out of `measurements/` does not evade the gate.
 //!   3. `measurements/INDEX.md`, generated from every manifest, either gets written
-//!      (`--write-index`) or compared against what is on disk (`--check-index`).
+//!      (`--write-index`) or compared against what is on disk (`--check-index`). A run whose
+//!      histogram cannot be parsed renders `unavailable` in its p99/max columns there, never a
+//!      substituted zero (T-1-52).
 //!
 //! Exit code 0 on success, 1 on any check failure.
 
@@ -91,8 +93,13 @@ pub fn run(args: Args) -> anyhow::Result<i32> {
     let stray_problems = check_stray_captures(&root_abs, &measurements_rel, &loaded);
     problems.extend(stray_problems);
 
+    // Computed unconditionally (not only under --write-index/--check-index): a malformed
+    // capture must fail --strict even when the caller only wants the orphan/checksum checks.
+    let (summaries, percentile_problems) = build_summaries(&measurements_abs, &loaded, args.strict);
+    problems.extend(percentile_problems);
+
     if args.write_index || args.check_index {
-        let index_text = render_index(&build_summaries(&measurements_abs, &loaded));
+        let index_text = render_index(&summaries);
         let index_path = measurements_abs.join("INDEX.md");
 
         if args.write_index {
@@ -391,19 +398,39 @@ fn check_stray_captures(
 // Check 3: the index.
 // ---------------------------------------------------------------------------------
 
+/// The one [`compute_percentiles`] failure that is never a `--strict` problem: a manifest with
+/// nothing to compute from at all (for example a firmware-screen-only run with no cyclictest
+/// capture), as opposed to a capture that exists and fails to parse.
+const NO_HISTOGRAM_ARTIFACT: &str = "no cyclictest histogram artifact in this manifest";
+
+/// Builds one [`RunSummary`] per loaded manifest, sorted by run directory name, plus the list
+/// of `--strict`-mode problems found while doing it. Under `--strict`, a percentile computation
+/// failure other than [`NO_HISTOGRAM_ARTIFACT`] is a problem: a malformed but correctly
+/// checksummed capture must fail the blocking gate rather than silently render `unavailable`
+/// and pass it. Finding 6 of `01-EXTERNAL-AUDIT.md`.
 fn build_summaries(
     measurements_root: &Path,
     loaded: &HashMap<String, RunManifest>,
-) -> Vec<RunSummary> {
+    strict: bool,
+) -> (Vec<RunSummary>, Vec<String>) {
     let mut names: Vec<&String> = loaded.keys().collect();
     names.sort();
+    let mut problems = Vec::new();
 
-    names
+    let summaries = names
         .into_iter()
         .map(|name| {
             let manifest = &loaded[name];
             let run_dir = measurements_root.join(name);
-            let (p99_us, max_us) = compute_percentiles(&run_dir, manifest).unwrap_or((0, 0));
+            let (p99_us, max_us) = match compute_percentiles(&run_dir, manifest) {
+                Ok((p99, max)) => (Some(p99), Some(max)),
+                Err(reason) => {
+                    if strict && reason != NO_HISTOGRAM_ARTIFACT {
+                        problems.push(format!("{}: {reason}", run_dir.display()));
+                    }
+                    (None, None)
+                }
+            };
             let date_format = format_description!("[year]-[month]-[day]");
             let date = manifest
                 .utc_start
@@ -424,23 +451,39 @@ fn build_summaries(
                 reason: manifest.exclusion_reason.clone(),
             }
         })
-        .collect()
+        .collect();
+
+    (summaries, problems)
 }
 
-/// Best-effort: locates the run's cyclictest histogram artifact and computes p99/max from it.
-/// A run with no such artifact, or one that fails to parse, contributes `None` rather than
-/// failing the whole index render; the artifact's own presence and checksum are already
-/// checked by [`check_run_directories`] and [`check_stray_captures`].
-fn compute_percentiles(run_dir: &Path, manifest: &RunManifest) -> Option<(u64, u64)> {
+/// Locates the run's cyclictest histogram artifact and computes p99 and max from it. Returns
+/// the reason on failure rather than a substituted value: a run with no such artifact, or one
+/// that fails to parse, is reported as such by the caller (`unavailable` in the index, a named
+/// problem under `--strict`), never as a computed zero. A substituted zero is indistinguishable
+/// from a run that really observed zero, and one of those is evidence while the other is a
+/// parse failure. The artifact's own presence and checksum are already checked by
+/// [`check_run_directories`] and [`check_stray_captures`]; this only asks whether the numbers
+/// behind it are also derivable. Finding 6 of `01-EXTERNAL-AUDIT.md`.
+fn compute_percentiles(run_dir: &Path, manifest: &RunManifest) -> Result<(u64, u64), String> {
     let artifact = manifest
         .artifacts
         .iter()
-        .find(|artifact| artifact.kind == ArtifactKind::CyclictestHist)?;
+        .find(|artifact| artifact.kind == ArtifactKind::CyclictestHist)
+        .ok_or_else(|| NO_HISTOGRAM_ARTIFACT.to_string())?;
     let hist_path = run_dir.join(&artifact.path);
-    let run = nr_histogram::hist::parse_hist_file(&hist_path, None).ok()?;
-    let percentiles = run.percentiles(&[0.99]).ok()?;
-    let p99_us = percentiles.values.first().map(|(_, v)| *v).unwrap_or(0);
-    Some((p99_us, percentiles.max_us))
+    let run = nr_histogram::hist::parse_hist_file(&hist_path, None)
+        .map_err(|err| format!("failed to parse {}: {err}", hist_path.display()))?;
+    let percentiles = run.percentiles(&[0.99]).map_err(|err| {
+        format!(
+            "failed to compute percentiles from {}: {err}",
+            hist_path.display()
+        )
+    })?;
+    let &(_, p99_us) = percentiles
+        .values
+        .first()
+        .expect("percentiles() returns one value per requested quantile");
+    Ok((p99_us, percentiles.max_us))
 }
 
 #[cfg(test)]

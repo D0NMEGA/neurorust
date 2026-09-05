@@ -18,8 +18,12 @@ pub struct RunSummary {
     pub instrument_class: InstrumentClass,
     pub provenance_tier: ProvenanceTier,
     pub verdict: ContaminationVerdict,
-    pub p99_us: u64,
-    pub max_us: u64,
+    /// `None` when the run's histogram could not be parsed. Rendered as `unavailable`.
+    /// Never substituted with zero: a substituted zero is indistinguishable from a run that
+    /// really observed zero, and one of those is evidence while the other is a parse failure.
+    /// Finding 6 of `01-EXTERNAL-AUDIT.md`.
+    pub p99_us: Option<u64>,
+    pub max_us: Option<u64>,
     /// Whether this run counts toward the regression series (the negation of the manifest's
     /// `excluded_from_series`).
     pub in_series: bool,
@@ -53,11 +57,20 @@ pub fn render_index(summaries: &[RunSummary]) -> String {
             kebab(&summary.instrument_class),
             kebab(&summary.provenance_tier),
             kebab(&summary.verdict),
-            summary.p99_us,
-            summary.max_us,
+            render_optional_us(summary.p99_us),
+            render_optional_us(summary.max_us),
             if summary.in_series { "yes" } else { "no" },
             summary.reason.as_deref().unwrap_or("-"),
         ));
     }
     out
+}
+
+/// Renders a `p99_us`/`max_us` value as its number, or the literal `unavailable` when the
+/// run's histogram could not be parsed (never a substituted zero; see [`RunSummary::p99_us`]).
+fn render_optional_us(value: Option<u64>) -> String {
+    match value {
+        Some(v) => v.to_string(),
+        None => "unavailable".to_string(),
+    }
 }

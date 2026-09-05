@@ -58,6 +58,32 @@ fn write_valid_run(measurements_root: &Path, run_id: &str) {
     .expect("write capture");
 }
 
+/// Writes a run directory identical to [`write_valid_run`], except its cyclictest histogram
+/// artifact is syntactically malformed (missing the required "# Histogram" header) while its
+/// checksum in the manifest still matches the file on disk: the exact "correctly hashed but
+/// malformed capture" case finding 6 of `01-EXTERNAL-AUDIT.md` names. A blake3 mismatch would
+/// trip check 2 instead (`verify_rejects_checksum_mismatch` already covers that); this fixture
+/// is built to pass checksum verification and fail only at histogram-parse time.
+fn write_run_with_malformed_hist(measurements_root: &Path, run_id: &str) {
+    let run_dir = measurements_root.join(run_id);
+    fs::create_dir_all(&run_dir).expect("mkdir run dir");
+
+    let garbage: &[u8] = b"this is not a cyclictest histogram file\n";
+    let hist_path = run_dir.join("cyclictest-rt-isolated-idle-10m.hist");
+    fs::write(&hist_path, garbage).expect("write malformed capture");
+    let garbage_blake3 = nr_manifest::blake3_file(&hist_path).expect("hash the malformed capture");
+
+    let mut manifest: Value = serde_json::from_str(MINIMAL_MANIFEST).expect("fixture parses");
+    manifest["run_id"] = Value::String(run_id.to_string());
+    manifest["artifacts"][0]["bytes"] = Value::from(garbage.len() as u64);
+    manifest["artifacts"][0]["blake3"] = Value::String(garbage_blake3);
+    fs::write(
+        run_dir.join("manifest.json"),
+        serde_json::to_string_pretty(&manifest).expect("serialise manifest"),
+    )
+    .expect("write manifest.json");
+}
+
 fn manifest_missing_key(key: &str) -> String {
     let mut manifest: Value = serde_json::from_str(MINIMAL_MANIFEST).expect("fixture parses");
     manifest
@@ -360,4 +386,85 @@ fn verify_check_index_detects_drift() {
     assert!(!output2.status.success());
     let stdout = String::from_utf8_lossy(&output2.stdout);
     assert!(stdout.contains("INDEX.md"), "stdout: {stdout}");
+}
+
+// ---------------------------------------------------------------------------------
+// Finding 6, first half (01-19 task 1): a value that could not be computed is
+// `unavailable`, never a substituted zero.
+// ---------------------------------------------------------------------------------
+
+#[test]
+fn unparseable_capture_is_reported_unavailable_not_zero() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    write_run_with_malformed_hist(&measurements, "2026-08-30-precision3591-malformed");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--write-index")
+        .output()
+        .expect("run verify --write-index");
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let index = fs::read_to_string(measurements.join("INDEX.md")).expect("read INDEX.md");
+    let row = index
+        .lines()
+        .find(|line| line.contains("2026-08-30-precision3591-malformed"))
+        .expect("row for the malformed run");
+    assert!(
+        row.contains("unavailable"),
+        "expected unavailable in the row, got: {row}"
+    );
+    assert!(
+        !row.contains("| 0 |"),
+        "a parse failure must never render as a zero: {row}"
+    );
+}
+
+#[test]
+fn unparseable_capture_fails_strict_verification() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    write_run_with_malformed_hist(&measurements, "2026-08-30-precision3591-malformed");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("2026-08-30-precision3591-malformed"),
+        "stdout should name the run: {stdout}"
+    );
+    assert!(
+        stdout.contains("failed to parse"),
+        "stdout should name the parse failure: {stdout}"
+    );
+}
+
+#[test]
+fn unparseable_capture_passes_non_strict_verification() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    write_run_with_malformed_hist(&measurements, "2026-08-30-precision3591-malformed");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .output()
+        .expect("run verify");
+
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
