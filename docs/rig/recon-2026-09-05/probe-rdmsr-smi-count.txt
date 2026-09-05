@@ -1,0 +1,15 @@
+# rdmsr -p <cpu> 0x34   (MSR_SMI_COUNT), taken 2026-09-05T22:49:50Z
+# msr-tools version: 1.3+git20220805.7d78c80-1build1
+# kernel: 7.0.0-30-realtime
+# invocation: rdmsr -p <cpu> 0x34
+cpu 0  0x34 = fa6
+cpu 5  0x34 = fa6
+cpu 6  0x34 = fa6
+cpu 7  0x34 = fa6
+cpu 8  0x34 = fa6
+cpu 9  0x34 = fa6
+cpu 10 0x34 = fa6
+cpu 11 0x34 = fa6
+# decimal form, rdmsr -d:
+cpu 6  0x34 = 4006
+cpu 11 0x34 = 4006

@@ -69,12 +69,17 @@ visudo -c -f "$TMP_SUDOERS"
 install -o root -g root -m 0440 "$TMP_SUDOERS" "$SUDOERS_DST"
 echo "install.sh: installed $SUDOERS_DST"
 
-# The 2026-09-04 hand installation of nr-run-measurement's grant lived in its
-# own file. Remove it so exactly one file describes the grant.
-if [ -f /etc/sudoers.d/nr-run-measurement ]; then
-    rm -f /etc/sudoers.d/nr-run-measurement
-    echo "install.sh: removed the superseded /etc/sudoers.d/nr-run-measurement"
-fi
+# The grants were hand-installed across two files: nr-recon (2026-09-02) carried
+# nr-recon, nr-probe and nr-measure-mode, and nr-run-measurement (2026-09-04)
+# carried the fourth. Remove both so exactly one file describes the grant. This
+# runs only after the replacement above is validated and installed, so there is
+# no window in which the operator holds no grant.
+for old in nr-recon nr-run-measurement; do
+    if [ -f "/etc/sudoers.d/$old" ]; then
+        rm -f "/etc/sudoers.d/$old"
+        echo "install.sh: removed the superseded /etc/sudoers.d/$old"
+    fi
+done
 
 echo
 echo "install.sh: done. Resulting grant:"
