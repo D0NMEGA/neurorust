@@ -58,6 +58,15 @@ pub struct RunManifest {
     /// Required to be `Some` and non-empty when `excluded_from_series` is true; see
     /// `ValidationError::MissingExclusionReason`.
     pub exclusion_reason: Option<String>,
+    /// Test-only fixture seams active for this run, by environment variable name.
+    /// Empty for a real measurement.
+    ///
+    /// A fixture is one text read repeatedly, so every interference delta computed from
+    /// one is exactly zero, which reads as a perfectly quiet machine rather than as a
+    /// value that was never measured. Any entry here forces `excluded_from_series`.
+    /// Finding 8 of `01-EXTERNAL-AUDIT.md`.
+    #[serde(default)]
+    pub fixtures_used: Vec<String>,
     pub notes: Option<String>,
 }
 

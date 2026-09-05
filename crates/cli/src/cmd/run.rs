@@ -308,7 +308,31 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         );
     }
 
+    // Matches the facts-fixture refusal above: one interrupts fixture text is read
+    // for both the before and the after interference snapshot, so every delta
+    // computed from it is exactly zero, which reads as a perfectly quiet machine
+    // rather than as a value that was never measured. Finding 8 of
+    // `01-EXTERNAL-AUDIT.md`.
+    if overrides.interrupts_fixture_path.is_some()
+        && matches!(
+            run_class,
+            RunClass::Headline | RunClass::Weekly | RunClass::Soak
+        )
+    {
+        anyhow::bail!(
+            "{INTERRUPTS_FIXTURE_ENV} cannot be used with run class {run_class:?}: one fixture \
+             text is read for every snapshot, so every interference delta it produces is zero. \
+             A run that would feed the headline series must read the real machine or it is not \
+             a measurement"
+        );
+    }
+
     let target_cpus = parse_cpu_list(&args.cpus);
+
+    // Which fixture seams (if any) are driving this run, computed once so the
+    // manifest's `fixtures_used` field and the forced-exclusion reason below always
+    // agree with each other.
+    let fixtures_used = fixtures_used_names(overrides);
 
     // Step 1: resolve tool paths and versions, and load every input the run will need at
     // the end. Fail early if any of it is missing.
@@ -644,6 +668,14 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         .context("failed to compute the D-15/D-24 contamination verdict")
         .stage(Stage::Verdict, &tool_invocations)?;
         outcome.pair.windows = windows;
+        // A fixture-driven interference snapshot pair reads the same text for both
+        // "before" and "after", so its own delta is exactly zero regardless of what
+        // `evaluate`/`evaluate_tail` conclude from it. Overwrite the verdict's own
+        // recorded reason so it says why, rather than letting a fabricated zero read
+        // as a quiet machine. Finding 8 of `01-EXTERNAL-AUDIT.md`.
+        if !fixtures_used.is_empty() {
+            outcome.reason = Some(fixture_usage_reason(&fixtures_used));
+        }
 
         // Step 9: the D-14 environment snapshot.
         let env_snapshot =
@@ -693,9 +725,14 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         // D-17: a run taken with --allow-precondition-violation is always excluded
         // from the series, unconditionally overriding whatever determine_exclusion
         // would otherwise compute from tool exit codes or the contamination
-        // verdict. This is not a default the operator can turn off.
+        // verdict. This is not a default the operator can turn off. A fixture-driven
+        // run (finding 8 of 01-EXTERNAL-AUDIT.md) is forced the same way, in this
+        // same decision, rather than as a second, separate forcing site: no fixture
+        // can ever reach the series regardless of what its fabricated deltas say.
         let (excluded_from_series, exclusion_reason) = if args.allow_precondition_violation {
             (true, Some(precondition_waiver_reason(&results)))
+        } else if !fixtures_used.is_empty() {
+            (true, outcome.reason.clone())
         } else {
             determine_exclusion(
                 &tool_invocations,
@@ -732,6 +769,7 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
             absent_fields: env_snapshot.absent_fields,
             excluded_from_series,
             exclusion_reason,
+            fixtures_used: fixtures_used.clone(),
             notes: args.note.clone(),
         };
 
@@ -1429,6 +1467,38 @@ fn precondition_waiver_reason(results: &[PreconditionResult]) -> String {
             offending.join("; ")
         )
     }
+}
+
+/// The environment variable names of every fixture seam active for this invocation,
+/// in a fixed order (facts before interrupts) so `RunManifest::fixtures_used` and any
+/// message built from it never varies between two runs of the same invocation. Empty
+/// for a real measurement.
+fn fixtures_used_names(overrides: &Overrides) -> Vec<String> {
+    let mut names = Vec::new();
+    if overrides.facts_fixture_path.is_some() {
+        names.push(FACTS_FIXTURE_ENV.to_string());
+    }
+    if overrides.interrupts_fixture_path.is_some() {
+        names.push(INTERRUPTS_FIXTURE_ENV.to_string());
+    }
+    names
+}
+
+/// Explains, for a human reading the manifest, why a fixture-driven run's
+/// interference deltas cannot be read as evidence of a quiet machine: one fixture
+/// text is read repeatedly for every snapshot, so every delta computed from it is
+/// exactly zero by construction, never because the machine was actually observed to
+/// be quiet. Used both as `RunManifest::exclusion_reason` and as the contamination
+/// verdict's own recorded reason, so the two never disagree. Finding 8 of
+/// `01-EXTERNAL-AUDIT.md`.
+fn fixture_usage_reason(fixtures_used: &[String]) -> String {
+    format!(
+        "excluded_from_series forced true: this run was driven by fixture data ({}) rather \
+         than the real machine; a fixture text is read repeatedly for every interference \
+         snapshot, so every delta it produces is exactly zero, which must never be read as \
+         evidence of a quiet machine",
+        fixtures_used.join(", ")
+    )
 }
 
 #[cfg(test)]

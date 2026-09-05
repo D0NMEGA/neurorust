@@ -59,7 +59,7 @@ nic_wifi:     absent driver=absent
 ## Contamination verdict
 
 verdict: contaminated
-reason: contamination verdict Contaminated was reached against provisional (D-24, not yet calibrated) thresholds; see config/contamination-thresholds.json
+reason: excluded_from_series forced true: this run was driven by fixture data (NRMEASURE_FACTS_FIXTURE, NRMEASURE_INTERRUPTS_FIXTURE) rather than the real machine; a fixture text is read repeatedly for every interference snapshot, so every delta it produces is exactly zero, which must never be read as evidence of a quiet machine
 thresholds: provisional (derived from 2 runs, not a calibrated set; see config/contamination-thresholds.json)
 
 tail metrics (D-24):

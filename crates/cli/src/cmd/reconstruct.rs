@@ -291,6 +291,9 @@ pub fn run(args: Args) -> anyhow::Result<i32> {
         absent_fields: absent,
         excluded_from_series,
         exclusion_reason,
+        // A reconstructed manifest was never driven live by any fixture seam; it is
+        // rebuilt from committed recon artifacts instead.
+        fixtures_used: Vec::new(),
         notes,
     };
 

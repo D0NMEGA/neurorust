@@ -28,6 +28,14 @@
         "null"
       ]
     },
+    "fixtures_used": {
+      "description": "Test-only fixture seams active for this run, by environment variable name.\nEmpty for a real measurement.\n\nA fixture is one text read repeatedly, so every interference delta computed from\none is exactly zero, which reads as a perfectly quiet machine rather than as a\nvalue that was never measured. Any entry here forces `excluded_from_series`.\nFinding 8 of `01-EXTERNAL-AUDIT.md`.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
     "harness": {
       "$ref": "#/$defs/HarnessInfo"
     },
