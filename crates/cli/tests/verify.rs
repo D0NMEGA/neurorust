@@ -11,7 +11,12 @@ use std::fs;
 use std::path::Path;
 
 use assert_cmd::Command;
+use nr_manifest::{
+    ArtifactKind, ArtifactRecord, AttemptFailure, AttemptRecord, AttemptStatus, HarnessInfo,
+    InstrumentClass, RequestedRun, RunClass, StorageLocation,
+};
 use serde_json::Value;
+use time::OffsetDateTime;
 
 /// A complete, valid, harness-generated manifest (plan 01-03's human-reviewed worked example),
 /// whose one artifact record's blake3 is the real committed histogram capture's own digest.
@@ -625,5 +630,197 @@ fn strict_refuses_to_guess_a_missing_histogram_bound() {
     assert!(
         stdout.contains("not re-derivable: no recorded --histogram bound"),
         "stdout: {stdout}"
+    );
+}
+
+// ---------------------------------------------------------------------------------
+// Finding 7 (01-17): a failed attempt is a first-class published outcome. A
+// directory holding only an ATTEMPT.json (no manifest.json) must verify under
+// --strict when status is failed, and must not when status is in-progress or the
+// preserved array omits a capture-shaped file actually present.
+// ---------------------------------------------------------------------------------
+
+fn sample_harness() -> HarnessInfo {
+    HarnessInfo {
+        version: "0.1.0".to_string(),
+        git_sha: "0".repeat(40),
+        git_dirty: false,
+        git_sha_source: None,
+        executable_blake3: None,
+        executable_bytes: None,
+        invoked_from_git_sha: None,
+    }
+}
+
+fn sample_requested() -> RequestedRun {
+    RequestedRun {
+        run_class: RunClass::Recon,
+        instrument_class: InstrumentClass::HeadlineSeries,
+        cpus: "6-11".to_string(),
+        main_cpus: "0,1".to_string(),
+        duration_seconds: 60,
+        with_hwlatdetect: false,
+        hwlatdetect_duration_seconds: None,
+    }
+}
+
+fn write_attempt_record(run_dir: &Path, record: &AttemptRecord) {
+    fs::write(
+        run_dir.join("ATTEMPT.json"),
+        serde_json::to_string_pretty(record).expect("serialise ATTEMPT.json"),
+    )
+    .expect("write ATTEMPT.json");
+}
+
+/// Writes a directory holding only an `ATTEMPT.json` (`status: failed`, no
+/// `manifest.json`) with one preserved capture-shaped file whose recorded blake3
+/// matches the file on disk: the shape task 1 introduced, that `verify --strict`
+/// must accept.
+fn write_failed_attempt(measurements_root: &Path, run_id: &str) -> AttemptRecord {
+    let run_dir = measurements_root.join(run_id);
+    fs::create_dir_all(&run_dir).expect("mkdir run dir");
+
+    let hist_path = run_dir.join("cyclictest.hist");
+    fs::write(&hist_path, b"this is not a valid cyclictest histogram\n")
+        .expect("write preserved capture");
+    let blake3 = nr_manifest::blake3_file(&hist_path).expect("hash the preserved capture");
+    let bytes = fs::metadata(&hist_path).expect("stat the preserved capture").len();
+
+    let record = AttemptRecord {
+        schema_version: nr_manifest::ATTEMPT_SCHEMA_VERSION,
+        run_id: run_id.to_string(),
+        utc_start: OffsetDateTime::now_utc(),
+        utc_end: Some(OffsetDateTime::now_utc()),
+        status: AttemptStatus::Failed,
+        harness: sample_harness(),
+        requested: sample_requested(),
+        tools: Vec::new(),
+        preserved: vec![ArtifactRecord {
+            path: "cyclictest.hist".to_string(),
+            bytes,
+            blake3,
+            kind: ArtifactKind::CyclictestHist,
+            stored: StorageLocation::InRepo,
+        }],
+        failure: Some(AttemptFailure {
+            stage: "parse".to_string(),
+            message: "failed to parse cyclictest's .hist output: missing # Histogram header"
+                .to_string(),
+        }),
+        usable_for_numerical_analysis: false,
+    };
+    write_attempt_record(&run_dir, &record);
+    record
+}
+
+#[test]
+fn verify_accepts_a_failed_attempt_directory() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    write_failed_attempt(&measurements, "2026-09-06-precision3591-recon");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(
+        output.status.success(),
+        "a failed attempt directory must pass --strict: stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn verify_rejects_a_directory_with_neither_record() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    let run_dir = measurements.join("2026-09-06-precision3591-neither");
+    fs::create_dir_all(&run_dir).expect("mkdir run dir");
+    fs::write(run_dir.join("cyclictest.hist"), HIST_BYTES).expect("write capture");
+    // Deliberately no manifest.json and no ATTEMPT.json.
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("2026-09-06-precision3591-neither"),
+        "stdout should name the directory: {stdout}"
+    );
+}
+
+#[test]
+fn verify_rejects_an_unchecksummed_preserved_file() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    write_failed_attempt(&measurements, "2026-09-06-precision3591-recon");
+
+    // A second capture-shaped file the preserved array does not name: a partial
+    // capture must still be checksummed evidence, not exempted by directory alone.
+    fs::write(
+        measurements
+            .join("2026-09-06-precision3591-recon")
+            .join("cyclictest.json"),
+        b"{}",
+    )
+    .expect("write unaccounted capture");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("cyclictest.json"),
+        "stdout should name the unaccounted file: {stdout}"
+    );
+}
+
+#[test]
+fn verify_rejects_an_in_progress_attempt() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    let run_id = "2026-09-06-precision3591-recon";
+    let run_dir = measurements.join(run_id);
+    fs::create_dir_all(&run_dir).expect("mkdir run dir");
+
+    let record = AttemptRecord {
+        schema_version: nr_manifest::ATTEMPT_SCHEMA_VERSION,
+        run_id: run_id.to_string(),
+        utc_start: OffsetDateTime::now_utc(),
+        utc_end: None,
+        status: AttemptStatus::InProgress,
+        harness: sample_harness(),
+        requested: sample_requested(),
+        tools: Vec::new(),
+        preserved: Vec::new(),
+        failure: None,
+        usable_for_numerical_analysis: false,
+    };
+    write_attempt_record(&run_dir, &record);
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(
+        !output.status.success(),
+        "a run left in-progress must fail strict verification, not be committable"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains(run_id), "stdout should name the run: {stdout}");
+    assert!(
+        stdout.to_lowercase().contains("in-progress") || stdout.to_lowercase().contains("unfinished"),
+        "stdout should describe the run as unfinished: {stdout}"
     );
 }

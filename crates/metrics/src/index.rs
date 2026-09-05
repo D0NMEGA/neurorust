@@ -74,3 +74,64 @@ fn render_optional_us(value: Option<u64>) -> String {
         None => "unavailable".to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nr_manifest::{ContaminationVerdict, ProvenanceTier};
+
+    /// BENCH-06: a failed attempt (task 1's `AttemptRecord`, no manifest) gets a
+    /// row here too, with `unavailable` in both numeric columns, `no` in the in
+    /// series column, and the failure stage and message in the reason column.
+    /// Finding 7 of `01-EXTERNAL-AUDIT.md`.
+    #[test]
+    fn index_lists_a_failed_attempt() {
+        let failed = RunSummary {
+            date: "2026-09-06".to_string(),
+            run_id: "2026-09-06-precision3591-recon".to_string(),
+            run_class: RunClass::Recon,
+            instrument_class: InstrumentClass::HeadlineSeries,
+            provenance_tier: ProvenanceTier::HarnessGenerated,
+            verdict: None,
+            p99_us: None,
+            max_us: None,
+            in_series: false,
+            reason: Some(
+                "attempt failed at parse: failed to parse cyclictest's .hist output".to_string(),
+            ),
+            outcome: RunOutcome::FailedAttempt,
+        };
+
+        let index = render_index(&[failed]);
+        let row = index
+            .lines()
+            .find(|line| line.contains("2026-09-06-precision3591-recon"))
+            .expect("a row for the failed attempt");
+        assert!(row.contains("unavailable"), "row: {row}");
+        assert!(row.contains("| no |"), "row: {row}");
+        assert!(row.contains("attempt failed at parse"), "row: {row}");
+
+        // A measured run's verdict cell is unaffected: still the real verdict, not
+        // "unavailable".
+        let measured = RunSummary {
+            date: "2026-09-06".to_string(),
+            run_id: "2026-09-06-precision3591-measured".to_string(),
+            run_class: RunClass::Weekly,
+            instrument_class: InstrumentClass::HeadlineSeries,
+            provenance_tier: ProvenanceTier::HarnessGenerated,
+            verdict: Some(ContaminationVerdict::Clean),
+            p99_us: Some(9),
+            max_us: Some(30),
+            in_series: true,
+            reason: None,
+            outcome: RunOutcome::Measured,
+        };
+        let index = render_index(&[measured]);
+        let row = index
+            .lines()
+            .find(|line| line.contains("2026-09-06-precision3591-measured"))
+            .expect("a row for the measured run");
+        assert!(row.contains("clean"), "row: {row}");
+        assert!(!row.contains("unavailable"), "row: {row}");
+    }
+}
