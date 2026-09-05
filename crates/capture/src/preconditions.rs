@@ -82,7 +82,7 @@ pub fn run_all(facts: &dyn SystemFacts, spec: &PreconditionSpec) -> Vec<Precondi
         check_no_active_login_sessions(facts),
         check_governor_is_performance(facts),
         check_no_turbo_enabled(facts),
-        check_deep_cstates_disabled(facts),
+        check_deep_cstates_disabled(facts, &spec.target_cpus),
         check_isolcpus_covers_target_cpus(facts, &spec.target_cpus),
         check_kernel_is_realtime(facts),
         check_rt_tuning_service_active(facts),
@@ -377,37 +377,83 @@ fn check_no_turbo_enabled(facts: &dyn SystemFacts) -> PreconditionResult {
     }
 }
 
-/// A deep C-state that was never registered by the cpuidle driver (e.g. under
-/// `intel_idle.max_cstate=1`) cannot fire, so its absence counts as satisfied rather
-/// than as a failure to read a `disable` flag that does not exist. See
+/// One target CPU's reading for one deep C-state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CstateStatus {
+    Disabled,
+    Enabled,
+    NotPresent,
+}
+
+impl CstateStatus {
+    /// `cpu{N}.{state}={word}` form, used once any target CPU disagrees with another
+    /// and every one must be named explicitly.
+    fn per_cpu_word(self) -> &'static str {
+        match self {
+            CstateStatus::Disabled => "disabled",
+            CstateStatus::Enabled => "enabled",
+            CstateStatus::NotPresent => "not-present",
+        }
+    }
+
+    /// `{state} {words} on cpus {range}` form, used when every target CPU agrees.
+    fn summary_word(self) -> &'static str {
+        match self {
+            CstateStatus::Disabled => "disabled",
+            CstateStatus::Enabled => "enabled",
+            CstateStatus::NotPresent => "not present",
+        }
+    }
+}
+
+/// A deep C-state that was never registered by the cpuidle driver on a given CPU (e.g.
+/// under `intel_idle.max_cstate=1`) cannot fire there, so its absence counts as
+/// satisfied rather than as a failure to read a `disable` flag that does not exist. See
 /// `docs/rig/recon-2026-08-31/FINDINGS.md`, "Downstream implication for plan 01-05".
-fn check_deep_cstates_disabled(facts: &dyn SystemFacts) -> PreconditionResult {
+///
+/// Reads every CPU in `target_cpus`, not only `cpu0`: the rig tunes C-states per CPU
+/// through sysfs, and a run that isolates CPUs 6 to 11 learns nothing about them from
+/// cpu0's cpuidle tree. Finding 8 of `01-EXTERNAL-AUDIT.md`.
+fn check_deep_cstates_disabled(facts: &dyn SystemFacts, target_cpus: &[u32]) -> PreconditionResult {
     let expected = "C6 disabled, C10 disabled";
-    let states = discover_cstates(facts, 0);
-    if states.is_empty() {
+
+    let per_cpu_states: Vec<(u32, Vec<(String, bool)>)> = target_cpus
+        .iter()
+        .map(|&cpu| (cpu, discover_cstates(facts, cpu)))
+        .collect();
+
+    if per_cpu_states.iter().all(|(_, states)| states.is_empty()) {
         return unavailable(
             PreconditionCheck::DeepCstatesDisabled,
-            "no cpuidle states found on cpu0",
+            format!(
+                "no cpuidle states found on cpus {}",
+                format_cpu_ranges(target_cpus)
+            ),
             expected,
         );
     }
 
-    let mut observed_parts = Vec::new();
-    let mut violated = false;
-    for target in TARGET_DEEP_CSTATES {
-        match states.iter().find(|(name, _)| name == target) {
-            Some((_, disabled)) => {
-                observed_parts.push(format!(
-                    "{target}={}",
-                    if *disabled { "disabled" } else { "enabled" }
-                ));
-                if !disabled {
-                    violated = true;
+    // (cpu, target state name, status), one entry per (CPU, state) pair.
+    let mut observations: Vec<(u32, &str, CstateStatus)> = Vec::new();
+    for (cpu, states) in &per_cpu_states {
+        for target in TARGET_DEEP_CSTATES {
+            let status = match states.iter().find(|(name, _)| name == target) {
+                Some((_, disabled)) => {
+                    if *disabled {
+                        CstateStatus::Disabled
+                    } else {
+                        CstateStatus::Enabled
+                    }
                 }
-            }
-            None => observed_parts.push(format!("{target} not present")),
+                None => CstateStatus::NotPresent,
+            };
+            observations.push((*cpu, target, status));
         }
     }
+
+    let violated = observations
+        .iter()
+        .any(|(_, _, status)| *status == CstateStatus::Enabled);
 
     PreconditionResult {
         check: PreconditionCheck::DeepCstatesDisabled,
@@ -416,9 +462,61 @@ fn check_deep_cstates_disabled(facts: &dyn SystemFacts) -> PreconditionResult {
         } else {
             PreconditionStatus::Pass
         },
-        observed: observed_parts.join(", "),
+        observed: format_cstate_observations(&observations, target_cpus),
         expected: expected.to_string(),
     }
+}
+
+/// Renders [`check_deep_cstates_disabled`]'s observed string. When every target CPU
+/// agrees on both states, collapses to one summary naming the whole CPU range (e.g.
+/// `C6 not present, C10 not present on cpus 6-11`), so a report table stays short in
+/// the overwhelmingly common case. A disagreement is never collapsed: the moment
+/// either state differs across the target CPUs, every CPU and both states are named
+/// explicitly (e.g. `cpu6.C6=not-present cpu6.C10=not-present cpu7.C6=enabled ...`),
+/// so the CPU whose state differs from the others cannot be lost inside a summary.
+fn format_cstate_observations(
+    observations: &[(u32, &str, CstateStatus)],
+    target_cpus: &[u32],
+) -> String {
+    let mut summary_words = Vec::new();
+    let mut any_disagreement = false;
+
+    for target in TARGET_DEEP_CSTATES {
+        let mut statuses = observations
+            .iter()
+            .filter(|(_, name, _)| *name == target)
+            .map(|(_, _, status)| *status);
+        let first_status = statuses.next();
+        let uniform = first_status.is_some_and(|first| statuses.all(|status| status == first));
+        if uniform {
+            summary_words.push(format!("{target} {}", first_status.unwrap().summary_word()));
+        } else {
+            any_disagreement = true;
+        }
+    }
+
+    if !any_disagreement {
+        return format!(
+            "{} on cpus {}",
+            summary_words.join(", "),
+            format_cpu_ranges(target_cpus)
+        );
+    }
+
+    let mut sorted_cpus = target_cpus.to_vec();
+    sorted_cpus.sort_unstable();
+    let mut parts = Vec::new();
+    for cpu in sorted_cpus {
+        for target in TARGET_DEEP_CSTATES {
+            let status = observations
+                .iter()
+                .find(|(c, name, _)| *c == cpu && *name == target)
+                .map(|(_, _, status)| *status)
+                .unwrap_or(CstateStatus::NotPresent);
+            parts.push(format!("cpu{cpu}.{target}={}", status.per_cpu_word()));
+        }
+    }
+    parts.join(" ")
 }
 
 fn check_isolcpus_covers_target_cpus(
@@ -588,41 +686,89 @@ fn check_no_package_manager_activity(facts: &dyn SystemFacts) -> PreconditionRes
     }
 }
 
-/// RESEARCH.md pattern 2, mechanised: a headline-class run is refused when a tracer
-/// is armed, so an investigation run's overhead can never leak into the published
-/// series, even by mistake.
+/// The sysfs controls that can each independently arm tracing on this kernel, paired
+/// with the value each must read for `TracersQuiescent` to pass on a `HeadlineSeries`
+/// run. `current_tracer` is only one of several independent controls under
+/// `/sys/kernel/tracing/`: `events/enable`, `set_event` and `tracing_on` can each arm
+/// tracing without ever changing `current_tracer`, so `current_tracer == nop` alone
+/// let a headline run pass with event tracing active. All four are confirmed present
+/// on this kernel in `docs/rig/recon-2026-08-31/available-tracers.txt`. Finding 8 of
+/// `01-EXTERNAL-AUDIT.md`.
+const TRACING_CONTROLS: [(&str, &str); 4] = [
+    ("current_tracer", "nop"),
+    ("events/enable", "0"),
+    ("set_event", ""),
+    ("tracing_on", "0"),
+];
+
+/// RESEARCH.md pattern 2, mechanised: a headline-class run is refused when any tracing
+/// control is armed, so an investigation run's overhead can never leak into the
+/// published series, even by mistake.
 fn check_tracers_quiescent(
     facts: &dyn SystemFacts,
     instrument_class: &InstrumentClass,
 ) -> PreconditionResult {
-    let expected = "nop";
-    let observed = facts
-        .read_text("/sys/kernel/tracing/current_tracer")
-        .map(|t| t.trim().to_string());
+    let expected = "current_tracer=nop, events/enable=0, set_event=(empty), tracing_on=0";
 
     match instrument_class {
-        InstrumentClass::HeadlineSeries => match observed {
-            Ok(tracer) => PreconditionResult {
+        InstrumentClass::HeadlineSeries => {
+            let mut observed_parts = Vec::new();
+            let mut any_readable = false;
+            let mut violated = false;
+
+            for (name, quiescent) in TRACING_CONTROLS {
+                match facts.read_text(&format!("/sys/kernel/tracing/{name}")) {
+                    Ok(value) => {
+                        any_readable = true;
+                        let value = value.trim();
+                        if value != quiescent {
+                            violated = true;
+                        }
+                        observed_parts.push(format!(
+                            "{name}={}",
+                            if value.is_empty() { "(empty)" } else { value }
+                        ));
+                    }
+                    // Not a violation (a control that does not exist on this kernel
+                    // cannot arm anything), but recorded so the result says which
+                    // controls were actually readable rather than silently omitting
+                    // one.
+                    Err(_) => observed_parts.push(format!("{name}=unavailable")),
+                }
+            }
+
+            if !any_readable {
+                return unavailable(
+                    PreconditionCheck::TracersQuiescent,
+                    observed_parts.join(" "),
+                    expected,
+                );
+            }
+
+            PreconditionResult {
                 check: PreconditionCheck::TracersQuiescent,
-                status: if tracer == expected {
-                    PreconditionStatus::Pass
-                } else {
+                status: if violated {
                     PreconditionStatus::Fail
+                } else {
+                    PreconditionStatus::Pass
                 },
-                observed: tracer,
+                observed: observed_parts.join(" "),
                 expected: expected.to_string(),
-            },
-            Err(_) => unavailable(
-                PreconditionCheck::TracersQuiescent,
-                "current_tracer not available",
-                expected,
-            ),
-        },
-        InstrumentClass::Investigation => PreconditionResult {
-            check: PreconditionCheck::TracersQuiescent,
-            status: PreconditionStatus::NotApplicable,
-            observed: observed.unwrap_or_else(|_| "unavailable".to_string()),
-            expected: expected.to_string(),
-        },
+            }
+        }
+        InstrumentClass::Investigation => {
+            // Unchanged from before this plan: only current_tracer is recorded,
+            // since tracing is the point of an investigation run.
+            let observed = facts
+                .read_text("/sys/kernel/tracing/current_tracer")
+                .map(|t| t.trim().to_string())
+                .unwrap_or_else(|_| "unavailable".to_string());
+            PreconditionResult {
+                check: PreconditionCheck::TracersQuiescent,
+                status: PreconditionStatus::NotApplicable,
+                observed,
+                expected: expected.to_string(),
+            }
+        }
     }
 }

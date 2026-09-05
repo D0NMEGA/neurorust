@@ -150,7 +150,14 @@ fn tracers_quiescent_refuses_headline_run() {
         .find(|r| r.check == PreconditionCheck::TracersQuiescent)
         .expect("TracersQuiescent result present");
     assert_eq!(tracer_result.status, PreconditionStatus::Fail);
-    assert_eq!(tracer_result.observed, "timerlat");
+    // VIOLATED only ever captured current_tracer; the other three controls are
+    // genuinely absent from this fixture and read back as unavailable, not as a
+    // second, fabricated violation.
+    assert_eq!(
+        tracer_result.observed,
+        "current_tracer=timerlat events/enable=unavailable set_event=unavailable \
+         tracing_on=unavailable"
+    );
 }
 
 #[test]
@@ -468,13 +475,34 @@ fn deep_cstates_reports_per_cpu_observation() {
     }
 }
 
-/// No target CPU registers C6 or C10 at all (the real `intel_idle.max_cstate=1`
-/// rationale `RIG_AS_FOUND` already reflects for cpu0), so every target CPU passes by
-/// absence, and the observed string still names every CPU checked, collapsed to a
-/// range since every one of them agrees.
+/// Extends a fixture with a real per-CPU cpuidle registration (POLL, C1E; no C6/C10)
+/// on every target CPU, matching the fact that `intel_idle.max_cstate=1` is a global
+/// boot parameter rather than a per-CPU setting: every core on this rig registers the
+/// same states. `RIG_AS_FOUND`'s own probe only ever read cpu0 (exactly the limitation
+/// this plan closes), so a test that needs a genuine "registered but absent" reading
+/// on the isolated cores, rather than "no data was read at all", supplies this
+/// explicitly.
+fn cstates_present_on_every_target_cpu() -> String {
+    let mut text = String::new();
+    for cpu in TARGET_CPUS {
+        text.push_str(&format!(
+            "/sys/devices/system/cpu/cpu{cpu}/cpuidle/state0/name=POLL\n\
+             /sys/devices/system/cpu/cpu{cpu}/cpuidle/state0/disable=0\n\
+             /sys/devices/system/cpu/cpu{cpu}/cpuidle/state1/name=C1E\n\
+             /sys/devices/system/cpu/cpu{cpu}/cpuidle/state1/disable=0\n"
+        ));
+    }
+    text
+}
+
+/// No target CPU registers C6 or C10 at all (only POLL and C1E, the real
+/// `intel_idle.max_cstate=1` rationale), so every target CPU passes by absence, and
+/// the observed string still names every CPU checked, collapsed to a range since
+/// every one of them agrees.
 #[test]
 fn deep_cstates_absent_states_still_pass() {
-    let facts = FixtureFacts::parse(RIG_AS_FOUND);
+    let text = format!("{RIG_AS_FOUND}\n{}", cstates_present_on_every_target_cpu());
+    let facts = FixtureFacts::parse(&text);
     let result = deep_cstates_result(&run_all(&facts, &headline_spec()));
     assert_eq!(result.status, PreconditionStatus::Pass, "{result:#?}");
     assert_eq!(

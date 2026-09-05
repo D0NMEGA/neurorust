@@ -296,3 +296,25 @@ audit record and the fix can be read together.
   could not.
   It also gives the harness a cheap, exact provenance field: SMI count per isolated CPU over
   the run, recordable in the manifest beside the interference counters.
+
+## From 01-18 (finding 8: `TracersQuiescent` now requires four controls, not one)
+
+- **`scripts/nr-measure-mode` sets only `current_tracer=nop` and is now insufficient to
+  satisfy `TracersQuiescent`.** This plan widened the check to require `events/enable=0`,
+  `set_event=` (empty) and `tracing_on=0` in addition to `current_tracer=nop`, since any of
+  the three can arm tracing independently of `current_tracer` (finding 8,
+  `01-EXTERNAL-AUDIT.md`). This is the intended, stricter outcome, not a regression to work
+  around. The rig's own `nr-measure-mode` script (referenced in
+  `docs/measurement-protocol.md`'s "The governor operating point" workflow) needs the three
+  additional writes:
+  ```
+  echo 0 | sudo tee /sys/kernel/tracing/events/enable
+  echo   | sudo tee /sys/kernel/tracing/set_event
+  echo 0 | sudo tee /sys/kernel/tracing/tracing_on
+  ```
+  Owner: plan 01-22, which re-installs the rig's scripts (per STATE.md's "Rig root access"
+  blocker). Until then, a real run against the unpatched script will correctly fail
+  `TracersQuiescent` if event tracing, `set_event`, or `tracing_on` happen to be armed from
+  an earlier investigation session; the operator can still satisfy the check by hand with
+  the four `echo`/`tee` commands in `docs/measurement-protocol.md`'s "Required system state"
+  table.

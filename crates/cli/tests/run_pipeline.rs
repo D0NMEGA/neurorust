@@ -83,6 +83,27 @@ fn tuned_facts_text() -> String {
     lines.push("login.local_sessions=".to_string());
     lines.push("cpu.isolated=6-11".to_string());
     lines.push("service.rt-tuning.service.ActiveState=active".to_string());
+    // `DeepCstatesDisabled` now reads every target CPU's own cpuidle tree (finding 8,
+    // 01-EXTERNAL-AUDIT.md) rather than cpu0's alone. `CLEAN_FACTS` only ever probed
+    // cpu0 (POLL, C1E; no C6/C10 registered, the `intel_idle.max_cstate=1` rationale),
+    // so a genuinely tuned reading of the isolated cores (6-11, matching `--cpus 6-11`
+    // in `base_run_command`) must be supplied explicitly here, or every full-pipeline
+    // test below would see `Unavailable` (no data was ever read for those CPUs) rather
+    // than the intended `Pass`.
+    for cpu in 6..=11 {
+        lines.push(format!(
+            "/sys/devices/system/cpu/cpu{cpu}/cpuidle/state0/name=POLL"
+        ));
+        lines.push(format!(
+            "/sys/devices/system/cpu/cpu{cpu}/cpuidle/state0/disable=0"
+        ));
+        lines.push(format!(
+            "/sys/devices/system/cpu/cpu{cpu}/cpuidle/state1/name=C1E"
+        ));
+        lines.push(format!(
+            "/sys/devices/system/cpu/cpu{cpu}/cpuidle/state1/disable=0"
+        ));
+    }
     format!("{}\n{D14_ENVIRONMENT_FIXTURE}", lines.join("\n"))
 }
 

@@ -47,14 +47,14 @@ nic_wifi:     absent driver=absent
 | no-active-login-sessions | pass | none | no local console login session |
 | governor-is-performance-on-all-cpus | pass | performance on 22 CPUs | performance on all CPUs |
 | no-turbo-enabled | pass | 1 | 1 |
-| deep-cstates-disabled | pass | C6 not present, C10 not present | C6 disabled, C10 disabled |
+| deep-cstates-disabled | pass | C6 not present, C10 not present on cpus 6-11 | C6 disabled, C10 disabled |
 | isolcpus-covers-target-cpus | pass | 6-11 | 6-11 |
 | kernel-is-realtime | pass | 1 | 1 |
 | rt-tuning-service-active | pass | active | active |
 | on-ac-power | pass | AC=1 | AC=1 |
 | thermal-headroom-at-start | pass | 40.0 C | package temp <= 70 C |
 | no-package-manager-activity | pass | none | no apt, dpkg, unattended-upgrade or snapd process |
-| tracers-quiescent | pass | nop | nop |
+| tracers-quiescent | pass | current_tracer=nop events/enable=unavailable set_event=unavailable tracing_on=unavailable | current_tracer=nop, events/enable=0, set_event=(empty), tracing_on=0 |
 
 ## Contamination verdict
 
