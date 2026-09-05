@@ -1,0 +1,27 @@
+hwlatdetect:  test duration 900 seconds
+   detector: tracer
+   parameters:
+        CPU list:          None
+        Latency threshold: 10us
+        Sample window:      1000000us
+        Sample width:      500000us
+     Non-sampling period:  500000us
+        Output File:       None
+
+Starting test
+test finished
+Max Latency: 15us
+Samples recorded: 12
+Samples exceeding threshold: 12
+ts: 1788583846.221605298, inner:8, outer:12, cpu:5
+ts: 1788583850.576680603, inner:11, outer:6, cpu:5
+ts: 1788583855.660434540, inner:8, outer:11, cpu:5
+ts: 1788583886.134113234, inner:11, outer:6, cpu:5
+ts: 1788583951.160012533, inner:9, outer:12, cpu:5
+ts: 1788583952.174015188, inner:9, outer:11, cpu:5
+ts: 1788583957.214401892, inner:11, outer:14, cpu:5
+ts: 1788583974.363335310, inner:12, outer:14, cpu:5
+ts: 1788583983.447143080, inner:15, outer:8, cpu:5
+ts: 1788584033.472680827, inner:8, outer:11, cpu:5
+ts: 1788584145.887591300, inner:14, outer:7, cpu:5
+ts: 1788584216.304601179, inner:12, outer:9, cpu:5

@@ -191,3 +191,39 @@ audit record and the fix can be read together.
   filled with the maximum, and its regression guard uses `merge-base origin/main HEAD`, which
   on a main-branch push makes the diff empty and lets through exactly the simultaneous
   baseline change it exists to prohibit.
+
+## From 01-11 (surfaced by the D-18 arm 2 capture itself, 2026-09-05)
+
+- **`RuntimeMaxSec` is silently ignored on a `Type=oneshot` unit, so the runaway guard
+  added in 178c7e8 does nothing.** systemd said so directly in the journal:
+  `nr-measurement.service: RuntimeMaxSec= has no effect in combination with Type=oneshot.
+  Ignoring.` The whole point of that commit was to stop a hung capture from wedging the rig
+  the way the `--duration 0` cyclictest did, and it does not. For a oneshot unit the entire
+  run is the start phase, so the equivalent bound is `TimeoutStartSec=`. Change
+  `scripts/nr-run-measurement` to pass `--property=TimeoutStartSec=` instead, and verify the
+  journal no longer prints the "has no effect" line, because that line is the only reason
+  this was caught. Requires one interactive sudo session on the rig to re-install the script,
+  so it is queued rather than fixed in place. Until then a hung capture still needs the
+  operator's password to clear.
+
+- **`hwlatdetect` exits 1 when it finds latency above the hard limit, and the harness reports
+  that as a tool failure.** `warn_on_tool_failure` printed `warning: hwlatdetect exited with
+  code 1` for arm 2, which reads as a broken capture. It was not: the tool ran to completion
+  and produced `Max Latency: 15us, Samples recorded: 12, Samples exceeding threshold: 12`.
+  `/usr/sbin/hwlatdetect` line 549 is `sys.exit(maxlatency > hardlimit)`, and line 458
+  defaults `hardlimit` to the threshold when `--hardlimit` is not passed, so any run that
+  observes anything above 10 us exits 1 by design. For a firmware screen that is the expected
+  outcome, not an error. Teach the harness the difference, or the D-18 arms will always look
+  like failures and a real failure will be indistinguishable from a finding.
+
+- **Open question, and the most consequential thing arm 2 produced: all 12 events landed on
+  CPU 5.** Not one on the isolated cores 6-11 that the runtime actually uses. This is the same
+  shape as the 2026-08-28 baseline, where all 13 P-core-arm events named CPU 0. With no
+  `--cpu-list`, `hwlatdetect` leaves `tracing_cpumask` at the system default and the hwlat
+  tracer round-robins under it (`/usr/sbin/hwlatdetect` only writes the mask when `--cpu-list`
+  is given, lines 491-502). Two candidate explanations, not yet distinguished: either the
+  tracer genuinely rotated and only CPU 5 exhibited gaps above threshold, or the tracer kthread
+  never sampled 6-11 at all under `isolcpus=6-11`/`nohz_full=6-11`. These have opposite
+  meanings, and the second would mean an unrestricted `hwlatdetect` run on this rig says
+  nothing whatsoever about the isolated cores. Arm 3, which passes `--hwlatdetect-cpu-list
+  0-11` and therefore writes the mask explicitly, is the experiment that separates them.
