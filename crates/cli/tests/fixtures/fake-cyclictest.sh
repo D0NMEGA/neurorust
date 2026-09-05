@@ -10,6 +10,11 @@
 # FAKE_CYCLICTEST_MARKER, if set, is touched on every invocation EXCEPT --version.
 # It lets a test prove that the measurement never started, which is how the
 # fail-fast ordering of run.rs step 1 is asserted rather than assumed.
+#
+# FAKE_CYCLICTEST_ARGV_FILE, if set, receives the exact argv this script was
+# invoked with (excluding --version calls), one argument per line. A test uses
+# this to assert the manifest records the executed argv byte for byte, rather
+# than trusting a hand-reconstructed expectation of what the harness passed.
 
 REAL_HIST="$(dirname "$0")/../../../histogram/tests/fixtures/cyclictest-rt-isolated-idle-10m.hist"
 
@@ -32,6 +37,12 @@ done
 
 if [ -n "$FAKE_CYCLICTEST_MARKER" ]; then
   : > "$FAKE_CYCLICTEST_MARKER"
+fi
+
+if [ -n "$FAKE_CYCLICTEST_ARGV_FILE" ]; then
+  for arg in "$@"; do
+    printf '%s\n' "$arg" >> "$FAKE_CYCLICTEST_ARGV_FILE"
+  done
 fi
 
 if [ -n "$histfile" ]; then

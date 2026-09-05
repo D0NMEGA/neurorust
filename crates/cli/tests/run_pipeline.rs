@@ -676,3 +676,208 @@ fn harness_git_sha_source_is_explicit() {
          previous code reported false unconditionally whenever git could not be read)"
     );
 }
+
+// ---------------------------------------------------------------------------------
+// Recorded argv and artifact_paths: the argv is byte for byte what ran, and every
+// output-file path in it maps to a named artifact (finding 6 of
+// 01-EXTERNAL-AUDIT.md). Relativizing argv against the run directory used to match
+// nothing, because the tools actually wrote into a scratch tempdir under /tmp.
+// ---------------------------------------------------------------------------------
+
+/// The manifest's cyclictest argv is exactly what the process received, byte for
+/// byte, with no rewriting attempted against it.
+#[test]
+fn argv_is_recorded_as_executed() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let facts_path = write_fixture(temp.path(), "facts.txt", &tuned_facts_text());
+    let interrupts_path = write_fixture(temp.path(), "interrupts.txt", INTERRUPTS);
+    let measurements_root = temp.path().join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+    let argv_log = temp.path().join("cyclictest-argv.log");
+
+    let output = base_run_command(&measurements_root)
+        .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
+        .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+        .env("FAKE_CYCLICTEST_ARGV_FILE", &argv_log)
+        .args(["--class", "recon"])
+        .output()
+        .expect("nrmeasure runs");
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let executed_argv: Vec<String> = std::fs::read_to_string(&argv_log)
+        .expect("the fake cyclictest logged the argv it received")
+        .lines()
+        .map(|s| s.to_string())
+        .collect();
+    assert!(!executed_argv.is_empty(), "the fake tool must have logged something");
+
+    let entries: Vec<_> = std::fs::read_dir(&measurements_root)
+        .expect("read_dir")
+        .filter_map(|entry| entry.ok())
+        .collect();
+    let run_dir = entries[0].path();
+    let manifest: RunManifest = serde_json::from_str(
+        &std::fs::read_to_string(run_dir.join("manifest.json")).expect("read manifest.json"),
+    )
+    .expect("manifest.json parses");
+    let cyclictest = manifest
+        .tools
+        .iter()
+        .find(|t| t.name == "cyclictest")
+        .expect("cyclictest ran");
+
+    // tools[].argv is [name, ...args]; the log captured only the args.
+    assert_eq!(
+        &cyclictest.argv[1..],
+        executed_argv.as_slice(),
+        "the recorded argv must be byte for byte what the process actually received"
+    );
+
+    let histfile_arg = cyclictest
+        .argv
+        .iter()
+        .find(|a| a.starts_with("--histfile="))
+        .expect("--histfile is always passed");
+    let histfile_value = histfile_arg.strip_prefix("--histfile=").unwrap();
+    assert!(
+        Path::new(histfile_value).is_absolute(),
+        "the scratch path cyclictest actually wrote into is absolute: {histfile_value:?}"
+    );
+}
+
+/// Every entry of `tools[].artifact_paths` names an artifact that actually exists in
+/// this manifest's own `artifacts` array, and its `executed_path` actually appears
+/// in that tool's own recorded argv.
+#[test]
+fn artifact_path_mapping_names_every_output() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let run_dir = run_full_pipeline(temp.path());
+    let manifest: RunManifest = serde_json::from_str(
+        &std::fs::read_to_string(run_dir.join("manifest.json")).expect("read manifest.json"),
+    )
+    .expect("manifest.json parses");
+
+    let artifact_names: Vec<&str> = manifest.artifacts.iter().map(|a| a.path.as_str()).collect();
+    let mut total_mappings = 0usize;
+    for tool in &manifest.tools {
+        for mapping in &tool.artifact_paths {
+            total_mappings += 1;
+            assert!(
+                artifact_names.contains(&mapping.artifact_path.as_str()),
+                "{}'s artifact_paths names {:?}, which is not in artifacts: {artifact_names:?}",
+                tool.name,
+                mapping.artifact_path
+            );
+            assert!(
+                tool.argv
+                    .iter()
+                    .any(|a| a.contains(&mapping.executed_path)),
+                "executed_path {:?} does not appear in {}'s own argv: {:?}",
+                mapping.executed_path,
+                tool.name,
+                tool.argv
+            );
+        }
+    }
+    assert!(
+        total_mappings > 0,
+        "the pipeline must produce at least one artifact_paths mapping"
+    );
+
+    let cyclictest = manifest
+        .tools
+        .iter()
+        .find(|t| t.name == "cyclictest")
+        .expect("cyclictest ran");
+    assert!(
+        cyclictest
+            .artifact_paths
+            .iter()
+            .any(|m| m.artifact_path == "cyclictest.hist"),
+        "cyclictest.hist must be mapped: {:?}",
+        cyclictest.artifact_paths
+    );
+}
+
+/// An argv element (or an `artifact_paths.executed_path`) under the process's home
+/// directory is recorded with the home prefix replaced by the literal token
+/// `[redacted]` (T-1-06, T-1-48): `scripts/nr-run-measurement` passes
+/// `--measurements-root /home/<user>/neurorust/measurements` on every rig
+/// invocation, and the scratch directory the tools actually write into would carry
+/// the same exposure if `$TMPDIR` (or an equivalent) ever pointed under home.
+#[test]
+fn argv_redacts_a_home_directory_prefix() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let facts_path = write_fixture(temp.path(), "facts.txt", &tuned_facts_text());
+    let interrupts_path = write_fixture(temp.path(), "interrupts.txt", INTERRUPTS);
+    let measurements_root = temp.path().join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+
+    // A directory shaped like a real home directory, forced as both $HOME and
+    // $TMPDIR for the subprocess, so the scratch tempdir() it creates for
+    // cyclictest's own output actually lands under it.
+    let fake_home = temp.path().join("home-precision3591-fake");
+    std::fs::create_dir_all(&fake_home).expect("mkdir fake home");
+
+    let output = base_run_command(&measurements_root)
+        .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
+        .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+        .env("HOME", &fake_home)
+        .env("TMPDIR", &fake_home)
+        .args(["--class", "recon"])
+        .output()
+        .expect("nrmeasure runs");
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let entries: Vec<_> = std::fs::read_dir(&measurements_root)
+        .expect("read_dir")
+        .filter_map(|entry| entry.ok())
+        .collect();
+    let manifest: RunManifest = serde_json::from_str(
+        &std::fs::read_to_string(entries[0].path().join("manifest.json"))
+            .expect("read manifest.json"),
+    )
+    .expect("manifest.json parses");
+    let cyclictest = manifest
+        .tools
+        .iter()
+        .find(|t| t.name == "cyclictest")
+        .expect("cyclictest ran");
+
+    let fake_home_str = fake_home.display().to_string();
+    let histfile_arg = cyclictest
+        .argv
+        .iter()
+        .find(|a| a.starts_with("--histfile="))
+        .expect("--histfile is always passed");
+    assert!(
+        histfile_arg.starts_with("--histfile=[redacted]"),
+        "expected the home-directory prefix to be redacted, got {histfile_arg:?}"
+    );
+    assert!(
+        !histfile_arg.contains(&fake_home_str),
+        "the real home path must not survive redaction: {histfile_arg:?}"
+    );
+
+    let mapping = cyclictest
+        .artifact_paths
+        .iter()
+        .find(|m| m.artifact_path == "cyclictest.hist")
+        .expect("cyclictest.hist mapping present");
+    assert!(
+        mapping.executed_path.starts_with("[redacted]"),
+        "executed_path must also be redacted: {:?}",
+        mapping.executed_path
+    );
+    assert!(!mapping.executed_path.contains(&fake_home_str));
+}
