@@ -146,6 +146,37 @@ comparison is SUBS-06 in Phase 3, not here.
   Ideas below for the exact errors and the corrected figures. Correcting a published artifact
   that misstates its own raw data is this phase's subject matter, not scope creep.
 
+### Gap closure after the external audit (added 2026-09-05)
+
+An external adversarial audit (`01-EXTERNAL-AUDIT.md`, codex-cli, gpt-6-astra, read-only,
+2026-09-04) found ten methodology and implementation defects. Findings 1, 2 and 4 were closed
+during plan 01-11. Separately, executing D-18 established that `hwlatdetect` cannot sample the
+isolated cores at all on this kernel, which removed the instrument plan 01-13 was written to
+consume. The operator settled three questions before replanning.
+
+- **D-25:** Do both. Write new plans that close the open shipped-code defects, and rewrite the
+  four unexecuted plans 01-12 through 01-15 in place so they no longer carry known-invalid
+  instructions. Rationale: leaving a defect in a plan that has not run yet is cheaper to fix than
+  leaving it in code that has.
+- **D-26:** Rig access is granted by a narrowly-scoped passwordless sudoers entry, specified and
+  version controlled in this repository rather than typed at the rig from memory. The authorized
+  surface stays as narrow as the three argument-free scripts already granted: a fixed script path,
+  root-owned and not writable by the invoking user, with no operator-supplied argument reaching a
+  shell and every path it writes to pinned by the script itself. Not blanket NOPASSWD on
+  `nrmeasure`. Plan 01-22 owns it and its first task is `checkpoint:human-action`, because only
+  the operator can edit `/etc/sudoers.d/`.
+- **D-27:** Build the real instruments rather than reinterpret the broken one. `rtla hwnoise
+  -c 6-11 -H 0-5` replaces `hwlatdetect` as the D-18 firmware instrument: it runs one osnoise
+  thread per CPU in the list and keeps its own control threads off the measured cores, and it is
+  already installed (rtla 7.0.12, from `linux-tools-common`, recorded in STATE.md since plan
+  01-02). Alongside it, install `msr-tools` and read `MSR_SMI_COUNT` (`rdmsr -p <cpu> 0x34`)
+  before and after every run as an exact per-CPU SMI count, recorded in the manifest beside the
+  interference counters.
+  D-27 does not reopen D-22. Audit finding 1 stands: the firmware observation is never subtracted
+  from the scheduling maximum, however good the firmware number becomes.
+  `render_plat03_verdict` (commit ece44b0) reports the two figures side by side, attributed to
+  their source runs and conditions, and states that they are not combined. Keep it that way.
+
 ### Claude's Discretion
 
 The publication surface and run matrix were reviewed and left to Claude:

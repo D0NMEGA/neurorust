@@ -2,16 +2,16 @@
 donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: "Blocked mid-plan: 01-11 task 2 needs a rig-access decision (see 01-11-SUMMARY.md checkpoint); task 3 closed"
-stopped_at: 01-11 task 2 blocked (rig root access), task 3 closed
+status: "Planned: phase 1 replanned to 23 plans in 18 waves after the external audit; 11 executed, waves 8 to 18 pending"
+stopped_at: 01-11 complete (PARTIAL); phase replanned 2026-09-05, next is wave 8
 last_updated: "2026-09-05T14:36:30.079Z"
-last_activity: "2026-09-04 -- 01-11 resumed: task 3 closed, D-18 rig captures blocked on missing root access"
+last_activity: "2026-09-05 -- phase 1 replanned after the external audit: 8 new plans (01-16 to 01-23), 4 rewritten in place (01-12 to 01-15)"
 progress:
   total_phases: 8
   completed_phases: 0
-  total_plans: 15
+  total_plans: 23
   completed_plans: 11
-  percent: 73
+  percent: 48
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 01 (trustworthy-measurement) — EXECUTING
-Plan: 11 of 15
-Status: Blocked mid-plan: 01-11 task 2 needs a rig-access decision (see 01-11-SUMMARY.md checkpoint); task 3 closed
-Last activity: 2026-09-04 -- 01-11 resumed: task 3 closed, D-18 rig captures blocked on missing root access
+Plan: 11 of 23
+Status: Planned. Phase 1 replanned to 23 plans in 18 waves after the external audit; 11 executed, waves 8 to 18 pending
+Last activity: 2026-09-05 -- phase 1 replanned after the external audit: 8 new plans (01-16 to 01-23), 4 rewritten in place (01-12 to 01-15)
 
-Progress: [███████░░░] 73%
+Progress: [████░░░░░░] 48%
 
 ## Performance Metrics
 
@@ -124,12 +124,14 @@ None yet.
 - Doc inconsistency: PROJECT.md Constraints still says "software timestamping only", which the corrected Out of Scope entry (PTP hardware timestamps back in scope, WIRE-06) supersedes. Fix at the next PROJECT.md update.
 - WIRE-06 needs an ethernet cable on `enp0s31f6`; the wifi adapter has no PTP clock.
 - Rig boots untuned: every CPU governor reads powersave despite rt-tuning.service reporting active/enabled (power-profiles-daemon wins a boot-time race, see docs/rig/recon-2026-08-31/FINDINGS.md). Any plan that runs the real measurement protocol must fix this or rely on nr-capture's own precondition check; it must not trust rt-tuning.service's ActiveState.
-- 01-11 task 2 (D-18 firmware floor re-run) cannot take the 2 remaining hwlatdetect arms: nrmeasure run needs root (cyclictest calls sched_setscheduler(SCHED_FIFO), confirmed refuses without it: 'Unable to change scheduling policy... run as root or increase RLIMIT_RTPRIO'), and this rig's sudo requires an interactive password for everything except 3 narrowly-scoped commands (nr-recon, nr-probe, nr-measure-mode; confirmed via sudo -l and a live sudo -n true / systemd-run probe, both refused with 'interactive authentication is required'). nr-measure-mode itself (passwordless) does bring the rig to protocol state successfully. See 01-11-SUMMARY.md for the full evidence and two remediation options.
+- The D-18 firmware floor does not exist for the isolated cores. `hwlatdetect` cannot sample more than one CPU on this kernel (tracer `mode` is `none` and `isolcpus=6-11` keeps its thread off 6-11), so all 32 events across three RT arms named CPU 5 and the 2026-08-28 P-core arm's 13 events all named CPU 0. Replacement instrument decided (D-27): `rtla hwnoise -c 6-11 -H 0-5` plus `rdmsr -p <cpu> 0x34`. Plans 01-20 through 01-23 build it and re-take the screens.
+- Six external-audit findings remain open (3 partial, 5 partial, 6, 7, 8, and 9/10 in the unexecuted plans). Each is assigned to a plan: finding 6 to 01-16 and 01-19, finding 7 to 01-17, findings 5 and 8 to 01-18, finding 3 to 01-21 and 01-23, finding 9 to 01-12, finding 10 to 01-14.
+- Rig root access: resolved in practice during 01-11 session 2 (the operator installed /usr/local/sbin/nr-run-measurement as a fourth NOPASSWD grant by hand), but the rule, the install procedure and the two recon scripts nr-recon and nr-probe still exist only on that laptop. Plan 01-22 brings all four scripts and the sudoers rule into this repository, re-installs them (the rig still runs the pre-TimeoutStartSec copy of nr-run-measurement, so a hung capture still needs the operator's password), and installs msr-tools and stress-ng. Background: 01-11-SUMMARY.md.
 
 ## Session Continuity
 
 Last session: 2026-09-04T16:51:28.163Z
-Stopped at: 01-11 task 2 blocked (rig root access), task 3 closed
-Resume file: .planning/phases/01-trustworthy-measurement/01-11-SUMMARY.md
+Stopped at: 01-11 complete (PARTIAL); phase replanned 2026-09-05, next is wave 8
+Resume file: .planning/phases/01-trustworthy-measurement/01-16-PLAN.md
 
-Next: `/donny-plan-phase 1`
+Next: `/donny-execute-phase 1` (wave 8 first: plans 01-16 and 01-19)

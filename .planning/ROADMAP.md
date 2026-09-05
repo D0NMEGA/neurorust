@@ -68,7 +68,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Worst-case scheduling latency on isolated cores is either under 30 us on a clean run, or the residual is attributed to a named platform cause and published as a stated limitation
   4. Every published figure is stamped by the capture harness with rig, kernel, BIOS revision, and tuning state, ships as a histogram with its raw capture alongside, and losing configurations appear rather than being omitted
   5. A CI job commits a weekly metrics JSON carrying p50, p95, and p99 for every stage instrumented so far
-**Plans**: 15 plans in 12 waves (single operator; waves express dependency, not parallel staffing)
+**Plans**: 23 plans in 18 waves (single operator; waves express dependency, not parallel staffing). Expanded from 15 on 2026-09-05: an external adversarial audit (`01-EXTERNAL-AUDIT.md`) found ten methodology and implementation defects, and executing D-18 showed that `hwlatdetect` cannot sample the isolated cores at all on this kernel. Plans 01-16 through 01-23 close those gaps and build the replacement instrument; plans 01-12 through 01-15 were rewritten in place and now run last. Plan numbers no longer match wave order, so each unexecuted plan below carries its wave.
 
 Plans:
 - [x] 01-01-PLAN.md - Cargo workspace, dual licence, CI skeleton, histogram fixture
@@ -82,12 +82,20 @@ Plans:
 - [x] 01-09-PLAN.md - The measurement protocol and the publication layout documents
 - [x] 01-10-PLAN.md - Reconstructed manifests and the 2026-08-28 README correction
 - [x] 01-11-PLAN.md - Calibration pair and the RT firmware floor re-run (rig runbook)
-- [ ] 01-12-PLAN.md - PLAT-01 investigation: tracing calibration and three capture cycles (rig runbook)
-- [ ] 01-13-PLAN.md - PLAT-03 headline capture and the decomposed verdict (rig runbook)
-- [ ] 01-14-PLAN.md - Weekly job: nrmeasure series, systemd units, regression gate
-- [ ] 01-15-PLAN.md - Rig install runbook: enable the weekly timer and observe the first fire
+- [ ] 01-12-PLAN.md - PLAT-01 investigation: armed tracing, threshold calibration, three cycles (rig runbook) [wave 15]
+- [ ] 01-13-PLAN.md - PLAT-03 headline capture and the verdict, with no subtraction (rig runbook) [wave 16]
+- [ ] 01-14-PLAN.md - Weekly job: nrmeasure series with nullable statistics, systemd units, regression gate [wave 17]
+- [ ] 01-15-PLAN.md - Rig install runbook: enable the weekly timer and observe the first fire [wave 18]
+- [ ] 01-16-PLAN.md - Harness identity, argv provenance, and the re-derivation guard [wave 8]
+- [ ] 01-17-PLAN.md - The durable attempt record and per-instrument interference windows [wave 9]
+- [ ] 01-18-PLAN.md - Gate audit: every precondition establishes what its name claims [wave 10]
+- [ ] 01-19-PLAN.md - Verification that recomputes: no substituted zeros, reports re-derived [wave 8]
+- [ ] 01-20-PLAN.md - rtla hwnoise parser, SMI manifest fields, CPU-distribution standing check [wave 12]
+- [ ] 01-21-PLAN.md - Wire hwnoise and MSR_SMI_COUNT into nrmeasure run [wave 13]
+- [ ] 01-22-PLAN.md - Rig entry point: sudoers rule, root scripts, msr-tools, format probes [wave 11]
+- [ ] 01-23-PLAN.md - Re-take D-18 on the isolated cores and correct the published firmware record [wave 14]
 
-**Notes**: The cargo workspace and the CI pipeline are created here as enabling work for the weekly metrics job; later phases add gates to the same pipeline (Kani in Phase 2, loom and criterion in Phase 4). The contaminated `cyclictest-rt-isolated-idle-10m.hist` run is the starting evidence, not a publishable figure.
+**Notes**: The cargo workspace and the CI pipeline are created here as enabling work for the weekly metrics job; later phases add gates to the same pipeline (Kani in Phase 2, loom and criterion in Phase 4). The contaminated `cyclictest-rt-isolated-idle-10m.hist` run is the starting evidence, not a publishable figure. The harness and provenance fixes (plans 01-16 through 01-19) run before any new rig capture, because a capture taken through a harness that can lose its raw evidence or stamp an unknown identity would have to be retaken.
 
 ### Phase 2: Proven emergency_stop
 **Goal**: The safety-critical abort path is proven correct across its reachable state space rather than tested, and its worst case is a measured number on the reference rig.
@@ -182,7 +190,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Trustworthy measurement | 11/15 | In Progress|  |
+| 1. Trustworthy measurement | 11/23 | In Progress|  |
 | 2. Proven emergency_stop | 0/TBD | Not started | - |
 | 3. Deterministic substrate | 0/TBD | Not started | - |
 | 4. Lock-free transport | 0/TBD | Not started | - |
