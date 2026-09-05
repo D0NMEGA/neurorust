@@ -886,14 +886,23 @@ fn place_artifact(
 /// reference capture have no bin index at all (cyclictest reports them separately,
 /// in the `.hist` footer, not as a histogram row), so they cannot appear here; the
 /// row-sum is the binned sample total, not `Percentiles::total_samples`.
-fn write_hist_tsv(run_dir: &Path, run: &CyclictestRun) -> Result<()> {
+/// `hist.tsv`'s exact on-disk format: `bin_us` TAB `count`, one line per non-empty bin, no
+/// header. Shared by the writer ([`write_hist_tsv`]) and strict verification's re-derivation
+/// check (`cmd::verify::check_derived_figures`), so the two can never quietly drift apart from
+/// each other. Finding 6 of `01-EXTERNAL-AUDIT.md`.
+pub(crate) fn format_hist_tsv(run: &CyclictestRun) -> String {
     let mut out = String::new();
     for (bin_us, count) in run.to_bin_table() {
         if count > 0 {
             out.push_str(&format!("{bin_us}\t{count}\n"));
         }
     }
-    std::fs::write(run_dir.join("hist.tsv"), out).context("failed to write hist.tsv")
+    out
+}
+
+fn write_hist_tsv(run_dir: &Path, run: &CyclictestRun) -> Result<()> {
+    std::fs::write(run_dir.join("hist.tsv"), format_hist_tsv(run))
+        .context("failed to write hist.tsv")
 }
 
 /// BENCH-06: a tool failure, a non-clean contamination verdict, or a verdict reached

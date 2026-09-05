@@ -468,3 +468,162 @@ fn unparseable_capture_passes_non_strict_verification() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+// ---------------------------------------------------------------------------------
+// Finding 6, second half (01-19 task 2): strict verification re-derives the
+// published numbers from the run's own raw capture.
+// ---------------------------------------------------------------------------------
+
+/// Recursively copies a real committed run directory (e.g.
+/// `measurements/2026-09-01-precision3591-calibration-clean`) into `dest`, so a strict-mode
+/// re-derivation test can edit exactly one committed value and leave everything else,
+/// including the real manifest and the real raw capture, untouched. Never writes back into the
+/// real `measurements/` tree: `dest` is always a tempdir path.
+fn copy_real_run(run_id: &str, dest: &Path) {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let src = repo_root.join("measurements").join(run_id);
+    copy_dir_recursive(&src, dest);
+}
+
+fn copy_dir_recursive(src: &Path, dest: &Path) {
+    fs::create_dir_all(dest).expect("mkdir dest");
+    for entry in fs::read_dir(src).expect("read src dir") {
+        let entry = entry.expect("dir entry");
+        let path = entry.path();
+        let dest_path = dest.join(entry.file_name());
+        if path.is_dir() {
+            copy_dir_recursive(&path, &dest_path);
+        } else {
+            fs::copy(&path, &dest_path).expect("copy file");
+        }
+    }
+}
+
+#[test]
+fn strict_rederives_hist_tsv() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    let run_id = "2026-09-01-precision3591-calibration-clean";
+    let run_dir = measurements.join(run_id);
+    copy_real_run(run_id, &run_dir);
+
+    let hist_tsv_path = run_dir.join("hist.tsv");
+    let original = fs::read_to_string(&hist_tsv_path).expect("read hist.tsv");
+    let mut lines: Vec<&str> = original.lines().collect();
+    let (bin, count) = lines[0].split_once('\t').expect("tab-separated line");
+    let tampered_count: u64 = count.parse::<u64>().expect("numeric count") + 1;
+    let tampered_first_line = format!("{bin}\t{tampered_count}");
+    lines[0] = tampered_first_line.as_str();
+    fs::write(&hist_tsv_path, lines.join("\n") + "\n").expect("write tampered hist.tsv");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("hist.tsv"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("re-derived hist.tsv"),
+        "stdout should name the disagreement: {stdout}"
+    );
+}
+
+#[test]
+fn strict_rederives_report_results() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    let run_id = "2026-09-01-precision3591-calibration-clean";
+    let run_dir = measurements.join(run_id);
+    copy_real_run(run_id, &run_dir);
+
+    let report_path = run_dir.join("REPORT.md");
+    let original = fs::read_to_string(&report_path).expect("read REPORT.md");
+    let tampered = original.replace("| p99 | 9 |", "| p99 | 999 |");
+    assert_ne!(
+        original, tampered,
+        "the fixture must actually contain the row this test edits"
+    );
+    fs::write(&report_path, tampered).expect("write tampered REPORT.md");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("REPORT.md"), "stdout: {stdout}");
+    assert!(stdout.contains("p99"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("999"),
+        "stdout should name the published figure: {stdout}"
+    );
+}
+
+#[test]
+fn strict_records_a_reconstructed_run_as_not_rederivable() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    let run_id = "2026-08-28-precision3591";
+    copy_real_run(run_id, &measurements.join(run_id));
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("not re-derivable: reconstructed run has no generated report"),
+        "stdout: {stdout}"
+    );
+}
+
+#[test]
+fn strict_refuses_to_guess_a_missing_histogram_bound() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    let run_id = "2026-09-01-precision3591-calibration-clean";
+    let run_dir = measurements.join(run_id);
+    copy_real_run(run_id, &run_dir);
+
+    let manifest_path = run_dir.join("manifest.json");
+    let mut manifest: Value =
+        serde_json::from_str(&fs::read_to_string(&manifest_path).expect("read manifest"))
+            .expect("parse manifest");
+    manifest["tools"] = Value::Array(vec![]);
+    fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).expect("serialise manifest"),
+    )
+    .expect("write manifest.json");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("not re-derivable: no recorded --histogram bound"),
+        "stdout: {stdout}"
+    );
+}

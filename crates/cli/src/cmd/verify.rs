@@ -1,6 +1,6 @@
 //! `nrmeasure verify`: the D-13 blocking provenance gate.
 //!
-//! Three checks, run over the whole tree, every failure collected before exiting (never
+//! Four checks, run over the whole tree, every failure collected before exiting (never
 //! stopping at the first):
 //!
 //!   1. Every immediate subdirectory of `measurements/` has a readable `manifest.json` that
@@ -14,6 +14,11 @@
 //!      (`--write-index`) or compared against what is on disk (`--check-index`). A run whose
 //!      histogram cannot be parsed renders `unavailable` in its p99/max columns there, never a
 //!      substituted zero (T-1-52).
+//!   4. `--strict` only: every harness-generated run's published `hist.tsv` and `REPORT.md`
+//!      `## Results` figures are re-derived from the run's own raw capture and compared
+//!      (T-1-53). A run with no recorded `--histogram` bound, or a reconstructed run with no
+//!      generated report, is recorded as not re-derivable rather than guessed at (T-1-54,
+//!      T-1-55).
 //!
 //! Exit code 0 on success, 1 on any check failure.
 
@@ -22,7 +27,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
-use nr_manifest::{ArtifactKind, RunManifest};
+use nr_histogram::hist::CyclictestRun;
+use nr_manifest::{ArtifactKind, ProvenanceTier, RunManifest};
 use nr_metrics::index::{RunSummary, render_index};
 use time::macros::format_description;
 
@@ -128,13 +134,30 @@ pub fn run(args: Args) -> anyhow::Result<i32> {
         }
     }
 
+    let mut derived_summary: Option<(usize, usize)> = None;
+    let mut derived_notes: Vec<String> = Vec::new();
+    if args.strict {
+        let derived = check_derived_figures(&measurements_abs, &loaded);
+        problems.extend(derived.problems);
+        derived_notes = derived.notes;
+        derived_summary = Some((derived.rederived, derived.not_rederivable));
+    }
+
     let strict_note = if args.strict { " (strict)" } else { "" };
+    let derived_note = derived_summary
+        .map(|(rederived, not_rederivable)| {
+            format!("{rederived} re-derived, {not_rederivable} not re-derivable, ")
+        })
+        .unwrap_or_default();
     println!(
-        "verify: {run_dir_count} run directories, {} problems{strict_note}",
+        "verify: {run_dir_count} run directories, {derived_note}{} problems{strict_note}",
         problems.len()
     );
     for problem in &problems {
         println!("{problem}");
+    }
+    for note in &derived_notes {
+        println!("{note}");
     }
 
     Ok(if problems.is_empty() { 0 } else { 1 })
@@ -398,9 +421,10 @@ fn check_stray_captures(
 // Check 3: the index.
 // ---------------------------------------------------------------------------------
 
-/// The one [`compute_percentiles`] failure that is never a `--strict` problem: a manifest with
-/// nothing to compute from at all (for example a firmware-screen-only run with no cyclictest
-/// capture), as opposed to a capture that exists and fails to parse.
+/// The one [`compute_percentiles`] failure, and the one [`check_derived_figures`] outcome, that
+/// is never a `--strict` problem: a manifest with nothing to compute from at all (for example a
+/// firmware-screen-only run with no cyclictest capture), as opposed to a capture that exists
+/// and fails to parse. Shared by both so the two agree on the exact wording.
 const NO_HISTOGRAM_ARTIFACT: &str = "no cyclictest histogram artifact in this manifest";
 
 /// Builds one [`RunSummary`] per loaded manifest, sorted by run directory name, plus the list
@@ -484,6 +508,300 @@ fn compute_percentiles(run_dir: &Path, manifest: &RunManifest) -> Result<(u64, u
         .first()
         .expect("percentiles() returns one value per requested quantile");
     Ok((p99_us, percentiles.max_us))
+}
+
+// ---------------------------------------------------------------------------------
+// Check 4 (--strict only): re-derive every published number from the raw capture.
+// ---------------------------------------------------------------------------------
+
+/// The result of [`check_derived_figures`]: every disagreement found (a `--strict` problem),
+/// every run recorded as not re-derivable (never a problem; printed for visibility, T-1-55),
+/// and the two counts `verify`'s own summary line reports.
+struct DerivedFiguresReport {
+    problems: Vec<String>,
+    notes: Vec<String>,
+    rederived: usize,
+    not_rederivable: usize,
+}
+
+/// Re-derives every harness-generated run's published `hist.tsv` and `REPORT.md` `## Results`
+/// figures from its own raw capture and compares them. This is what makes a checksummed
+/// capture mean something beyond "unchanged since it was written": the published numbers are
+/// checked against the evidence rather than trusted because the harness wrote them (T-1-53).
+///
+/// A run is recorded as not re-derivable, rather than checked or failed, when:
+///   - its `provenance_tier` is `reconstructed` (no generated report exists to check; T-1-55),
+///     or
+///   - its recorded argv carries no `--histogram=<n>` for the `cyclictest` invocation: guessing
+///     a plausible-looking default bound would produce a re-derivation that agrees with itself
+///     by construction and proves nothing (T-1-54).
+fn check_derived_figures(
+    measurements_root: &Path,
+    loaded: &HashMap<String, RunManifest>,
+) -> DerivedFiguresReport {
+    let mut problems = Vec::new();
+    let mut notes = Vec::new();
+    let mut rederived = 0usize;
+    let mut not_rederivable = 0usize;
+
+    let mut names: Vec<&String> = loaded.keys().collect();
+    names.sort();
+
+    for name in names {
+        let manifest = &loaded[name];
+        let run_dir = measurements_root.join(name);
+
+        if matches!(manifest.provenance_tier, ProvenanceTier::Reconstructed) {
+            not_rederivable += 1;
+            notes.push(format!(
+                "{}: not re-derivable: reconstructed run has no generated report",
+                run_dir.display()
+            ));
+            continue;
+        }
+
+        let Some(bound) = recorded_histogram_bound(manifest) else {
+            not_rederivable += 1;
+            notes.push(format!(
+                "{}: not re-derivable: no recorded --histogram bound",
+                run_dir.display()
+            ));
+            continue;
+        };
+
+        let Some(artifact) = manifest
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.kind == ArtifactKind::CyclictestHist)
+        else {
+            not_rederivable += 1;
+            notes.push(format!(
+                "{}: not re-derivable: {NO_HISTOGRAM_ARTIFACT}",
+                run_dir.display()
+            ));
+            continue;
+        };
+
+        let hist_path = run_dir.join(&artifact.path);
+        let run = match nr_histogram::hist::parse_hist_file(&hist_path, Some(bound)) {
+            Ok(run) => run,
+            Err(err) => {
+                problems.push(format!(
+                    "{}: failed to re-derive from its own capture: {err}",
+                    hist_path.display()
+                ));
+                continue;
+            }
+        };
+        rederived += 1;
+
+        let hist_tsv_path = run_dir.join("hist.tsv");
+        match std::fs::read_to_string(&hist_tsv_path) {
+            Ok(committed) => {
+                let regenerated = crate::cmd::run::format_hist_tsv(&run);
+                if let Some((line_no, committed_line, regenerated_line)) =
+                    first_differing_line(&committed, &regenerated)
+                {
+                    problems.push(format!(
+                        "{}: disagrees with the re-derived hist.tsv at line {line_no}: \
+                         committed={committed_line:?}, re-derived={regenerated_line:?}",
+                        hist_tsv_path.display()
+                    ));
+                }
+            }
+            Err(_) => problems.push(format!(
+                "{}: missing; cannot re-derive hist.tsv",
+                hist_tsv_path.display()
+            )),
+        }
+
+        let report_path = run_dir.join("REPORT.md");
+        match std::fs::read_to_string(&report_path) {
+            Ok(committed) => match parse_report_results(&committed) {
+                Some(published) => {
+                    problems.extend(compare_derived_results(&report_path, &published, &run));
+                }
+                None => problems.push(format!(
+                    "{}: could not find a ## Results block to re-derive against",
+                    report_path.display()
+                )),
+            },
+            Err(_) => problems.push(format!(
+                "{}: missing; cannot re-derive REPORT.md",
+                report_path.display()
+            )),
+        }
+    }
+
+    DerivedFiguresReport {
+        problems,
+        notes,
+        rederived,
+        not_rederivable,
+    }
+}
+
+/// Parses the `--histogram=<n>` bound out of the `cyclictest` tool invocation's recorded argv.
+/// `None` when the tools array carries no `cyclictest` invocation, or that invocation carries
+/// no `--histogram=` token: the caller must record the run as not re-derivable rather than
+/// assume a bound (T-1-54). `run.rs` never emits any other flag form; only this one appears in
+/// a real captured argv.
+fn recorded_histogram_bound(manifest: &RunManifest) -> Option<u64> {
+    manifest
+        .tools
+        .iter()
+        .find(|tool| tool.name == "cyclictest")
+        .and_then(|tool| {
+            tool.argv
+                .iter()
+                .find_map(|arg| arg.strip_prefix("--histogram="))
+        })
+        .and_then(|value| value.parse::<u64>().ok())
+}
+
+/// The 1-based line number and the two differing lines, at the first place `committed` and
+/// `regenerated` disagree; `None` when every line matches.
+fn first_differing_line<'a>(
+    committed: &'a str,
+    regenerated: &'a str,
+) -> Option<(usize, &'a str, &'a str)> {
+    let mut committed_lines = committed.lines();
+    let mut regenerated_lines = regenerated.lines();
+    let mut line_no = 0usize;
+    loop {
+        line_no += 1;
+        match (committed_lines.next(), regenerated_lines.next()) {
+            (None, None) => return None,
+            (a, b) if a == b => continue,
+            (a, b) => return Some((line_no, a.unwrap_or(""), b.unwrap_or(""))),
+        }
+    }
+}
+
+/// The `## Results` block figures parsed out of a generated `REPORT.md`, by plain line
+/// matching against the fixed shapes `render_results` (`nr_metrics::report`) emits: see this
+/// plan's `<interfaces>` block for a worked example.
+struct ReportResults {
+    /// `(label, value_us)`, e.g. `("p99", 9)`, in file order.
+    percentiles: Vec<(String, u64)>,
+    sample_count: u64,
+    overflow_count: u64,
+    maximum_us: u64,
+}
+
+/// Parses a `## Results` block out of a generated `REPORT.md`. `None` when any of the three
+/// scalar lines (`sample count:`, `overflow count:`, `maximum:`) could not be found; a real
+/// generated report always has all three, and a hand-truncated one is the only way to hit this,
+/// reported as its own problem by the caller.
+fn parse_report_results(report_text: &str) -> Option<ReportResults> {
+    const LABELS: [&str; 4] = ["p50", "p95", "p99", "p99.9"];
+    let mut percentiles: Vec<(String, u64)> = Vec::new();
+    let mut sample_count = None;
+    let mut overflow_count = None;
+    let mut maximum_us = None;
+
+    for line in report_text.lines() {
+        let trimmed = line.trim();
+        if let Some(cells) = table_row_cells(trimmed) {
+            if cells.len() == 2 && LABELS.contains(&cells[0]) {
+                if let Ok(value) = cells[1].parse::<u64>() {
+                    percentiles.push((cells[0].to_string(), value));
+                }
+            }
+        } else if let Some(rest) = trimmed.strip_prefix("sample count:") {
+            sample_count = rest.trim().parse::<u64>().ok();
+        } else if let Some(rest) = trimmed.strip_prefix("overflow count:") {
+            overflow_count = rest.trim().parse::<u64>().ok();
+        } else if let Some(rest) = trimmed.strip_prefix("maximum:") {
+            maximum_us = rest
+                .trim()
+                .strip_suffix("us")
+                .and_then(|value| value.trim().parse::<u64>().ok());
+        }
+    }
+
+    Some(ReportResults {
+        percentiles,
+        sample_count: sample_count?,
+        overflow_count: overflow_count?,
+        maximum_us: maximum_us?,
+    })
+}
+
+/// Splits a markdown table row `| a | b |` into its trimmed cells. `None` for a line that is
+/// not a pipe-delimited row at all.
+fn table_row_cells(line: &str) -> Option<Vec<&str>> {
+    let inner = line.strip_prefix('|')?.strip_suffix('|')?;
+    Some(inner.split('|').map(str::trim).collect())
+}
+
+/// Compares the re-derived percentiles, sample count, overflow count and maximum against what
+/// `REPORT.md` publishes, returning one problem string per disagreement (never stopping at the
+/// first) so a reader sees every field that drifted, not just the earliest one.
+fn compare_derived_results(
+    report_path: &Path,
+    published: &ReportResults,
+    run: &CyclictestRun,
+) -> Vec<String> {
+    let mut problems = Vec::new();
+
+    let percentiles = match run.percentiles(&[0.5, 0.95, 0.99, 0.999]) {
+        Ok(percentiles) => percentiles,
+        Err(err) => {
+            problems.push(format!(
+                "{}: failed to re-derive percentiles: {err}",
+                report_path.display()
+            ));
+            return problems;
+        }
+    };
+
+    const LABELS: [&str; 4] = ["p50", "p95", "p99", "p99.9"];
+    for (label, &(_, derived_value)) in LABELS.iter().zip(percentiles.values.iter()) {
+        let published_value = published
+            .percentiles
+            .iter()
+            .find(|entry| entry.0.as_str() == *label)
+            .map(|entry| entry.1);
+        match published_value {
+            Some(value) if value == derived_value => {}
+            Some(value) => problems.push(format!(
+                "{}: {label} disagrees: published {value}, re-derived {derived_value}",
+                report_path.display()
+            )),
+            None => problems.push(format!(
+                "{}: {label} is missing from the published Results block",
+                report_path.display()
+            )),
+        }
+    }
+
+    if published.sample_count != percentiles.total_samples {
+        problems.push(format!(
+            "{}: sample count disagrees: published {}, re-derived {}",
+            report_path.display(),
+            published.sample_count,
+            percentiles.total_samples
+        ));
+    }
+    if published.overflow_count != percentiles.overflow_samples {
+        problems.push(format!(
+            "{}: overflow count disagrees: published {}, re-derived {}",
+            report_path.display(),
+            published.overflow_count,
+            percentiles.overflow_samples
+        ));
+    }
+    if published.maximum_us != percentiles.max_us {
+        problems.push(format!(
+            "{}: maximum disagrees: published {} us, re-derived {} us",
+            report_path.display(),
+            published.maximum_us,
+            percentiles.max_us
+        ));
+    }
+
+    problems
 }
 
 #[cfg(test)]
