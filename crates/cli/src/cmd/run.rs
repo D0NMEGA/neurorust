@@ -879,11 +879,14 @@ fn artifact_kind_for_filename(name: &str) -> ArtifactKind {
 /// `manifest.artifacts` on success (and, on a failure, it is discovered again by
 /// [`scan_preserved_files`], independent of this return value). `None` when
 /// `stderr` is empty: an empty sidecar file would be one more file to account for
-/// and carries no evidence. T-1-62: stderr is captured verbatim and can contain
-/// paths from the invoking environment; `redact_home_prefix` is applied to argv
-/// elsewhere, but stderr text itself is free-form tool output with no fixed
-/// structure to redact against, so it is committed as-is, matching how `hist.tsv`
-/// and the raw captures are already committed verbatim.
+/// and carries no evidence.
+///
+/// T-1-62: stderr is captured verbatim as evidence, but it is free-form output a
+/// tool wrote on its own initiative and can contain the operator's username, a
+/// home directory path, or this machine's hostname. [`redact_stderr`] scrubs all
+/// three before the bytes ever touch disk; the visible `[redacted]` token left
+/// behind is the record that something was found and scrubbed, the same
+/// convention `KernelInfo::redact_cmdline` and `redact_home_prefix` already use.
 fn capture_stderr_sidecar(
     run_dir: &Path,
     tool_name: &str,
@@ -893,10 +896,11 @@ fn capture_stderr_sidecar(
     if stderr.is_empty() {
         return Ok(None);
     }
+    let redacted = redact_stderr(&String::from_utf8_lossy(stderr));
     let file_name = format!("{tool_name}.stderr.txt");
     let dest = run_dir.join(&file_name);
-    std::fs::write(&dest, stderr).with_context(|| format!("failed to write {file_name}"))?;
-    let bytes = stderr.len() as u64;
+    std::fs::write(&dest, &redacted).with_context(|| format!("failed to write {file_name}"))?;
+    let bytes = redacted.len() as u64;
     let blake3 = nr_manifest::blake3_file(&dest)
         .map_err(|source| anyhow::anyhow!("failed to checksum {file_name}: {source}"))?;
     *run_bytes_so_far += bytes;
@@ -907,6 +911,39 @@ fn capture_stderr_sidecar(
         kind: ArtifactKind::Other,
         stored: StorageLocation::InRepo,
     }))
+}
+
+/// Replaces every occurrence of the operator's username, a `/home/`-shaped path
+/// prefix, and this machine's own hostname in free-form tool stderr text with the
+/// literal token `[redacted]` (T-1-62). Unlike `redact_home_prefix` (anchored at
+/// the start of a single argv token), stderr is unstructured, possibly
+/// multi-line text a tool wrote unprompted, so every occurrence anywhere in the
+/// text is scanned and replaced, not just a leading match.
+fn redact_stderr(text: &str) -> String {
+    let mut redacted = text.to_string();
+    if let Some(user) = std::env::var("USER").ok().filter(|value| !value.is_empty()) {
+        redacted = redacted.replace(&user, "[redacted]");
+    }
+    redacted = redacted.replace("/home/", "[redacted]/");
+    if let Some(hostname) = current_hostname() {
+        redacted = redacted.replace(&hostname, "[redacted]");
+    }
+    redacted
+}
+
+/// This machine's hostname, read once per invocation purely to check whether a
+/// tool's stderr happens to contain it. Never itself recorded in a manifest or
+/// attempt record: `HostInfo`'s own documentation already forbids storing any
+/// network-derived machine name, and this function exists only to grep stderr
+/// against it, matching T-1-06's existing hostname-redaction convention (the
+/// D-14 environment probes redact it out of `uname -a` and journalctl lines).
+fn current_hostname() -> Option<String> {
+    std::process::Command::new("hostname")
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn print_summary(run_dir: &RunDir, run: &CyclictestRun, manifest: &RunManifest) -> Result<()> {
@@ -1693,5 +1730,35 @@ VERSION=\"26.04.1 LTS\"
         );
         assert!(excluded, "cyclictest has no such convention");
         assert!(reason.unwrap().contains("cyclictest exited with code 1"));
+    }
+
+    /// T-1-62: a home-directory path and the operator's username, however they
+    /// appear inside free-form stderr text (not just at the start of a token,
+    /// unlike `redact_home_prefix`), are both replaced with the visible
+    /// `[redacted]` token.
+    #[test]
+    fn redact_stderr_scrubs_a_home_path_and_the_operator_username() {
+        let user = std::env::var("USER").unwrap_or_else(|_| "test-operator".to_string());
+        let text = format!(
+            "cyclictest: warning: could not open /home/{user}/.cache/foo, running as {user} anyway\n"
+        );
+        let redacted = redact_stderr(&text);
+        assert!(
+            !redacted.contains("/home/"),
+            "the home-directory prefix must not survive redaction: {redacted:?}"
+        );
+        if std::env::var("USER").is_ok() {
+            assert!(
+                !redacted.contains(&user),
+                "the operator's username must not survive redaction: {redacted:?}"
+            );
+        }
+        assert!(redacted.contains("[redacted]"), "redacted: {redacted:?}");
+    }
+
+    #[test]
+    fn redact_stderr_is_a_no_op_on_text_with_nothing_to_redact() {
+        let text = "cyclictest: no errors\n";
+        assert_eq!(redact_stderr(text), text);
     }
 }
