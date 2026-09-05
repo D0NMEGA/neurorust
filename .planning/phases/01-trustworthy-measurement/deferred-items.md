@@ -307,14 +307,19 @@ audit record and the fix can be read together.
   build, but filed it as settling plan 01-12's instrument only. Nobody connected that
   `hwnoise` is the per-CPU replacement for `hwlatdetect`, and three arms were spent
   discovering the limitation the hard way.
-  **Still OPEN, owner: plan 01-20.** Plan 01-22 took a real 60 s `rtla hwnoise -c 6-11
-  -H 0-5 -P f:99` probe and committed it as `docs/rig/recon-2026-09-05/probe-rtla-hwnoise.txt`,
-  described in full in the FINDINGS.md beside it. Two format details a parser needs and this
-  entry did not anticipate: the default live redraw repeats a full header once per second and
-  is preceded by a terminal reset artifact (`-q/--quiet` avoids both, and plan 01-20 should use
-  it), and the per-CPU `Runtime` column, not the wall-clock `duration` header, is the real
-  per-CPU exposure figure. This entry stays open until 01-20 builds the parser against that
-  probe and 01-23 re-takes D-18 with it.
+  **Parser half CLOSED, commits `515be12`/`cd49f45` (plan 01-20).** Plan 01-22 took a real
+  60 s `rtla hwnoise -c 6-11 -H 0-5 -P f:99` probe and committed it as
+  `docs/rig/recon-2026-09-05/probe-rtla-hwnoise.txt`, described in full in the FINDINGS.md
+  beside it. Two format details a parser needs and this entry did not anticipate: the default
+  live redraw repeats a full header once per second and is preceded by a terminal reset
+  artifact, and the per-CPU `Runtime` column, not the wall-clock `duration` header, is the
+  real per-CPU exposure figure. `crates/capture/src/hwnoise.rs` (`parse_hwnoise`,
+  `parse_hwnoise_file`) parses both correctly, tested against a byte-identical copy of that
+  probe; `nr_manifest::FirmwareScreen`/`SmiCounts` can now record the result honestly.
+  **Wiring and re-take half still OPEN, owner: plan 01-21 (wiring into `nrmeasure run`) and
+  01-23 (re-taking D-18 with both instruments live on the rig).** Nothing in this repository
+  has driven `rtla hwnoise` or `rdmsr` from the harness itself yet, and no new firmware
+  capture exists beyond the two probes plan 01-22 took.
 
 - **Install `msr-tools` and read `MSR_SMI_COUNT` (0x34) around every firmware screen.**
   `rdmsr -p <cpu> 0x34` is an exact per-CPU SMI counter. Sampled before and after a run it

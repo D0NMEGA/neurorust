@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-22-PLAN.md
-last_updated: "2026-09-05T23:05:50.385Z"
+stopped_at: Completed 01-20-PLAN.md
+last_updated: "2026-09-05T23:29:51.129Z"
 last_activity: 2026-09-05
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 23
-  completed_plans: 16
-  percent: 70
+  completed_plans: 17
+  percent: 74
 ---
 
 # Project State
@@ -26,13 +26,13 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 01 (trustworthy-measurement) — EXECUTING
-Plan: 16 of 23 done; wave 11 (01-22) complete. Next: wave 12 (01-20-PLAN.md, the rtla hwnoise
-  parser and SMI manifest fields), which consumes the probes and FINDINGS.md this plan
-  committed.
+Plan: 17 of 23 done; wave 12 (01-20, the rtla hwnoise parser and firmware manifest fields)
+  complete. Next: wave 13 (01-21-PLAN.md, wiring both D-27 instruments into the live harness),
+  which consumes 01-20's parser and manifest fields directly.
 Status: Ready to execute
 Last activity: 2026-09-05
 
-Progress: [███████░░░] 70%
+Progress: [███████░░░] 74%
 
 ## Performance Metrics
 
@@ -69,6 +69,7 @@ Progress: [███████░░░] 70%
 | Phase 01 P17 | 95min | 3 tasks | 21 files |
 | Phase 01 P18 | 45min | 3 tasks | 12 files |
 | Phase 01 P22 | 46min | 3 tasks | 11 files |
+| Phase 01 P20 | 22min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -138,6 +139,7 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-22: nr-recon/nr-probe's no_turbo path was already corrected on the rig out of band after the 01-02 recon filed the defect; both scripts vendored as-is rather than re-edited, confirmed by grep before commit.
 - [Phase 01]: 01-22: requirements-completed left empty for PLAT-02, following 01-09/01-18 precedent - PLAT-02 means a human followed the clean protocol on the rig end to end, which this plan's sudoers/probe infrastructure enables but does not itself perform.
 - [Phase 01]: 01-22: rtla hwnoise's per-CPU Runtime column, not the wall-clock duration header, is the real per-CPU exposure figure (59 periods x 750000us = 44.25s of Runtime inside a 60s wall-clock probe); plan 01-20 must parse Runtime directly.
+- [Phase 01]: 01-20: FirmwareScreen/SmiCounts manifest fields added optional/defaulted alongside a schema-generated rtla hwnoise parser (header-name-validated, tested against 01-22's real probe) and a standing coverage test proving all eight committed hwlatdetect captures name no isolated core (6-11); requirements-completed left empty for PLAT-03/BENCH-04 since no capture is taken here (that is 01-21/01-23's job).
 
 ### Pending Todos
 
@@ -155,8 +157,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-05T23:05:50.384Z
-Stopped at: Completed 01-22-PLAN.md
+Last session: 2026-09-05T23:29:51.127Z
+Stopped at: Completed 01-20-PLAN.md
 Resume file: None
 
-Next: `/donny-execute-phase 1` (wave 12: plan 01-20)
+Next: `/donny-execute-phase 1` (wave 13: plan 01-21)
