@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-17-PLAN.md
-last_updated: "2026-09-05T18:25:56.930Z"
+stopped_at: Completed 01-18-PLAN.md
+last_updated: "2026-09-05T22:04:02.754Z"
 last_activity: 2026-09-05
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 23
-  completed_plans: 14
-  percent: 61
+  completed_plans: 15
+  percent: 65
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 01 (trustworthy-measurement) — EXECUTING
-Plan: 14 of 23 done (01-17 just finished); waves 8-9 complete, wave 10 is 01-18
+Plan: 15 of 23 done (01-18 just finished); waves 8-10 complete, wave 11 is 01-22
 Status: Ready to execute
 Last activity: 2026-09-05
 
-Progress: [██████░░░░] 61%
+Progress: [███████░░░] 65%
 
 ## Performance Metrics
 
@@ -65,6 +65,7 @@ Progress: [██████░░░░] 61%
 | Phase 01 P16 | 32min | 3 tasks | 14 files |
 | Phase 01 P19 | 38min | 3 tasks | 11 files |
 | Phase 01 P17 | 95min | 3 tasks | 21 files |
+| Phase 01 P18 | 45min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,10 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-17: Verified by direct source read that interference::verdict()'s run_duration parameter feeds both the per-hour counter normalisation and overflow_rate_per_s, contradicting the plan's own executor note that D-24 tail metrics do not use this denominator; forced two snapshot re-pins.
 - [Phase 01]: 01-17: Added redact_stderr/current_hostname as a dedicated follow-up commit (not amended into task 1) after a post-implementation self-review caught a real gap against threat T-1-62 (mitigate disposition), which the initial implementation had explicitly and incorrectly decided to skip.
 - [Phase 01]: 01-17: state advance-plan's naive sequential counter again mis-set Current Position (13->14 of 23 without naming which plan); hand-corrected Current Position and Session Continuity to name 01-17, matching the precedent from 01-16/01-19.
+- [Phase 01]: 01-18: DeepCstatesDisabled reports Unavailable, not Pass, when no target CPU has any cpuidle fixture data (every historical fixture only ever captured cpu0); extended tuned_facts_text() in run_pipeline.rs with real per-CPU POLL/C1E data for cpus 6-11 so the full-pipeline test suite kept passing.
+- [Phase 01]: 01-18: screen_spec() kept its default ThermalProfile::Normal rather than HotScreen, so thermal_headroom_still_passes_a_cold_screen keeps testing a still-true claim; a new hot_screen_spec() declares HotScreen explicitly for the tests that need it. thermal_headroom_does_not_refuse_a_firmware_screen (whose premise, any Screen-class run is exempt when hot, is exactly finding 5's defect) was replaced by two profile-scoped tests.
+- [Phase 01]: 01-18: interference::verdict()'s own VerdictOutcome.reason is overwritten with the fixture-usage explanation whenever any fixture drove the run, then reused verbatim as RunManifest.exclusion_reason, so the two can never disagree about why a fixture-driven run's deltas are zero.
+- [Phase 01]: 01-18: state advance-plan's counter itself was numerically correct this time (15 matches the real SUMMARY.md count on disk), but its Current Position/Session Continuity prose still named the prior plan (01-17) and the just-completed wave (10) as pending; hand-corrected both to name 01-18 and wave 11 (01-22), matching the precedent from 01-16/01-17/01-19.
 
 ### Pending Todos
 
@@ -138,13 +143,13 @@ None yet.
 - WIRE-06 needs an ethernet cable on `enp0s31f6`; the wifi adapter has no PTP clock.
 - Rig boots untuned: every CPU governor reads powersave despite rt-tuning.service reporting active/enabled (power-profiles-daemon wins a boot-time race, see docs/rig/recon-2026-08-31/FINDINGS.md). Any plan that runs the real measurement protocol must fix this or rely on nr-capture's own precondition check; it must not trust rt-tuning.service's ActiveState.
 - The D-18 firmware floor does not exist for the isolated cores. `hwlatdetect` cannot sample more than one CPU on this kernel (tracer `mode` is `none` and `isolcpus=6-11` keeps its thread off 6-11), so all 32 events across three RT arms named CPU 5 and the 2026-08-28 P-core arm's 13 events all named CPU 0. Replacement instrument decided (D-27): `rtla hwnoise -c 6-11 -H 0-5` plus `rdmsr -p <cpu> 0x34`. Plans 01-20 through 01-23 build it and re-take the screens.
-- Six external-audit findings remain open (3 partial, 5 partial, 6, 7, 8, and 9/10 in the unexecuted plans). Each is assigned to a plan: finding 6 to 01-16 and 01-19, finding 7 to 01-17, findings 5 and 8 to 01-18, finding 3 to 01-21 and 01-23, finding 9 to 01-12, finding 10 to 01-14.
+- External-audit findings status (of the original six): 6 CLOSED (01-16, 01-19), 7 CLOSED (01-17), 5 CLOSED (documentation half in 01-11's 137c3c1, exemption-scoping half in 01-18), 8 CLOSED (01-18). Still open: finding 3 (partial; assigned to 01-21 and 01-23), and findings 9 and 10, both in unexecuted plans (9 to 01-12, 10 to 01-14).
 - Rig root access: resolved in practice during 01-11 session 2 (the operator installed /usr/local/sbin/nr-run-measurement as a fourth NOPASSWD grant by hand), but the rule, the install procedure and the two recon scripts nr-recon and nr-probe still exist only on that laptop. Plan 01-22 brings all four scripts and the sudoers rule into this repository, re-installs them (the rig still runs the pre-TimeoutStartSec copy of nr-run-measurement, so a hung capture still needs the operator's password), and installs msr-tools and stress-ng. Background: 01-11-SUMMARY.md.
 
 ## Session Continuity
 
-Last session: 2026-09-05T18:25:56.928Z
-Stopped at: Completed 01-17-PLAN.md
-Resume file: .planning/phases/01-trustworthy-measurement/01-18-PLAN.md
+Last session: 2026-09-05T22:03:12.537Z
+Stopped at: Completed 01-18-PLAN.md
+Resume file: .planning/phases/01-trustworthy-measurement/01-22-PLAN.md
 
-Next: `/donny-execute-phase 1` (wave 10: plan 01-18)
+Next: `/donny-execute-phase 1` (wave 11: plan 01-22)

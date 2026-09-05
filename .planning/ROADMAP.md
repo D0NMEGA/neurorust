@@ -88,7 +88,7 @@ Plans:
 - [ ] 01-15-PLAN.md - Rig install runbook: enable the weekly timer and observe the first fire [wave 18]
 - [x] 01-16-PLAN.md - Harness identity, argv provenance, and the re-derivation guard [wave 8]
 - [x] 01-17-PLAN.md - The durable attempt record and per-instrument interference windows [wave 9]
-- [ ] 01-18-PLAN.md - Gate audit: every precondition establishes what its name claims [wave 10]
+- [x] 01-18-PLAN.md - Gate audit: every precondition establishes what its name claims [wave 10]
 - [x] 01-19-PLAN.md - Verification that recomputes: no substituted zeros, reports re-derived [wave 8]
 - [ ] 01-20-PLAN.md - rtla hwnoise parser, SMI manifest fields, CPU-distribution standing check [wave 12]
 - [ ] 01-21-PLAN.md - Wire hwnoise and MSR_SMI_COUNT into nrmeasure run [wave 13]
@@ -190,7 +190,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Trustworthy measurement | 14/23 | In Progress|  |
+| 1. Trustworthy measurement | 15/23 | In Progress|  |
 | 2. Proven emergency_stop | 0/TBD | Not started | - |
 | 3. Deterministic substrate | 0/TBD | Not started | - |
 | 4. Lock-free transport | 0/TBD | Not started | - |
