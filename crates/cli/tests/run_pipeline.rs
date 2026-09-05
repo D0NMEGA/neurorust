@@ -1144,3 +1144,131 @@ fn preserved_artifacts_carry_checksums() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------------
+// Interference counters bracket one instrument each, measured on a monotonic clock
+// (finding 7 of 01-EXTERNAL-AUDIT.md, second half). The counters used to be sampled
+// once before cyclictest and once after everything (including a second
+// instrument), while the per-run-hour normalisation divided by the requested
+// cyclictest --duration alone.
+// ---------------------------------------------------------------------------------
+
+/// A run with both cyclictest and hwlatdetect records two `InstrumentWindow`
+/// entries, each with its own before, after and measured elapsed time.
+#[test]
+fn interference_windows_are_per_instrument() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let facts_path = write_fixture(temp.path(), "facts.txt", &tuned_facts_text());
+    let interrupts_path = write_fixture(temp.path(), "interrupts.txt", INTERRUPTS);
+    let measurements_root = temp.path().join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+
+    let output = base_run_command(&measurements_root)
+        .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
+        .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+        .args(["--class", "recon"])
+        .arg("--with-hwlatdetect")
+        .args(["--hwlatdetect-duration", "1"])
+        .output()
+        .expect("nrmeasure runs");
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let entries: Vec<_> = std::fs::read_dir(&measurements_root)
+        .expect("read_dir")
+        .filter_map(|entry| entry.ok())
+        .collect();
+    let manifest: RunManifest = serde_json::from_str(
+        &std::fs::read_to_string(entries[0].path().join("manifest.json"))
+            .expect("read manifest.json"),
+    )
+    .expect("manifest.json parses");
+
+    let windows = &manifest.interference.windows;
+    assert_eq!(
+        windows.len(),
+        2,
+        "cyclictest and hwlatdetect must each get their own window: {windows:?}"
+    );
+    assert_eq!(windows[0].instrument, "cyclictest");
+    assert_eq!(windows[1].instrument, "hwlatdetect");
+    assert!(windows[0].elapsed_seconds >= 0.0);
+    assert!(windows[1].elapsed_seconds >= 0.0);
+    assert_eq!(windows[0].requested_seconds, Some(1));
+    assert_eq!(windows[1].requested_seconds, Some(1));
+}
+
+/// The contamination verdict's denominator equals the cyclictest window's
+/// measured `elapsed_seconds`, not `--duration`. The fake cyclictest here always
+/// returns the same real capture (888 overflow samples) almost instantly, so a
+/// verdict still normalising by `--duration` (1 second, per `base_run_command`)
+/// would compute an overflow rate near 888/s; normalising by the truly measured,
+/// near-zero elapsed time produces a rate many times larger.
+#[test]
+fn verdict_normalises_by_measured_cyclictest_elapsed() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let run_dir = run_full_pipeline(temp.path());
+    let manifest: RunManifest = serde_json::from_str(
+        &std::fs::read_to_string(run_dir.join("manifest.json")).expect("read manifest.json"),
+    )
+    .expect("manifest.json parses");
+
+    let tail = manifest
+        .interference
+        .tail_metrics
+        .as_ref()
+        .expect("tail metrics are always populated for a harness-generated run");
+    let cyclictest_elapsed = manifest.interference.windows[0].elapsed_seconds;
+    assert!(
+        cyclictest_elapsed > 0.0,
+        "a real subprocess must take a measurable, nonzero amount of time"
+    );
+
+    let expected_rate = 888.0 / cyclictest_elapsed;
+    assert!(
+        (tail.overflow_rate_per_s - expected_rate).abs() < expected_rate.max(1.0) * 0.05,
+        "overflow_rate_per_s {} does not match overflow_count / windows[0].elapsed_seconds \
+         ({expected_rate}); the verdict must normalise by the cyclictest window's measured \
+         elapsed time",
+        tail.overflow_rate_per_s
+    );
+    assert!(
+        (tail.overflow_rate_per_s - 888.0).abs() > 1.0,
+        "overflow_rate_per_s must not equal overflow_count / --duration (the old, wrong \
+         denominator this plan replaces): got {}",
+        tail.overflow_rate_per_s
+    );
+}
+
+/// The sum of the windows' `elapsed_seconds` is strictly less than the whole-run
+/// wall clock, proving parsing, reconciliation, and the environment snapshot all
+/// fall outside every measurement window.
+#[test]
+fn parsing_is_outside_every_measurement_window() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let run_dir = run_full_pipeline(temp.path());
+    let manifest: RunManifest = serde_json::from_str(
+        &std::fs::read_to_string(run_dir.join("manifest.json")).expect("read manifest.json"),
+    )
+    .expect("manifest.json parses");
+
+    assert!(!manifest.interference.windows.is_empty());
+    let total_window_seconds: f64 = manifest
+        .interference
+        .windows
+        .iter()
+        .map(|w| w.elapsed_seconds)
+        .sum();
+    let whole_run_seconds = (manifest.utc_end - manifest.utc_start).as_seconds_f64();
+
+    assert!(
+        total_window_seconds < whole_run_seconds,
+        "the sum of the windows' elapsed_seconds ({total_window_seconds}) must be strictly less \
+         than the whole-run wall clock ({whole_run_seconds}s), proving parsing and snapshotting \
+         fall outside every measurement window"
+    );
+}
