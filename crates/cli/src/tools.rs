@@ -118,6 +118,9 @@ pub fn run_tool(
             version: version.to_string(),
             argv: full_argv,
             exit_code: output.status.code().unwrap_or(-1),
+            // Populated later in run.rs::execute, once the artifacts this
+            // invocation's output became are known.
+            artifact_paths: Vec::new(),
         },
         stdout: output.stdout,
         stderr: output.stderr,

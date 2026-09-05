@@ -29,9 +29,9 @@ use nr_capture::{environment, interference, preconditions};
 use nr_histogram::hist::{CyclictestRun, parse_hist_file};
 use nr_histogram::json::{parse_json_file, reconcile};
 use nr_manifest::{
-    ArtifactKind, ArtifactRecord, ContaminationVerdict, GitShaSource, HarnessInfo, InstrumentClass,
-    PreconditionResult, PreconditionStatus, ProvenanceTier, RunClass, RunManifest, StorageLocation,
-    ToolInvocation,
+    ArtifactKind, ArtifactPathMapping, ArtifactRecord, ContaminationVerdict, GitShaSource,
+    HarnessInfo, InstrumentClass, PreconditionResult, PreconditionStatus, ProvenanceTier, RunClass,
+    RunManifest, StorageLocation, ToolInvocation,
 };
 use nr_metrics::report::render_run_report;
 use time::OffsetDateTime;
@@ -405,6 +405,11 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
 
     let mut run_bytes = 0u64;
     let mut artifacts = Vec::new();
+    // Paired with each placed artifact's scratch path, so the argv finalization
+    // below can name which argv element became which artifact without
+    // re-deriving either.
+    let mut placed_scratch_paths: Vec<(String, &'static str)> = Vec::new();
+
     artifacts.push(place_artifact(
         &hist_path,
         &run_dir.path,
@@ -412,6 +417,8 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         ArtifactKind::CyclictestHist,
         &mut run_bytes,
     )?);
+    placed_scratch_paths.push((hist_path.display().to_string(), "cyclictest.hist"));
+
     if json_path.is_file() {
         artifacts.push(place_artifact(
             &json_path,
@@ -420,6 +427,7 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
             ArtifactKind::CyclictestJson,
             &mut run_bytes,
         )?);
+        placed_scratch_paths.push((json_path.display().to_string(), "cyclictest.json"));
     }
     if let Some(raw) = &hwlatdetect_raw {
         let hwlat_path = scratch.path().join("hwlatdetect.txt");
@@ -431,16 +439,46 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
             ArtifactKind::HwlatdetectText,
             &mut run_bytes,
         )?);
+        placed_scratch_paths.push((hwlat_path.display().to_string(), "hwlatdetect.txt"));
     }
     write_hist_tsv(&run_dir.path, &cyclictest_run)?;
 
-    // Output-file paths in a recorded argv are relative to the run directory, not
-    // the temporary directory they were actually written to during capture.
+    // The argv is recorded exactly as it was executed (finding 6 of
+    // 01-EXTERNAL-AUDIT.md: relativizing it against the run directory matched
+    // nothing, because the tools actually wrote into a scratch tempdir under
+    // /tmp, not the run directory). artifact_paths maps each output-file path in
+    // argv to the committed artifact it became, matched by substring rather than
+    // exact element equality because cyclictest's paths arrive as
+    // `--histfile=<path>`, one argument, not two. A home directory prefix in
+    // either is redacted (T-1-06); the scratch /tmp paths themselves are left
+    // verbatim, since they are process-lifetime temporary names that identify
+    // nobody.
     let tool_invocations: Vec<ToolInvocation> = tool_invocations
         .into_iter()
-        .map(|invocation| ToolInvocation {
-            argv: nr_capture::argv::relativize_argv(&run_dir.path, &invocation.argv),
-            ..invocation
+        .map(|invocation| {
+            let artifact_paths = placed_scratch_paths
+                .iter()
+                .filter(|(scratch_path, _)| {
+                    invocation
+                        .argv
+                        .iter()
+                        .any(|arg| arg.contains(scratch_path.as_str()))
+                })
+                .map(|(scratch_path, artifact_name)| ArtifactPathMapping {
+                    executed_path: redact_home_prefix(scratch_path),
+                    artifact_path: artifact_name.to_string(),
+                })
+                .collect();
+            let argv = invocation
+                .argv
+                .iter()
+                .map(|arg| redact_home_prefix(arg))
+                .collect();
+            ToolInvocation {
+                argv,
+                artifact_paths,
+                ..invocation
+            }
         })
         .collect();
 
@@ -751,6 +789,44 @@ fn git_output(args: &[&str]) -> Option<String> {
         .ok()
         .filter(|output| output.status.success())
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+/// Replaces a leading match of `std::env::home_dir()` in `value` with the literal
+/// token `[redacted]`, following the same visible-redaction convention as
+/// `KernelInfo::redact_cmdline` and T-1-06's hostname redaction. An executed argv
+/// can carry a home directory (`--measurements-root /home/<user>/neurorust/
+/// measurements` is passed on every rig invocation by `scripts/nr-run-measurement`,
+/// and the scratch directory the tools write into would carry the same exposure if
+/// `$TMPDIR` or an equivalent ever pointed under home); a published manifest must
+/// never carry it verbatim. Handles both a bare path (e.g. `executed_path`, or a
+/// standalone argv token) and a `--flag=/abs/path` token, splitting on the first
+/// `=` the same way `KernelInfo::redact_cmdline` does: a naive whole-string match
+/// would never fire for a `--histfile=...` token, since the string starts with
+/// `--histfile=`, not with the path. A value with no home-directory prefix, for
+/// example the scratch `/tmp/.tmpXXXXXX` paths the tools actually write into
+/// today, passes through unchanged: those are process-lifetime temporary names
+/// and identify nobody.
+fn redact_home_prefix(value: &str) -> String {
+    if let Some((flag, rest)) = value.split_once('=') {
+        if flag.starts_with('-') {
+            return format!("{flag}={}", redact_home_prefix_in_path(rest));
+        }
+    }
+    redact_home_prefix_in_path(value)
+}
+
+fn redact_home_prefix_in_path(value: &str) -> String {
+    let Some(home) = std::env::home_dir() else {
+        return value.to_string();
+    };
+    if home.as_os_str().is_empty() {
+        return value.to_string();
+    }
+    let home = home.to_string_lossy();
+    match value.strip_prefix(home.as_ref()) {
+        Some(rest) => format!("[redacted]{rest}"),
+        None => value.to_string(),
+    }
 }
 
 /// Copies `src` into `run_dir` under `target_name`, checksums it, and records
@@ -1159,6 +1235,7 @@ VERSION=\"26.04.1 LTS\"
             version: "test".to_string(),
             argv: vec![],
             exit_code,
+            artifact_paths: vec![],
         }
     }
 

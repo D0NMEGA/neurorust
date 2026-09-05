@@ -10,7 +10,7 @@ instrument class: headline-series
 provenance tier: harness-generated
 utc start: 2026-08-31T06:00:00Z
 utc end: 2026-08-31T06:10:00Z
-manifest blake3: 1357aaa82fad4fe228b8ebaf870c1156754dd1bd9babb316bc7fe1587bdf51dc
+manifest blake3: b93bfd3a3deea9ecbf0890fa99d4e233364075ea671371ca527d965277cdd37b
 
 ## Rig and tuning
 

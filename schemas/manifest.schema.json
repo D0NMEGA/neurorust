@@ -151,6 +151,25 @@
         "other"
       ]
     },
+    "ArtifactPathMapping": {
+      "description": "Maps a path that appeared in an executed argv to the artifact it became in the run\ndirectory.\n\nThe argv is recorded exactly as executed, which means it names the scratch directory\nthe tool actually wrote into (`/tmp/.tmpEb5CdX/cyclictest.hist`) and that directory is\ngone by the time anyone reads the manifest. Rewriting the argv to point at the\ncommitted file was tried and was worse: it produced a command line that was never run,\nand because the rewrite matched against the run directory while the tool wrote into\n`/tmp`, it silently did nothing at all. Finding 6 of `01-EXTERNAL-AUDIT.md`.",
+      "type": "object",
+      "properties": {
+        "artifact_path": {
+          "description": "The matching entry in this manifest's own `artifacts` array, e.g. `cyclictest.hist`.",
+          "type": "string"
+        },
+        "executed_path": {
+          "description": "The path exactly as it appeared in `argv`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "executed_path",
+        "artifact_path"
+      ]
+    },
     "ArtifactRecord": {
       "description": "One raw capture, checksummed (D-12). `path` is validated by `validate::validate`\nagainst traversal and absolute paths before it is ever joined to a run directory\n(ASVS V12, T-1-16).",
       "type": "object",
@@ -933,10 +952,18 @@
       "type": "object",
       "properties": {
         "argv": {
-          "description": "The exact argument vector, for reproduction. Any output-file path in\n`argv` is recorded relative to the run directory, not as an absolute\npath, so the command a third party pastes actually runs (the rewrite\nhappens where argv is captured, in `nr-capture`, plan 01-05).\nEverything else in `argv` is verbatim.",
+          "description": "The exact argument vector as executed, for reproduction. A previous\nconvention rewrote any output-file path to be relative to the run\ndirectory; that rewrite ran against the wrong directory (the tool\nactually wrote into a scratch `tempfile::tempdir()`, not the final run\ndirectory), silently did nothing, and left every committed manifest's\nargv naming a `/tmp` directory that no longer exists (finding 6 of\n`01-EXTERNAL-AUDIT.md`). `argv` is now recorded byte for byte as\nexecuted; use `artifact_paths` to map a path in `argv` to the artifact\nit became. A home directory prefix in any element is replaced by the\nliteral token `[redacted]` (T-1-06), following the same visible\nconvention as `KernelInfo::redact_cmdline`.",
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "artifact_paths": {
+          "description": "Every path in `argv` that became a committed artifact, paired with the\nartifact's name in this manifest. Empty for a tool that wrote no file\n(`hwlatdetect` writes its report to stdout). Defaults to empty so\nmanifests written before this field existed keep parsing.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ArtifactPathMapping"
           }
         },
         "exit_code": {

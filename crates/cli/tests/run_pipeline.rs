@@ -714,7 +714,10 @@ fn argv_is_recorded_as_executed() {
         .lines()
         .map(|s| s.to_string())
         .collect();
-    assert!(!executed_argv.is_empty(), "the fake tool must have logged something");
+    assert!(
+        !executed_argv.is_empty(),
+        "the fake tool must have logged something"
+    );
 
     let entries: Vec<_> = std::fs::read_dir(&measurements_root)
         .expect("read_dir")
@@ -774,9 +777,7 @@ fn artifact_path_mapping_names_every_output() {
                 mapping.artifact_path
             );
             assert!(
-                tool.argv
-                    .iter()
-                    .any(|a| a.contains(&mapping.executed_path)),
+                tool.argv.iter().any(|a| a.contains(&mapping.executed_path)),
                 "executed_path {:?} does not appear in {}'s own argv: {:?}",
                 mapping.executed_path,
                 tool.name,

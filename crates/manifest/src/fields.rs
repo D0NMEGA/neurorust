@@ -498,6 +498,24 @@ pub struct InterferenceSnapshotPair {
     pub verdict: ContaminationVerdict,
 }
 
+/// Maps a path that appeared in an executed argv to the artifact it became in the run
+/// directory.
+///
+/// The argv is recorded exactly as executed, which means it names the scratch directory
+/// the tool actually wrote into (`/tmp/.tmpEb5CdX/cyclictest.hist`) and that directory is
+/// gone by the time anyone reads the manifest. Rewriting the argv to point at the
+/// committed file was tried and was worse: it produced a command line that was never run,
+/// and because the rewrite matched against the run directory while the tool wrote into
+/// `/tmp`, it silently did nothing at all. Finding 6 of `01-EXTERNAL-AUDIT.md`.
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ArtifactPathMapping {
+    /// The path exactly as it appeared in `argv`.
+    pub executed_path: String,
+    /// The matching entry in this manifest's own `artifacts` array, e.g. `cyclictest.hist`.
+    pub artifact_path: String,
+}
+
 /// One external tool the harness shelled out to, e.g. `cyclictest`.
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -505,13 +523,25 @@ pub struct ToolInvocation {
     pub name: String,
     /// As reported by the tool itself.
     pub version: String,
-    /// The exact argument vector, for reproduction. Any output-file path in
-    /// `argv` is recorded relative to the run directory, not as an absolute
-    /// path, so the command a third party pastes actually runs (the rewrite
-    /// happens where argv is captured, in `nr-capture`, plan 01-05).
-    /// Everything else in `argv` is verbatim.
+    /// The exact argument vector as executed, for reproduction. A previous
+    /// convention rewrote any output-file path to be relative to the run
+    /// directory; that rewrite ran against the wrong directory (the tool
+    /// actually wrote into a scratch `tempfile::tempdir()`, not the final run
+    /// directory), silently did nothing, and left every committed manifest's
+    /// argv naming a `/tmp` directory that no longer exists (finding 6 of
+    /// `01-EXTERNAL-AUDIT.md`). `argv` is now recorded byte for byte as
+    /// executed; use `artifact_paths` to map a path in `argv` to the artifact
+    /// it became. A home directory prefix in any element is replaced by the
+    /// literal token `[redacted]` (T-1-06), following the same visible
+    /// convention as `KernelInfo::redact_cmdline`.
     pub argv: Vec<String>,
     pub exit_code: i32,
+    /// Every path in `argv` that became a committed artifact, paired with the
+    /// artifact's name in this manifest. Empty for a tool that wrote no file
+    /// (`hwlatdetect` writes its report to stdout). Defaults to empty so
+    /// manifests written before this field existed keep parsing.
+    #[serde(default)]
+    pub artifact_paths: Vec<ArtifactPathMapping>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]

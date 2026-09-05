@@ -132,9 +132,15 @@
         "--interval=200",
         "--histofall=400",
         "--json=results.json",
-        "--histfile=cyclictest-rt-isolated-idle-10m.hist"
+        "--histfile=/tmp/.tmpEXAMPLE/cyclictest.hist"
       ],
-      "exit_code": 0
+      "exit_code": 0,
+      "artifact_paths": [
+        {
+          "executed_path": "/tmp/.tmpEXAMPLE/cyclictest.hist",
+          "artifact_path": "cyclictest-rt-isolated-idle-10m.hist"
+        }
+      ]
     }
   ],
   "artifacts": [
