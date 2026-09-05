@@ -76,6 +76,8 @@ const CAPTURE_GLOBS: &[&str] = &[
     "trace-*.txt",
     "timerlat*.txt",
     "osnoise*.txt",
+    "hwnoise*.txt",
+    "rtla-hwnoise*.txt",
 ];
 
 /// Exempt tree (b): `crates/*/tests/fixtures/`. Test input, not a published figure.
@@ -958,6 +960,8 @@ mod tests {
             "trace-001.txt",
             "timerlat-top.txt",
             "osnoise-top.txt",
+            "hwnoise-top.txt",
+            "rtla-hwnoise-probe.txt",
         ] {
             assert!(is_capture_shaped(name), "{name} should be capture-shaped");
         }

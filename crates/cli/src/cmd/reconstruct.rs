@@ -291,6 +291,10 @@ pub fn run(args: Args) -> anyhow::Result<i32> {
         interference,
         tools: Vec::<ToolInvocation>::new(),
         artifacts,
+        // Nothing in the reconstructed recon artifacts speaks to a firmware screen; a
+        // reconstructed run records none rather than inferring one.
+        firmware_screens: Vec::new(),
+        smi_counts: None,
         absent_fields: absent,
         excluded_from_series,
         exclusion_reason,

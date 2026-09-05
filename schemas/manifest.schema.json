@@ -28,6 +28,14 @@
         "null"
       ]
     },
+    "firmware_screens": {
+      "description": "Every firmware screen this run took, in execution order. Empty for a run that took none.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/FirmwareScreen"
+      }
+    },
     "fixtures_used": {
       "description": "Test-only fixture seams active for this run, by environment variable name.\nEmpty for a real measurement.\n\nA fixture is one text read repeatedly, so every interference delta computed from\none is exactly zero, which reads as a perfectly quiet machine rather than as a\nvalue that was never measured. Any entry here forces `excluded_from_series`.\nFinding 8 of `01-EXTERNAL-AUDIT.md`.",
       "type": "array",
@@ -88,6 +96,17 @@
       "type": "integer",
       "format": "uint32",
       "minimum": 0
+    },
+    "smi_counts": {
+      "description": "Per-CPU SMI counts bracketing the whole run. Absent on manifests written before this\nfield existed and on machines where the register could not be read.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SmiCounts"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "thermal_profile": {
       "description": "What this run declared about its own thermal intent before it started. `None`\non a manifest written before this field existed, or a reconstructed run, which\nnever declared one. A harness-generated run always records `Some`.",
@@ -167,6 +186,7 @@
         "hwlatdetect-text",
         "ftrace-markers",
         "rtla-timerlat",
+        "rtla-hwnoise",
         "other"
       ]
     },
@@ -260,6 +280,26 @@
         "count"
       ]
     },
+    "CpuExposure": {
+      "description": "One CPU's real sampling time within a [`FirmwareScreen`], in seconds.",
+      "type": "object",
+      "properties": {
+        "cpu": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "seconds": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cpu",
+        "seconds"
+      ]
+    },
     "CpuGovernor": {
       "description": "One CPU's scaling governor, as read per-core rather than assumed uniform.\n\n`energy_performance_preference` is a second, independent tuning lever some HWP\n(hardware P-state) backends drive alongside `governor`: on this project's own\nMeteor Lake reference rig, `power-profiles-daemon`'s \"performance\" profile leaves\n`governor` at `powersave` and expresses itself as\n`energy_performance_preference=performance` instead\n(`docs/rig/recon-2026-08-31/FINDINGS.md`, \"The rt-tuning.service contradiction\").\n`None` means the hardware has no `energy_performance_preference` file at all\n(non-HWP, non-Intel), never a stand-in for a read that failed. `governor` alone no\nlonger fully describes the tuning state on a machine like this one, which is why\nthe two are recorded side by side rather than one substituting for the other.",
       "type": "object",
@@ -307,6 +347,80 @@
         "cpu",
         "name",
         "disabled"
+      ]
+    },
+    "FirmwareScreen": {
+      "description": "One firmware screen: which instrument ran, exactly how, and what it observed per CPU.\n\nRecorded per CPU because the alternative is what happened on 2026-08-28 and again on\n2026-09-05: a single maximum published as a machine-wide firmware floor, when every event\nbehind it named one CPU that was not among the isolated cores. See\n`docs/rig/firmware-floor-rt-vs-stock.md`.",
+      "type": "object",
+      "properties": {
+        "argv": {
+          "description": "The full argument vector as executed.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "events_recorded": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "instrument": {
+          "description": "The instrument, e.g. `rtla-hwnoise` or `hwlatdetect`. Two instruments measure two\ndifferent things and their numbers are not interchangeable.",
+          "type": "string"
+        },
+        "max_population": {
+          "description": "What `max_us` is a maximum over, in words, e.g.\n`threshold-exceeding sampling records on the listed CPUs`.",
+          "type": "string"
+        },
+        "max_us": {
+          "description": "The maximum the instrument reported, in microseconds, and the population it is the\nmaximum of. `None` when the run observed nothing above threshold.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "observed_cpus": {
+          "description": "The CPUs that actually produced a row or an event. A requested CPU absent from this\nlist was not sampled, or was sampled and observed nothing; the instrument's own\noutput decides which, and `per_cpu_exposure_seconds` is what distinguishes them.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "per_cpu_exposure_seconds": {
+          "description": "Real sampling time on each CPU, when the instrument reports it. Wall-clock duration\nis not exposure: a single migrating thread polling across N CPUs gives each roughly\n1/N of its own polling time, and `hwlatdetect` in `mode=none` gives all of it to one.\nLeft empty for an instrument whose own output gives no basis to compute this per CPU\n(never filled by dividing wall-clock duration; see `nr_capture::hwnoise`).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CpuExposure"
+          }
+        },
+        "requested_cpus": {
+          "description": "The CPUs the instrument was asked to sample.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "tool_version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instrument",
+        "tool_version",
+        "argv",
+        "requested_cpus",
+        "observed_cpus",
+        "per_cpu_exposure_seconds",
+        "max_population",
+        "events_recorded"
       ]
     },
     "GitShaSource": {
@@ -929,6 +1043,48 @@
       "enum": [
         "installed",
         "live-usb"
+      ]
+    },
+    "SmiCounts": {
+      "description": "`MSR_SMI_COUNT` (register 0x34) read on each CPU before and after a run.\n\nAn exact count of system management interrupts serviced on that CPU, with no sampling,\nno threshold and no inference from timing gaps. It answers how many, never how long: a\ncount is not a duration and must never be reported as one.",
+      "type": "object",
+      "properties": {
+        "after": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CpuCounter"
+          }
+        },
+        "before": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CpuCounter"
+          }
+        },
+        "delta": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CpuCounter"
+          }
+        },
+        "register": {
+          "description": "The literal register, `\"0x34\"`.",
+          "type": "string"
+        },
+        "unavailable_reason": {
+          "description": "Why the read failed, when it did. `rdmsr` needs root and the `msr` module; a run on a\nmachine without either records the reason rather than a zero.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "register",
+        "before",
+        "after",
+        "delta"
       ]
     },
     "StorageLocation": {

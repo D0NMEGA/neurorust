@@ -54,6 +54,13 @@ pub struct RunManifest {
     pub interference: InterferenceSnapshotPair,
     pub tools: Vec<ToolInvocation>,
     pub artifacts: Vec<ArtifactRecord>,
+    /// Every firmware screen this run took, in execution order. Empty for a run that took none.
+    #[serde(default)]
+    pub firmware_screens: Vec<FirmwareScreen>,
+    /// Per-CPU SMI counts bracketing the whole run. Absent on manifests written before this
+    /// field existed and on machines where the register could not be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub smi_counts: Option<SmiCounts>,
     /// D-16: fields a reconstructed manifest could not recover. Empty for a
     /// harness-generated run with nothing missing.
     pub absent_fields: Vec<AbsentField>,
@@ -612,6 +619,7 @@ pub enum ArtifactKind {
     HwlatdetectText,
     FtraceMarkers,
     RtlaTimerlat,
+    RtlaHwnoise,
     Other,
 }
 
@@ -637,6 +645,68 @@ pub struct ArtifactRecord {
     pub blake3: String,
     pub kind: ArtifactKind,
     pub stored: StorageLocation,
+}
+
+/// One firmware screen: which instrument ran, exactly how, and what it observed per CPU.
+///
+/// Recorded per CPU because the alternative is what happened on 2026-08-28 and again on
+/// 2026-09-05: a single maximum published as a machine-wide firmware floor, when every event
+/// behind it named one CPU that was not among the isolated cores. See
+/// `docs/rig/firmware-floor-rt-vs-stock.md`.
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct FirmwareScreen {
+    /// The instrument, e.g. `rtla-hwnoise` or `hwlatdetect`. Two instruments measure two
+    /// different things and their numbers are not interchangeable.
+    pub instrument: String,
+    pub tool_version: String,
+    /// The full argument vector as executed.
+    pub argv: Vec<String>,
+    /// The CPUs the instrument was asked to sample.
+    pub requested_cpus: Vec<u32>,
+    /// The CPUs that actually produced a row or an event. A requested CPU absent from this
+    /// list was not sampled, or was sampled and observed nothing; the instrument's own
+    /// output decides which, and `per_cpu_exposure_seconds` is what distinguishes them.
+    pub observed_cpus: Vec<u32>,
+    /// Real sampling time on each CPU, when the instrument reports it. Wall-clock duration
+    /// is not exposure: a single migrating thread polling across N CPUs gives each roughly
+    /// 1/N of its own polling time, and `hwlatdetect` in `mode=none` gives all of it to one.
+    /// Left empty for an instrument whose own output gives no basis to compute this per CPU
+    /// (never filled by dividing wall-clock duration; see `nr_capture::hwnoise`).
+    pub per_cpu_exposure_seconds: Vec<CpuExposure>,
+    /// The maximum the instrument reported, in microseconds, and the population it is the
+    /// maximum of. `None` when the run observed nothing above threshold.
+    pub max_us: Option<u64>,
+    /// What `max_us` is a maximum over, in words, e.g.
+    /// `threshold-exceeding sampling records on the listed CPUs`.
+    pub max_population: String,
+    pub events_recorded: u64,
+}
+
+/// One CPU's real sampling time within a [`FirmwareScreen`], in seconds.
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct CpuExposure {
+    pub cpu: u32,
+    pub seconds: f64,
+}
+
+/// `MSR_SMI_COUNT` (register 0x34) read on each CPU before and after a run.
+///
+/// An exact count of system management interrupts serviced on that CPU, with no sampling,
+/// no threshold and no inference from timing gaps. It answers how many, never how long: a
+/// count is not a duration and must never be reported as one.
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct SmiCounts {
+    /// The literal register, `"0x34"`.
+    pub register: String,
+    pub before: Vec<CpuCounter>,
+    pub after: Vec<CpuCounter>,
+    pub delta: Vec<CpuCounter>,
+    /// Why the read failed, when it did. `rdmsr` needs root and the `msr` module; a run on a
+    /// machine without either records the reason rather than a zero.
+    pub unavailable_reason: Option<String>,
 }
 
 #[cfg(test)]
@@ -752,5 +822,133 @@ mod tests {
                 "PreconditionCheck::ALL is missing {variant:?}"
             );
         }
+    }
+
+    /// A manifest carrying a `FirmwareScreen` serialises and deserialises unchanged.
+    #[test]
+    fn firmware_screen_roundtrips() {
+        let screen = FirmwareScreen {
+            instrument: "rtla-hwnoise".to_string(),
+            tool_version: "7.0.12".to_string(),
+            argv: vec![
+                "rtla".to_string(),
+                "hwnoise".to_string(),
+                "-c".to_string(),
+                "6-11".to_string(),
+                "-H".to_string(),
+                "0-5".to_string(),
+                "-P".to_string(),
+                "f:99".to_string(),
+                "-q".to_string(),
+                "-d".to_string(),
+                "900s".to_string(),
+            ],
+            requested_cpus: vec![6, 7, 8, 9, 10, 11],
+            observed_cpus: vec![6, 7, 8, 9, 10, 11],
+            per_cpu_exposure_seconds: vec![
+                CpuExposure {
+                    cpu: 6,
+                    seconds: 44.25,
+                },
+                CpuExposure {
+                    cpu: 7,
+                    seconds: 44.25,
+                },
+            ],
+            max_us: Some(2),
+            max_population: "threshold-exceeding sampling records on the listed CPUs".to_string(),
+            events_recorded: 7,
+        };
+
+        let json = serde_json::to_string(&screen).expect("FirmwareScreen must serialize");
+        let restored: FirmwareScreen =
+            serde_json::from_str(&json).expect("FirmwareScreen must deserialize");
+        assert_eq!(restored, screen);
+    }
+
+    /// Before, after and delta per CPU serialise and deserialise unchanged, including the
+    /// `unavailable_reason` case where the register could not be read at all (no root, no
+    /// `msr` module).
+    #[test]
+    fn smi_counts_roundtrip() {
+        let counts = SmiCounts {
+            register: "0x34".to_string(),
+            before: vec![CpuCounter {
+                cpu: 6,
+                count: 4006,
+            }],
+            after: vec![CpuCounter {
+                cpu: 6,
+                count: 4006,
+            }],
+            delta: vec![CpuCounter { cpu: 6, count: 0 }],
+            unavailable_reason: None,
+        };
+        let json = serde_json::to_string(&counts).expect("SmiCounts must serialize");
+        let restored: SmiCounts = serde_json::from_str(&json).expect("SmiCounts must deserialize");
+        assert_eq!(restored, counts);
+
+        let unavailable = SmiCounts {
+            register: "0x34".to_string(),
+            before: vec![],
+            after: vec![],
+            delta: vec![],
+            unavailable_reason: Some("rdmsr: not running as root".to_string()),
+        };
+        let json_unavailable =
+            serde_json::to_string(&unavailable).expect("SmiCounts must serialize when unavailable");
+        let restored_unavailable: SmiCounts = serde_json::from_str(&json_unavailable)
+            .expect("SmiCounts must deserialize when unavailable");
+        assert_eq!(restored_unavailable, unavailable);
+    }
+
+    /// All eight committed manifests still deserialise with `firmware_screens` and
+    /// `smi_counts` absent from the JSON on disk: every manifest committed before this plan
+    /// predates both fields, and this is precisely the case `#[serde(default)]` exists to
+    /// keep validating. Counted independently on 2026-09-05 (see this plan's own
+    /// `<interfaces>` block); a future plan adding a ninth run directory should update the
+    /// count here deliberately.
+    #[test]
+    fn committed_manifests_parse_without_firmware_fields() {
+        let measurements_dir =
+            std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../measurements"));
+        let mut checked = 0;
+        for entry in std::fs::read_dir(measurements_dir)
+            .expect("measurements/ must exist for this test to mean anything")
+        {
+            let entry = entry.expect("readable directory entry");
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let manifest_path = path.join("manifest.json");
+            let Ok(text) = std::fs::read_to_string(&manifest_path) else {
+                continue; // a failed-attempt directory has no manifest.json at all
+            };
+            assert!(
+                !text.contains("firmware_screens") && !text.contains("smi_counts"),
+                "{}: expected to predate the firmware fields this test is about; if it now \
+                 carries them, this test no longer exercises the absent-field default",
+                manifest_path.display()
+            );
+            let manifest: RunManifest = serde_json::from_str(&text).unwrap_or_else(|err| {
+                panic!("{} failed to deserialize: {err}", manifest_path.display())
+            });
+            assert!(
+                manifest.firmware_screens.is_empty(),
+                "{} predates firmware_screens and must default to empty",
+                manifest_path.display()
+            );
+            assert!(
+                manifest.smi_counts.is_none(),
+                "{} predates smi_counts and must default to absent",
+                manifest_path.display()
+            );
+            checked += 1;
+        }
+        assert_eq!(
+            checked, 8,
+            "expected exactly the 8 committed run manifests as of plan 01-20"
+        );
     }
 }

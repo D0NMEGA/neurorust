@@ -810,6 +810,10 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
             interference: outcome.pair,
             tools: tool_invocations,
             artifacts,
+            // No firmware screen is driven by `nrmeasure run` yet (plan 01-21); a run this
+            // harness produces today took none.
+            firmware_screens: Vec::new(),
+            smi_counts: None,
             absent_fields: env_snapshot.absent_fields,
             excluded_from_series,
             exclusion_reason,

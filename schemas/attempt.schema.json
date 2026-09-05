@@ -82,6 +82,7 @@
         "hwlatdetect-text",
         "ftrace-markers",
         "rtla-timerlat",
+        "rtla-hwnoise",
         "other"
       ]
     },
