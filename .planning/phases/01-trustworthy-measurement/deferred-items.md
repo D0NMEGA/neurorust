@@ -318,3 +318,25 @@ audit record and the fix can be read together.
   an earlier investigation session; the operator can still satisfy the check by hand with
   the four `echo`/`tee` commands in `docs/measurement-protocol.md`'s "Required system state"
   table.
+
+## From 01-22 (task 1: the rig has no git, so "git pull" as written does not work)
+
+- **`git` is not installed on the rig, and `~/neurorust` there is a plain directory, not a
+  git clone.** Confirmed directly: `dpkg -l git` reports `un` (never installed), `which git`
+  and `bash -lc 'which git'` both report not found, and `~/neurorust/.git` does not exist.
+  The directory is a working tree kept in sync by `rsync` alone (matching 01-11-SUMMARY.md's
+  own "rsynced and rebuilt there" phrasing for the binary; this plan confirms the same is
+  true of the source tree, not just the build).
+  This plan's own task 1 step 5 instructs `cd ~/neurorust && git pull` as the first line of
+  the rig-side session. That command fails outright (`git: command not found`) as written.
+  Worked around here, before the checkpoint was returned: pushed the six new/changed files
+  (`scripts/nr-recon`, `scripts/nr-probe`, `scripts/nr-measure-mode`,
+  `scripts/nr-run-measurement`, `deploy/sudoers/nr-measurement`, `deploy/sudoers/install.sh`)
+  directly from the dev host with a plain, unprivileged `rsync -av <paths>
+  precision3591-rig:~/neurorust/<paths>` (verified byte-identical after transfer via
+  `sha256sum` on both ends), so the operator's rig-side session can run
+  `sudo ./deploy/sudoers/install.sh` immediately with no pull step.
+  Whoever next writes a rig-facing plan should say `rsync` from the dev host, not `git pull`
+  on the rig, unless a future plan deliberately installs `git` there first (itself a `sudo
+  apt install`, i.e. another password-gated step, for a machine that has managed fine without
+  it so far).
