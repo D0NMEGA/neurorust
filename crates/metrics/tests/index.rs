@@ -11,7 +11,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use nr_manifest::{ArtifactKind, RunManifest};
-use nr_metrics::index::{RunSummary, render_index};
+use nr_metrics::index::{RunOutcome, RunSummary, render_index};
 use time::macros::format_description;
 
 fn measurements_root() -> PathBuf {
@@ -72,11 +72,12 @@ fn load_summaries(measurements_root: &Path) -> Vec<RunSummary> {
                 run_class: manifest.run_class.clone(),
                 instrument_class: manifest.instrument_class.clone(),
                 provenance_tier: manifest.provenance_tier.clone(),
-                verdict: manifest.interference.verdict.clone(),
+                verdict: Some(manifest.interference.verdict.clone()),
                 p99_us,
                 max_us,
                 in_series: !manifest.excluded_from_series,
                 reason: manifest.exclusion_reason.clone(),
+                outcome: RunOutcome::Measured,
             }
         })
         .collect()

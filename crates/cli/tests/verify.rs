@@ -684,7 +684,9 @@ fn write_failed_attempt(measurements_root: &Path, run_id: &str) -> AttemptRecord
     fs::write(&hist_path, b"this is not a valid cyclictest histogram\n")
         .expect("write preserved capture");
     let blake3 = nr_manifest::blake3_file(&hist_path).expect("hash the preserved capture");
-    let bytes = fs::metadata(&hist_path).expect("stat the preserved capture").len();
+    let bytes = fs::metadata(&hist_path)
+        .expect("stat the preserved capture")
+        .len();
 
     let record = AttemptRecord {
         schema_version: nr_manifest::ATTEMPT_SCHEMA_VERSION,
@@ -818,9 +820,13 @@ fn verify_rejects_an_in_progress_attempt() {
         "a run left in-progress must fail strict verification, not be committable"
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains(run_id), "stdout should name the run: {stdout}");
     assert!(
-        stdout.to_lowercase().contains("in-progress") || stdout.to_lowercase().contains("unfinished"),
+        stdout.contains(run_id),
+        "stdout should name the run: {stdout}"
+    );
+    assert!(
+        stdout.to_lowercase().contains("in-progress")
+            || stdout.to_lowercase().contains("unfinished"),
         "stdout should describe the run as unfinished: {stdout}"
     );
 }

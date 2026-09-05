@@ -3,17 +3,24 @@
 //! Four checks, run over the whole tree, every failure collected before exiting (never
 //! stopping at the first):
 //!
-//!   1. Every immediate subdirectory of `measurements/` has a readable `manifest.json` that
-//!      deserialises into a [`RunManifest`] and passes [`nr_manifest::validate`].
+//!   1. Every immediate subdirectory of `measurements/` has either a readable `manifest.json`
+//!      that deserialises into a [`RunManifest`] and passes [`nr_manifest::validate`], or a
+//!      readable `ATTEMPT.json` (task 1's [`AttemptRecord`]) with `status: failed`: a run that
+//!      failed before producing a measurement is still a first-class published outcome
+//!      (BENCH-06, finding 7 of `01-EXTERNAL-AUDIT.md`). A directory carrying both a manifest
+//!      and a failed attempt record, or one left at `status: in-progress`, is reported as a
+//!      defect; a directory with neither is reported exactly as an orphan capture always has
+//!      been.
 //!   2. No capture-shaped file exists anywhere in the git-tracked tree except inside a run
-//!      directory that lists it (by path and by blake3), or under one of two narrow exempt
-//!      trees: `crates/*/tests/fixtures/` or `docs/rig/recon-*/` with a filename beginning
-//!      `probe-`. This is the T-1-05 mitigation: scoped by what a file *is*, not only by
-//!      where it sits, so moving a figure out of `measurements/` does not evade the gate.
-//!   3. `measurements/INDEX.md`, generated from every manifest, either gets written
-//!      (`--write-index`) or compared against what is on disk (`--check-index`). A run whose
-//!      histogram cannot be parsed renders `unavailable` in its p99/max columns there, never a
-//!      substituted zero (T-1-52).
+//!      directory that lists it (by path and by blake3) in its `manifest.json` OR in a failed
+//!      attempt's `ATTEMPT.json` `preserved` array, or under one of two narrow exempt trees:
+//!      `crates/*/tests/fixtures/` or `docs/rig/recon-*/` with a filename beginning `probe-`.
+//!      This is the T-1-05 mitigation: scoped by what a file *is*, not only by where it sits,
+//!      so moving a figure out of `measurements/` does not evade the gate.
+//!   3. `measurements/INDEX.md`, generated from every manifest and every failed attempt,
+//!      either gets written (`--write-index`) or compared against what is on disk
+//!      (`--check-index`). A run whose histogram cannot be parsed, or a failed attempt, renders
+//!      `unavailable` in its p99/max columns there, never a substituted zero (T-1-52).
 //!   4. `--strict` only: every harness-generated run's published `hist.tsv` and `REPORT.md`
 //!      `## Results` figures are re-derived from the run's own raw capture and compared
 //!      (T-1-53). A run with no recorded `--histogram` bound, or a reconstructed run with no
@@ -28,8 +35,8 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use clap::Args as ClapArgs;
 use nr_histogram::hist::CyclictestRun;
-use nr_manifest::{ArtifactKind, ProvenanceTier, RunManifest};
-use nr_metrics::index::{RunSummary, render_index};
+use nr_manifest::{ArtifactKind, AttemptRecord, AttemptStatus, ProvenanceTier, RunManifest};
+use nr_metrics::index::{RunOutcome, RunSummary, render_index};
 use time::macros::format_description;
 
 #[derive(ClapArgs, Debug)]
@@ -175,14 +182,54 @@ fn resolve_absolute(base: &Path, path: &Path) -> PathBuf {
 // Check 1: every run directory is complete.
 // ---------------------------------------------------------------------------------
 
+/// What [`check_run_directories`] found for one run directory that verifies at all: either a
+/// normal manifest, or a published failed attempt (task 1's [`AttemptRecord`], `status:
+/// failed`; BENCH-06, finding 7 of `01-EXTERNAL-AUDIT.md`). Shared by check 2 (the
+/// stray-capture scan) and check 3 (the index), so both understand the second valid shape a run
+/// directory can take.
+enum RunDirRecord {
+    /// Both variants boxed: `RunManifest` and `AttemptRecord` are each large enough that
+    /// leaving either unboxed would size every `RunDirRecord` to its larger variant.
+    Manifest(Box<RunManifest>),
+    FailedAttempt(Box<AttemptRecord>),
+}
+
+/// The result of reading and parsing one JSON sidecar file (`manifest.json` or `ATTEMPT.json`)
+/// out of a run directory. `Invalid` means the file exists but failed to parse; the caller has
+/// already recorded that as a problem and must not also report the directory as if the file
+/// were simply missing.
+enum Loaded<T> {
+    Absent,
+    Invalid,
+    Valid(T),
+}
+
+fn load_json<T: serde::de::DeserializeOwned>(
+    path: &Path,
+    what: &str,
+    problems: &mut Vec<String>,
+) -> Loaded<T> {
+    match std::fs::read_to_string(path) {
+        Ok(text) => match serde_json::from_str::<T>(&text) {
+            Ok(value) => Loaded::Valid(value),
+            Err(err) => {
+                problems.push(format!("{}: {what} failed to parse: {err}", path.display()));
+                Loaded::Invalid
+            }
+        },
+        Err(_) => Loaded::Absent,
+    }
+}
+
 /// Validates every immediate subdirectory of `measurements_root`. Returns every problem found
-/// (never stopping at the first), the number of run directories examined, and every manifest
-/// that at least *deserialised* successfully (regardless of whether `nr_manifest::validate`
-/// also found a problem with it), keyed by the run directory's own name. Check 2 uses this map
-/// to avoid re-reporting a directory whose manifest could not be loaded at all.
+/// (never stopping at the first), the number of run directories examined, and every directory
+/// that at least *deserialised* successfully into one of the two valid shapes (regardless of
+/// whether `nr_manifest::validate` also found a problem with a manifest), keyed by the run
+/// directory's own name. Checks 2 and 3 use this map to avoid re-reporting a directory whose
+/// records could not be loaded at all.
 fn check_run_directories(
     measurements_root: &Path,
-) -> (Vec<String>, usize, HashMap<String, RunManifest>) {
+) -> (Vec<String>, usize, HashMap<String, RunDirRecord>) {
     let mut problems = Vec::new();
     let mut loaded = HashMap::new();
     let mut run_dir_count = 0usize;
@@ -206,37 +253,71 @@ fn check_run_directories(
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let manifest_path = dir.join("manifest.json");
 
-        let text = match std::fs::read_to_string(&manifest_path) {
-            Ok(text) => text,
-            Err(_) => {
+        let manifest: Loaded<RunManifest> =
+            load_json(&dir.join("manifest.json"), "manifest.json", &mut problems);
+        let attempt: Loaded<AttemptRecord> =
+            load_json(&dir.join("ATTEMPT.json"), "ATTEMPT.json", &mut problems);
+
+        match (manifest, attempt) {
+            (Loaded::Valid(manifest), Loaded::Valid(attempt))
+                if attempt.status == AttemptStatus::Failed =>
+            {
+                problems.push(format!(
+                    "{}: has both manifest.json and an ATTEMPT.json with status failed; a \
+                     failed attempt must not carry a manifest",
+                    dir.display()
+                ));
+                if let Err(errors) = nr_manifest::validate(&dir, &manifest) {
+                    for err in errors {
+                        problems.push(format!("{}: {err}", dir.display()));
+                    }
+                }
+                loaded.insert(name, RunDirRecord::Manifest(Box::new(manifest)));
+            }
+            (Loaded::Valid(manifest), _) => {
+                // Either no ATTEMPT.json at all (every manifest committed before this plan),
+                // or one with status completed (the normal shape going forward): both are a
+                // manifest-bearing directory, validated exactly as before.
+                if let Err(errors) = nr_manifest::validate(&dir, &manifest) {
+                    for err in errors {
+                        problems.push(format!("{}: {err}", dir.display()));
+                    }
+                }
+                loaded.insert(name, RunDirRecord::Manifest(Box::new(manifest)));
+            }
+            (Loaded::Absent, Loaded::Valid(attempt)) => match attempt.status {
+                AttemptStatus::Failed => {
+                    loaded.insert(name, RunDirRecord::FailedAttempt(Box::new(attempt)));
+                }
+                AttemptStatus::InProgress => {
+                    problems.push(format!(
+                        "{}: ATTEMPT.json has status in-progress; a run that never finished \
+                         must not be committed",
+                        dir.display()
+                    ));
+                }
+                AttemptStatus::Completed => {
+                    // A completed attempt with no manifest is inconsistent (the harness always
+                    // writes manifest.json before marking an attempt completed); reported the
+                    // same way an orphan capture always has been.
+                    problems.push(format!(
+                        "{}: missing or unreadable manifest.json (orphan capture)",
+                        dir.display()
+                    ));
+                }
+            },
+            (Loaded::Absent, Loaded::Absent) => {
                 problems.push(format!(
                     "{}: missing or unreadable manifest.json (orphan capture)",
                     dir.display()
                 ));
-                continue;
             }
-        };
-
-        let manifest: RunManifest = match serde_json::from_str(&text) {
-            Ok(manifest) => manifest,
-            Err(err) => {
-                problems.push(format!(
-                    "{}: manifest.json failed to parse: {err}",
-                    manifest_path.display()
-                ));
-                continue;
-            }
-        };
-
-        if let Err(errors) = nr_manifest::validate(&dir, &manifest) {
-            for err in errors {
-                problems.push(format!("{}: {err}", dir.display()));
+            (Loaded::Invalid, _) | (Loaded::Absent, Loaded::Invalid) => {
+                // A parse-failure problem was already pushed by load_json for whichever file
+                // was malformed; nothing further to report for this directory.
             }
         }
-
-        loaded.insert(name, manifest);
     }
 
     (problems, run_dir_count, loaded)
@@ -350,16 +431,22 @@ fn is_exempt_recon_probe(rel_path: &Path) -> bool {
 }
 
 /// Whether `abs_path` (a capture-shaped file physically present on disk, at `rel_in_run`
-/// relative to its run directory) is listed in `manifest.artifacts` with a matching path AND a
-/// matching blake3 (a file present on disk but absent from, or disagreeing with, the manifest
-/// fails either way).
-fn artifact_listed(manifest: &RunManifest, abs_path: &Path, rel_in_run: &Path) -> bool {
+/// relative to its run directory) is listed with a matching path AND a matching blake3 in
+/// `record`'s own artifact list: `manifest.artifacts` for a measured run, or a failed attempt's
+/// `preserved` array (task 1). A file present on disk but absent from, or disagreeing with,
+/// that list fails either way. The exemption is by record and checksum, not by directory, so a
+/// partial capture preserved by a failed attempt is still checksummed evidence rather than an
+/// unaccounted file (T-1-61).
+fn artifact_listed(record: &RunDirRecord, abs_path: &Path, rel_in_run: &Path) -> bool {
     let rel_str = rel_in_run.to_string_lossy();
     let Ok(actual_blake3) = nr_manifest::blake3_file(abs_path) else {
         return false;
     };
-    manifest
-        .artifacts
+    let artifacts = match record {
+        RunDirRecord::Manifest(manifest) => &manifest.artifacts,
+        RunDirRecord::FailedAttempt(attempt) => &attempt.preserved,
+    };
+    artifacts
         .iter()
         .any(|artifact| artifact.path == rel_str && artifact.blake3 == actual_blake3)
 }
@@ -367,7 +454,7 @@ fn artifact_listed(manifest: &RunManifest, abs_path: &Path, rel_in_run: &Path) -
 fn check_stray_captures(
     root: &Path,
     measurements_rel: &Path,
-    loaded: &HashMap<String, RunManifest>,
+    loaded: &HashMap<String, RunDirRecord>,
 ) -> Vec<String> {
     let mut problems = Vec::new();
 
@@ -383,22 +470,23 @@ fn check_stray_captures(
             let mut comps = rel_to_measurements.components();
             if let Some(run_dir_component) = comps.next() {
                 let run_dir_name = run_dir_component.as_os_str().to_string_lossy().into_owned();
-                if let Some(manifest) = loaded.get(&run_dir_name) {
+                if let Some(record) = loaded.get(&run_dir_name) {
                     let rel_in_run = rel_to_measurements
                         .strip_prefix(run_dir_component.as_os_str())
                         .unwrap_or(rel_to_measurements);
                     let abs = root.join(&rel);
-                    if !artifact_listed(manifest, &abs, rel_in_run) {
+                    if !artifact_listed(record, &abs, rel_in_run) {
                         problems.push(format!(
                             "{}: capture-shaped file is not listed (with a matching checksum) \
-                             in {}'s manifest",
+                             in {}'s manifest or preserved attempt record",
                             rel.display(),
                             run_dir_name
                         ));
                     }
                 }
-                // If the run directory has no loaded manifest, check 1 already reported its
-                // root cause (missing or unparsable manifest.json); no further per-file noise.
+                // If the run directory has no loaded record, check 1 already reported its root
+                // cause (missing or unparsable manifest.json/ATTEMPT.json); no further per-file
+                // noise.
                 continue;
             }
         }
@@ -434,7 +522,7 @@ const NO_HISTOGRAM_ARTIFACT: &str = "no cyclictest histogram artifact in this ma
 /// and pass it. Finding 6 of `01-EXTERNAL-AUDIT.md`.
 fn build_summaries(
     measurements_root: &Path,
-    loaded: &HashMap<String, RunManifest>,
+    loaded: &HashMap<String, RunDirRecord>,
     strict: bool,
 ) -> (Vec<RunSummary>, Vec<String>) {
     let mut names: Vec<&String> = loaded.keys().collect();
@@ -443,36 +531,67 @@ fn build_summaries(
 
     let summaries = names
         .into_iter()
-        .map(|name| {
-            let manifest = &loaded[name];
-            let run_dir = measurements_root.join(name);
-            let (p99_us, max_us) = match compute_percentiles(&run_dir, manifest) {
-                Ok((p99, max)) => (Some(p99), Some(max)),
-                Err(reason) => {
-                    if strict && reason != NO_HISTOGRAM_ARTIFACT {
-                        problems.push(format!("{}: {reason}", run_dir.display()));
+        .map(|name| match &loaded[name] {
+            RunDirRecord::Manifest(manifest) => {
+                let run_dir = measurements_root.join(name);
+                let (p99_us, max_us) = match compute_percentiles(&run_dir, manifest) {
+                    Ok((p99, max)) => (Some(p99), Some(max)),
+                    Err(reason) => {
+                        if strict && reason != NO_HISTOGRAM_ARTIFACT {
+                            problems.push(format!("{}: {reason}", run_dir.display()));
+                        }
+                        (None, None)
                     }
-                    (None, None)
-                }
-            };
-            let date_format = format_description!("[year]-[month]-[day]");
-            let date = manifest
-                .utc_start
-                .date()
-                .format(&date_format)
-                .unwrap_or_default();
+                };
+                let date_format = format_description!("[year]-[month]-[day]");
+                let date = manifest
+                    .utc_start
+                    .date()
+                    .format(&date_format)
+                    .unwrap_or_default();
 
-            RunSummary {
-                date,
-                run_id: manifest.run_id.clone(),
-                run_class: manifest.run_class.clone(),
-                instrument_class: manifest.instrument_class.clone(),
-                provenance_tier: manifest.provenance_tier.clone(),
-                verdict: manifest.interference.verdict.clone(),
-                p99_us,
-                max_us,
-                in_series: !manifest.excluded_from_series,
-                reason: manifest.exclusion_reason.clone(),
+                RunSummary {
+                    date,
+                    run_id: manifest.run_id.clone(),
+                    run_class: manifest.run_class.clone(),
+                    instrument_class: manifest.instrument_class.clone(),
+                    provenance_tier: manifest.provenance_tier.clone(),
+                    verdict: Some(manifest.interference.verdict.clone()),
+                    p99_us,
+                    max_us,
+                    in_series: !manifest.excluded_from_series,
+                    reason: manifest.exclusion_reason.clone(),
+                    outcome: RunOutcome::Measured,
+                }
+            }
+            // BENCH-06/finding 7: a failed attempt gets a row too, never a computed value it
+            // never produced. There is no `strict`-mode percentile attempt here at all: a
+            // failed attempt is not required to have a parseable (or any) histogram, so its
+            // absence is not a problem to report, only unavailable data to render.
+            RunDirRecord::FailedAttempt(attempt) => {
+                let date_format = format_description!("[year]-[month]-[day]");
+                let date = attempt
+                    .utc_start
+                    .date()
+                    .format(&date_format)
+                    .unwrap_or_default();
+                let reason = attempt.failure.as_ref().map(|failure| {
+                    format!("attempt failed at {}: {}", failure.stage, failure.message)
+                });
+
+                RunSummary {
+                    date,
+                    run_id: attempt.run_id.clone(),
+                    run_class: attempt.requested.run_class.clone(),
+                    instrument_class: attempt.requested.instrument_class.clone(),
+                    provenance_tier: ProvenanceTier::HarnessGenerated,
+                    verdict: None,
+                    p99_us: None,
+                    max_us: None,
+                    in_series: false,
+                    reason,
+                    outcome: RunOutcome::FailedAttempt,
+                }
             }
         })
         .collect();
@@ -535,9 +654,13 @@ struct DerivedFiguresReport {
 ///   - its recorded argv carries no `--histogram=<n>` for the `cyclictest` invocation: guessing
 ///     a plausible-looking default bound would produce a re-derivation that agrees with itself
 ///     by construction and proves nothing (T-1-54).
+///
+/// A failed attempt (task 1's [`AttemptRecord`]) is skipped outright, counted in neither
+/// bucket: it has no manifest and no generated report at all, which is a different thing from a
+/// measured run this check cannot re-derive, not a variant of it.
 fn check_derived_figures(
     measurements_root: &Path,
-    loaded: &HashMap<String, RunManifest>,
+    loaded: &HashMap<String, RunDirRecord>,
 ) -> DerivedFiguresReport {
     let mut problems = Vec::new();
     let mut notes = Vec::new();
@@ -548,7 +671,9 @@ fn check_derived_figures(
     names.sort();
 
     for name in names {
-        let manifest = &loaded[name];
+        let RunDirRecord::Manifest(manifest) = &loaded[name] else {
+            continue;
+        };
         let run_dir = measurements_root.join(name);
 
         if matches!(manifest.provenance_tier, ProvenanceTier::Reconstructed) {

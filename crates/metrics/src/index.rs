@@ -8,6 +8,16 @@ use nr_manifest::{ContaminationVerdict, InstrumentClass, ProvenanceTier, RunClas
 
 use crate::kebab;
 
+/// `Measured` for a run with a manifest; `FailedAttempt` for a directory that holds
+/// only an attempt record (task 1's `AttemptRecord`, `status: failed`). BENCH-06:
+/// the failure case appears in the published index, it is not omitted. Finding 7
+/// of `01-EXTERNAL-AUDIT.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunOutcome {
+    Measured,
+    FailedAttempt,
+}
+
 /// One row of `measurements/INDEX.md`.
 #[derive(Debug, Clone)]
 pub struct RunSummary {
@@ -16,19 +26,26 @@ pub struct RunSummary {
     pub run_id: String,
     pub run_class: RunClass,
     pub instrument_class: InstrumentClass,
+    /// `HarnessGenerated` for a failed attempt too: it really was generated live
+    /// by the harness, it simply produced no manifest.
     pub provenance_tier: ProvenanceTier,
-    pub verdict: ContaminationVerdict,
-    /// `None` when the run's histogram could not be parsed. Rendered as `unavailable`.
-    /// Never substituted with zero: a substituted zero is indistinguishable from a run that
-    /// really observed zero, and one of those is evidence while the other is a parse failure.
-    /// Finding 6 of `01-EXTERNAL-AUDIT.md`.
+    /// `None` for a failed attempt, which never reaches the D-15/D-24 verdict.
+    /// Rendered as `unavailable`, the same convention as `p99_us`/`max_us` below.
+    pub verdict: Option<ContaminationVerdict>,
+    /// `None` when the run's histogram could not be parsed, or the run is a failed
+    /// attempt with no histogram to parse. Rendered as `unavailable`. Never
+    /// substituted with zero: a substituted zero is indistinguishable from a run
+    /// that really observed zero, and one of those is evidence while the other is
+    /// a parse failure. Finding 6 of `01-EXTERNAL-AUDIT.md`.
     pub p99_us: Option<u64>,
     pub max_us: Option<u64>,
-    /// Whether this run counts toward the regression series (the negation of the manifest's
-    /// `excluded_from_series`).
+    /// Whether this run counts toward the regression series (the negation of the
+    /// manifest's `excluded_from_series`). Always `false` for a failed attempt.
     pub in_series: bool,
-    /// The manifest's `exclusion_reason`, carried through unchanged when present.
+    /// The manifest's `exclusion_reason`, or, for a failed attempt, `attempt
+    /// failed at <stage>: <message>`.
     pub reason: Option<String>,
+    pub outcome: RunOutcome,
 }
 
 /// Renders `measurements/INDEX.md`. Every run directory gets a row here; a run excluded from
@@ -39,8 +56,8 @@ pub fn render_index(summaries: &[RunSummary]) -> String {
     out.push_str("# Measurement index\n\n");
     out.push_str(
         "Every run directory under `measurements/` has a row here, including a contaminated, \
-         regressed, or refused run: BENCH-06 requires a losing configuration to be reported, \
-         not omitted.\n\n",
+         regressed, refused, or failed run: BENCH-06 requires a losing configuration, or a \
+         failed attempt, to be reported, not omitted.\n\n",
     );
     out.push_str(
         "| date | run id | class | instrument class | provenance tier | verdict | p99 us | max us | in series | reason |\n",
@@ -56,7 +73,7 @@ pub fn render_index(summaries: &[RunSummary]) -> String {
             kebab(&summary.run_class),
             kebab(&summary.instrument_class),
             kebab(&summary.provenance_tier),
-            kebab(&summary.verdict),
+            render_optional_verdict(&summary.verdict),
             render_optional_us(summary.p99_us),
             render_optional_us(summary.max_us),
             if summary.in_series { "yes" } else { "no" },
@@ -71,6 +88,16 @@ pub fn render_index(summaries: &[RunSummary]) -> String {
 fn render_optional_us(value: Option<u64>) -> String {
     match value {
         Some(v) => v.to_string(),
+        None => "unavailable".to_string(),
+    }
+}
+
+/// Renders a verdict as its kebab-case form, or the literal `unavailable` for a
+/// failed attempt, which never reaches the D-15/D-24 verdict computation. Same
+/// convention as [`render_optional_us`].
+fn render_optional_verdict(value: &Option<ContaminationVerdict>) -> String {
+    match value {
+        Some(verdict) => kebab(verdict),
         None => "unavailable".to_string(),
     }
 }

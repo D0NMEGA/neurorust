@@ -1,6 +1,6 @@
 # Measurement index
 
-Every run directory under `measurements/` has a row here, including a contaminated, regressed, or refused run: BENCH-06 requires a losing configuration to be reported, not omitted.
+Every run directory under `measurements/` has a row here, including a contaminated, regressed, refused, or failed run: BENCH-06 requires a losing configuration, or a failed attempt, to be reported, not omitted.
 
 | date | run id | class | instrument class | provenance tier | verdict | p99 us | max us | in series | reason |
 |------|--------|-------|-------------------|------------------|---------|--------|--------|-----------|--------|

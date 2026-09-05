@@ -1,6 +1,6 @@
 use nr_histogram::hist::{CyclictestRun, parse_hist_file};
 use nr_manifest::RunManifest;
-use nr_metrics::index::{RunSummary, render_index};
+use nr_metrics::index::{RunOutcome, RunSummary, render_index};
 use nr_metrics::report::{HwlatObservation, Plat03Input, render_plat03_verdict, render_run_report};
 
 /// A hand-built manifest, adapted from the reviewed worked example
@@ -342,11 +342,12 @@ fn losing_config_rendered() {
             run_class: RunClass::Weekly,
             instrument_class: InstrumentClass::HeadlineSeries,
             provenance_tier: ProvenanceTier::HarnessGenerated,
-            verdict: ContaminationVerdict::Clean,
+            verdict: Some(ContaminationVerdict::Clean),
             p99_us: Some(9),
             max_us: Some(27),
             in_series: true,
             reason: None,
+            outcome: RunOutcome::Measured,
         },
         RunSummary {
             date: "2026-08-24".to_string(),
@@ -354,11 +355,12 @@ fn losing_config_rendered() {
             run_class: RunClass::Weekly,
             instrument_class: InstrumentClass::HeadlineSeries,
             provenance_tier: ProvenanceTier::HarnessGenerated,
-            verdict: ContaminationVerdict::Contaminated,
+            verdict: Some(ContaminationVerdict::Contaminated),
             p99_us: Some(30),
             max_us: Some(3800),
             in_series: false,
             reason: Some("CAL IPI count exceeded threshold on cpu6".to_string()),
+            outcome: RunOutcome::Measured,
         },
         RunSummary {
             date: "2026-08-17".to_string(),
@@ -366,11 +368,12 @@ fn losing_config_rendered() {
             run_class: RunClass::Weekly,
             instrument_class: InstrumentClass::HeadlineSeries,
             provenance_tier: ProvenanceTier::HarnessGenerated,
-            verdict: ContaminationVerdict::Contaminated,
+            verdict: Some(ContaminationVerdict::Contaminated),
             p99_us: Some(41),
             max_us: Some(4200),
             in_series: false,
             reason: Some("SSH session active during capture".to_string()),
+            outcome: RunOutcome::Measured,
         },
     ];
 
@@ -395,11 +398,12 @@ fn index_never_omits() {
         run_class: RunClass::Weekly,
         instrument_class: InstrumentClass::HeadlineSeries,
         provenance_tier: ProvenanceTier::HarnessGenerated,
-        verdict: ContaminationVerdict::Contaminated,
+        verdict: Some(ContaminationVerdict::Contaminated),
         p99_us: Some(30),
         max_us: Some(3800),
         in_series: false,
         reason: Some("CAL IPI count exceeded threshold on cpu6".to_string()),
+        outcome: RunOutcome::Measured,
     };
 
     let index = render_index(&[excluded]);
