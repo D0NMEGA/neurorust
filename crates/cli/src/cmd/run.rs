@@ -32,7 +32,7 @@ use nr_manifest::{
     ArtifactKind, ArtifactPathMapping, ArtifactRecord, AttemptFailure, AttemptRecord,
     AttemptStatus, ContaminationVerdict, GitShaSource, HarnessInfo, InstrumentClass,
     PreconditionResult, PreconditionStatus, ProvenanceTier, RequestedRun, RunClass, RunManifest,
-    StorageLocation, ToolInvocation,
+    StorageLocation, ThermalProfile, ToolInvocation,
 };
 use nr_metrics::report::render_run_report;
 use time::OffsetDateTime;
@@ -89,6 +89,24 @@ impl From<InstrumentClassArg> for InstrumentClass {
         match value {
             InstrumentClassArg::HeadlineSeries => InstrumentClass::HeadlineSeries,
             InstrumentClassArg::Investigation => InstrumentClass::Investigation,
+        }
+    }
+}
+
+/// `hot-screen` exempts the run from `ThermalHeadroomAtStart` and is accepted only for
+/// `--class screen` (see the early guard in `execute`); every other class must declare
+/// `normal`, the default. Finding 5 of `01-EXTERNAL-AUDIT.md`.
+#[derive(ValueEnum, Clone, Copy, Debug)]
+pub enum ThermalProfileArg {
+    Normal,
+    HotScreen,
+}
+
+impl From<ThermalProfileArg> for ThermalProfile {
+    fn from(value: ThermalProfileArg) -> Self {
+        match value {
+            ThermalProfileArg::Normal => ThermalProfile::Normal,
+            ThermalProfileArg::HotScreen => ThermalProfile::HotScreen,
         }
     }
 }
@@ -177,6 +195,16 @@ pub struct Args {
     /// with a stated reason; the operator cannot override that.
     #[arg(long)]
     pub allow_precondition_violation: bool,
+
+    /// What this run declares about its own thermal intent, before it starts.
+    /// `hot-screen` exempts the run from `ThermalHeadroomAtStart`, because a firmware
+    /// screen saturates the machine on purpose; it is accepted ONLY when `--class` is
+    /// `screen`, rejected outright otherwise (see `execute`). The exemption follows
+    /// this declaration, never the observed temperature: a `normal`-profile run (the
+    /// default) is refused for starting hot regardless of its run class. Finding 5 of
+    /// `01-EXTERNAL-AUDIT.md`.
+    #[arg(long, value_enum, default_value = "normal")]
+    pub thermal_profile: ThermalProfileArg,
 }
 
 /// Everything `run` would otherwise read from the environment: tool paths and the
@@ -279,6 +307,7 @@ where
 fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
     let run_class: RunClass = args.class.into();
     let instrument_class: InstrumentClass = args.instrument.into();
+    let thermal_profile: ThermalProfile = args.thermal_profile.into();
 
     // D-06/D-17: checked first and unconditionally, ahead of every other check
     // below (including the fixture-facts guard immediately following), so the
@@ -292,6 +321,19 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
              calibration-contaminated (got {run_class:?}): this flag exists to take the D-17 \
              deliberately contaminated calibration arm without lying to the harness, and must \
              never be available to waive preconditions on a publishable run"
+        );
+    }
+
+    // Finding 5 of `01-EXTERNAL-AUDIT.md`: the same shape of guard, for the same
+    // reason. A headline run must never be able to declare itself thermally exempt.
+    if matches!(thermal_profile, ThermalProfile::HotScreen)
+        && !matches!(run_class, RunClass::Screen)
+    {
+        anyhow::bail!(
+            "--thermal-profile hot-screen is accepted only for --class screen (got \
+             {run_class:?}): this profile exempts a run from ThermalHeadroomAtStart because a \
+             firmware screen saturates the machine on purpose, and must never be available to \
+             declare a publishable run thermally exempt"
         );
     }
 
@@ -374,6 +416,7 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         instrument_class: instrument_class.clone(),
         run_class: run_class.clone(),
         target_cpus: target_cpus.clone(),
+        thermal_profile: thermal_profile.clone(),
     };
     let results: Vec<PreconditionResult> = preconditions::run_all(facts.as_ref(), &spec);
     if let Err(refusal) = preconditions::refuse_on_violation(&results, &instrument_class) {
@@ -753,6 +796,7 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
             run_id: run_dir.run_id.clone(),
             run_class,
             instrument_class,
+            thermal_profile: Some(thermal_profile),
             utc_start,
             utc_end,
             harness: harness.clone(),
@@ -1578,6 +1622,7 @@ VERSION=\"26.04.1 LTS\"
             note: None,
             dry_run: false,
             allow_precondition_violation: false,
+            thermal_profile: ThermalProfileArg::Normal,
         }
     }
 

@@ -32,6 +32,11 @@ pub struct RunManifest {
     pub run_id: String,
     pub run_class: RunClass,
     pub instrument_class: InstrumentClass,
+    /// What this run declared about its own thermal intent before it started. `None`
+    /// on a manifest written before this field existed, or a reconstructed run, which
+    /// never declared one. A harness-generated run always records `Some`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thermal_profile: Option<ThermalProfile>,
     #[serde(with = "time::serde::rfc3339")]
     #[schemars(with = "String")]
     pub utc_start: time::OffsetDateTime,
@@ -91,6 +96,20 @@ pub enum RunClass {
 pub enum InstrumentClass {
     HeadlineSeries,
     Investigation,
+}
+
+/// What a run declares about its own thermal intent, before it starts.
+///
+/// `HotScreen` exempts the run from [`PreconditionCheck::ThermalHeadroomAtStart`], because a
+/// firmware screen saturates the machine on purpose and the 2026-08-28 screening it is
+/// compared against ran at 91 to 95 C. The exemption used to key on `RunClass::Screen` and to
+/// be evaluated only after the observed temperature had already exceeded the ceiling, so an
+/// unintentionally hot idle screen was exempted too. Finding 5 of `01-EXTERNAL-AUDIT.md`.
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ThermalProfile {
+    Normal,
+    HotScreen,
 }
 
 /// Ties a manifest to the exact harness build that produced it (T-1-10).

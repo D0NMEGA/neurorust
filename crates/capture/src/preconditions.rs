@@ -14,6 +14,7 @@
 
 use nr_manifest::{
     InstrumentClass, PreconditionCheck, PreconditionResult, PreconditionStatus, RunClass,
+    ThermalProfile,
 };
 
 use crate::sources::{
@@ -51,21 +52,31 @@ use crate::sources::{
 /// visible after the fact: the manifest records `temp_c_start`, `temp_c_end` and
 /// `package_temp_c_max` per thermal zone, so thermal excursions are auditable rather than
 /// silently absorbed.
-const THERMAL_HEADROOM_CEILING_C: f32 = 70.0;
+///
+/// `pub` so `crates/capture/tests/protocol_doc.rs` can assert that
+/// `docs/measurement-protocol.md` states this exact number rather than a value that has
+/// drifted out of sync with it (the 60 C versus 70 C drift this project already hit once,
+/// fixed by hand in commit 137c3c1 with nothing to stop it recurring).
+pub const THERMAL_HEADROOM_CEILING_C: f32 = 70.0;
 
 const DISPLAY_MANAGERS: [&str; 3] = ["gdm.service", "sddm.service", "lightdm.service"];
 const TARGET_DEEP_CSTATES: [&str; 2] = ["C6", "C10"];
 const PACKAGE_MANAGER_PROCESSES: [&str; 4] = ["apt", "dpkg", "unattended-upgrade", "snapd"];
 
 /// What a run declares before its preconditions are evaluated: the instrument class
-/// (RESEARCH.md pattern 2) and the CPU list the run intends to isolate work onto.
+/// (RESEARCH.md pattern 2), the CPU list the run intends to isolate work onto, and the
+/// declared thermal intent (finding 5 of `01-EXTERNAL-AUDIT.md`).
 #[derive(Debug, Clone)]
 pub struct PreconditionSpec {
     pub instrument_class: InstrumentClass,
-    /// The run's cadence class. Only [`check_thermal_headroom_at_start`] consults it, to
-    /// exempt a firmware screen whose whole purpose is to start hot.
+    /// The run's cadence class. Not consulted by [`check_thermal_headroom_at_start`]
+    /// (see `thermal_profile` below); retained here since it may acquire other uses.
     pub run_class: RunClass,
     pub target_cpus: Vec<u32>,
+    /// What this run declares about its own thermal intent, decided by the operator
+    /// before anything is read. Only [`check_thermal_headroom_at_start`] consults it,
+    /// to exempt a declared hot screen whose whole purpose is to start hot.
+    pub thermal_profile: ThermalProfile,
 }
 
 /// Runs every [`PreconditionCheck`] variant, in a stable order, and returns exactly
@@ -87,7 +98,7 @@ pub fn run_all(facts: &dyn SystemFacts, spec: &PreconditionSpec) -> Vec<Precondi
         check_kernel_is_realtime(facts),
         check_rt_tuning_service_active(facts),
         check_on_ac_power(facts),
-        check_thermal_headroom_at_start(facts, &spec.run_class),
+        check_thermal_headroom_at_start(facts, &spec.thermal_profile),
         check_no_package_manager_activity(facts),
         check_tracers_quiescent(facts, &spec.instrument_class),
     ]
@@ -617,23 +628,31 @@ fn check_on_ac_power(facts: &dyn SystemFacts) -> PreconditionResult {
     }
 }
 
-/// Refuses a run that starts thermally loaded, except for [`RunClass::Screen`].
+/// Refuses a run that starts thermally loaded, except for a run that has declared
+/// [`ThermalProfile::HotScreen`].
 ///
-/// The ceiling protects a *latency* measurement from starting throttled. A firmware
+/// The ceiling protects a *latency* measurement from starting throttled. A declared hot
 /// screen asks a different question: `hwlatdetect` under D-18 saturates 22 cores on
 /// purpose to provoke load-triggered SMIs, and the 2026-08-28 screening it is compared
 /// against ran at 91 to 93 C whole-machine and 93 to 95 C P-core-only. Applying the
-/// ceiling to a screen made those arms impossible to take through the harness at all:
-/// arm 2 was refused at 78 C on 2026-09-04, even though this very constant's evidence
-/// table is built from the under-load rows it was forbidding.
+/// ceiling unconditionally made those arms impossible to take through the harness at
+/// all: arm 2 was refused at 78 C on 2026-09-04, even though this very constant's
+/// evidence table is built from the under-load rows it was forbidding.
 ///
-/// A screen still records its real observed temperature as
+/// Applicability is decided entirely by the declaration, before anything is read: the
+/// `HotScreen` arm performs no temperature comparison at all. This used to key on
+/// `RunClass::Screen` and to be evaluated only after `max_c` had already exceeded the
+/// ceiling, so an unintentionally hot idle screen was exempted right along with a
+/// deliberately saturated one. Finding 5 of `01-EXTERNAL-AUDIT.md`.
+///
+/// A declared hot screen still records its real observed temperature as
 /// [`PreconditionStatus::NotApplicable`], never a silent omission and never a fake pass,
 /// and the manifest keeps `temp_c_start`, `temp_c_end` and `package_temp_c_max` per zone
-/// regardless. Every other class, including `Headline` and `Weekly`, is unchanged.
+/// regardless. Every `Normal`-profile run, including `Headline` and `Weekly`, is
+/// unchanged.
 fn check_thermal_headroom_at_start(
     facts: &dyn SystemFacts,
-    run_class: &RunClass,
+    profile: &ThermalProfile,
 ) -> PreconditionResult {
     let expected = format!("package temp <= {THERMAL_HEADROOM_CEILING_C} C");
     let zones = discover_thermal_zones_c(facts);
@@ -646,10 +665,10 @@ fn check_thermal_headroom_at_start(
     }
 
     let max_c = zones.iter().map(|(_, c)| *c).fold(f32::MIN, f32::max);
-    let status = match run_class {
-        RunClass::Screen if max_c > THERMAL_HEADROOM_CEILING_C => PreconditionStatus::NotApplicable,
-        _ if max_c <= THERMAL_HEADROOM_CEILING_C => PreconditionStatus::Pass,
-        _ => PreconditionStatus::Fail,
+    let status = match profile {
+        ThermalProfile::HotScreen => PreconditionStatus::NotApplicable,
+        ThermalProfile::Normal if max_c <= THERMAL_HEADROOM_CEILING_C => PreconditionStatus::Pass,
+        ThermalProfile::Normal => PreconditionStatus::Fail,
     };
     PreconditionResult {
         check: PreconditionCheck::ThermalHeadroomAtStart,

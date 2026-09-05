@@ -89,6 +89,17 @@
       "format": "uint32",
       "minimum": 0
     },
+    "thermal_profile": {
+      "description": "What this run declared about its own thermal intent before it started. `None`\non a manifest written before this field existed, or a reconstructed run, which\nnever declared one. A harness-generated run always records `Some`.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ThermalProfile"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "tools": {
       "type": "array",
       "items": {
@@ -976,6 +987,14 @@
         "tail_excursion_ratio",
         "thread_max_spread",
         "overflow_rate_per_s"
+      ]
+    },
+    "ThermalProfile": {
+      "description": "What a run declares about its own thermal intent, before it starts.\n\n`HotScreen` exempts the run from [`PreconditionCheck::ThermalHeadroomAtStart`], because a\nfirmware screen saturates the machine on purpose and the 2026-08-28 screening it is\ncompared against ran at 91 to 95 C. The exemption used to key on `RunClass::Screen` and to\nbe evaluated only after the observed temperature had already exceeded the ceiling, so an\nunintentionally hot idle screen was exempted too. Finding 5 of `01-EXTERNAL-AUDIT.md`.",
+      "type": "string",
+      "enum": [
+        "normal",
+        "hot-screen"
       ]
     },
     "ThermalZone": {

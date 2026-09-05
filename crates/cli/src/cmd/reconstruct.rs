@@ -275,6 +275,9 @@ pub fn run(args: Args) -> anyhow::Result<i32> {
         run_id,
         run_class: args.run_class.into(),
         instrument_class: args.instrument.into(),
+        // A reconstructed run never declared a thermal profile: this concept did not
+        // exist for it, so `None` is the honest answer rather than a guessed default.
+        thermal_profile: None,
         utc_start: args.utc_start,
         utc_end: args.utc_end,
         harness: harness_info(),
