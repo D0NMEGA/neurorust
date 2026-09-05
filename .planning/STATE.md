@@ -3,8 +3,8 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-18-PLAN.md
-last_updated: "2026-09-05T22:04:02.754Z"
+stopped_at: "Checkpoint: 01-22 tasks 1-2 awaiting operator interactive sudo on the rig"
+last_updated: "2026-09-05T22:20:09.375Z"
 last_activity: 2026-09-05
 progress:
   total_phases: 8
@@ -26,8 +26,10 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 01 (trustworthy-measurement) — EXECUTING
-Plan: 15 of 23 done (01-18 just finished); waves 8-10 complete, wave 11 is 01-22
-Status: Ready to execute
+Plan: 15 of 23 done; wave 11 (01-22) in progress - task 1 dev-host work committed (07c93ee),
+  tasks 1 step 5, 2 and 3 blocked at a checkpoint pending the operator's interactive sudo
+  session on the rig
+Status: Blocked at checkpoint:human-action, awaiting operator
 Last activity: 2026-09-05
 
 Progress: [███████░░░] 65%
@@ -130,6 +132,7 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-18: screen_spec() kept its default ThermalProfile::Normal rather than HotScreen, so thermal_headroom_still_passes_a_cold_screen keeps testing a still-true claim; a new hot_screen_spec() declares HotScreen explicitly for the tests that need it. thermal_headroom_does_not_refuse_a_firmware_screen (whose premise, any Screen-class run is exempt when hot, is exactly finding 5's defect) was replaced by two profile-scoped tests.
 - [Phase 01]: 01-18: interference::verdict()'s own VerdictOutcome.reason is overwritten with the fixture-usage explanation whenever any fixture drove the run, then reused verbatim as RunManifest.exclusion_reason, so the two can never disagree about why a fixture-driven run's deltas are zero.
 - [Phase 01]: 01-18: state advance-plan's counter itself was numerically correct this time (15 matches the real SUMMARY.md count on disk), but its Current Position/Session Continuity prose still named the prior plan (01-17) and the just-completed wave (10) as pending; hand-corrected both to name 01-18 and wave 11 (01-22), matching the precedent from 01-16/01-17/01-19.
+- [Phase 01]: nr-recon and nr-probe no_turbo sysfs read was already corrected to the cpu/ path directly on the rig, out of band, sometime after the 01-02 recon filed the defect; both scripts were pulled back verbatim rather than re-editing a path that was already right. stress-ng 0.20.01-1 is also already installed on the rig (used for the 01-11 session 2 D-18 arms), so task 2 only needs msr-tools. nr-run-measurement PATH/absolute-path/write-bit hardening and nr-measure-mode three added tracing writes are committed (07c93ee); install to the rig, msr-tools install, and both probes remain gated on the operator interactive sudo session (checkpoint returned).
 
 ### Pending Todos
 
@@ -144,12 +147,12 @@ None yet.
 - Rig boots untuned: every CPU governor reads powersave despite rt-tuning.service reporting active/enabled (power-profiles-daemon wins a boot-time race, see docs/rig/recon-2026-08-31/FINDINGS.md). Any plan that runs the real measurement protocol must fix this or rely on nr-capture's own precondition check; it must not trust rt-tuning.service's ActiveState.
 - The D-18 firmware floor does not exist for the isolated cores. `hwlatdetect` cannot sample more than one CPU on this kernel (tracer `mode` is `none` and `isolcpus=6-11` keeps its thread off 6-11), so all 32 events across three RT arms named CPU 5 and the 2026-08-28 P-core arm's 13 events all named CPU 0. Replacement instrument decided (D-27): `rtla hwnoise -c 6-11 -H 0-5` plus `rdmsr -p <cpu> 0x34`. Plans 01-20 through 01-23 build it and re-take the screens.
 - External-audit findings status (of the original six): 6 CLOSED (01-16, 01-19), 7 CLOSED (01-17), 5 CLOSED (documentation half in 01-11's 137c3c1, exemption-scoping half in 01-18), 8 CLOSED (01-18). Still open: finding 3 (partial; assigned to 01-21 and 01-23), and findings 9 and 10, both in unexecuted plans (9 to 01-12, 10 to 01-14).
-- Rig root access: resolved in practice during 01-11 session 2 (the operator installed /usr/local/sbin/nr-run-measurement as a fourth NOPASSWD grant by hand), but the rule, the install procedure and the two recon scripts nr-recon and nr-probe still exist only on that laptop. Plan 01-22 brings all four scripts and the sudoers rule into this repository, re-installs them (the rig still runs the pre-TimeoutStartSec copy of nr-run-measurement, so a hung capture still needs the operator's password), and installs msr-tools and stress-ng. Background: 01-11-SUMMARY.md.
+- Plan 01-22 checkpoint: task 1 dev-host work (nr-recon/nr-probe vendored, nr-measure-mode/nr-run-measurement hardened, deploy/sudoers/nr-measurement + install.sh) is committed at 07c93ee. Remaining work all needs the operator interactive sudo on precision3591-rig: task 1 step 5 (git pull, sudo ./deploy/sudoers/install.sh, verify grants/perms/diff, confirm no RuntimeMaxSec warning), task 2 (sudo apt install msr-tools, rdmsr 0x34 probe, rtla hwnoise probe), and task 3 (FINDINGS.md + deferred-items.md) which depends on task 2 output. Exact commands are in the 01-22 checkpoint return; resume with a fresh executor once the operator reports both resume-signal strings.
 
 ## Session Continuity
 
-Last session: 2026-09-05T22:03:12.537Z
-Stopped at: Completed 01-18-PLAN.md
+Last session: 2026-09-05T22:20:09.373Z
+Stopped at: Checkpoint: 01-22 tasks 1-2 awaiting operator interactive sudo on the rig
 Resume file: .planning/phases/01-trustworthy-measurement/01-22-PLAN.md
 
 Next: `/donny-execute-phase 1` (wave 11: plan 01-22)
