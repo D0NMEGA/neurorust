@@ -129,3 +129,65 @@ originating plan; noted here for a future plan or maintenance pass to pick up.
   connection open. Diagnose with `ss -Htn state established '( sport = :22 )'`
   and match peer addresses; `loginctl show-session <id> -p RemoteHost -p
   Timestamp` then identifies which is which.
+
+## From 01-11 (external audit, 2026-09-04; see 01-EXTERNAL-AUDIT.md)
+
+These are the audit findings NOT closed in this plan. Each names the finding number so the
+audit record and the fix can be read together.
+
+- **Finding 3, partially open: hwlatdetect exposure is not wall-clock duration, and the
+  report must say what the instrument actually measures.** Three statements have to appear
+  wherever an hwlatdetect figure is published, and none of them do yet. First, hwlatdetect
+  detects execution gaps; those are not uniquely identified SMIs, and NMI accounting and
+  other hardware effects contribute. Second, its output counts threshold-exceeding sampling
+  records, not a census of SMI invocations, and several gaps can land in one record. Third,
+  under round-robin sampling across a CPU list, wall-clock duration is not per-CPU exposure:
+  the 2026-08-28 baseline used a 500 ms sampling width in a 1 s window, so 600 s across 12
+  logical CPUs is roughly 300 aggregate CPU-seconds, about 25 per CPU, not 600 per CPU.
+  Verify the actual sampling mode and coverage rather than assuming rotation.
+  Related: all 13 events in `hwlatdetect-pcore-underload-10m.txt` name CPU 0. That does not
+  establish an observed 22 us maximum on the runtime's own isolated CPUs 6-11, which is
+  what plan 01-13 wanted to consume.
+
+- **Finding 6, open: provenance does not yet support "every claim is reproducible".**
+  `run.rs` derives harness identity from `git rev-parse HEAD` in the working directory, so a
+  stale executable can inherit a newer checkout's identity, and a failure records `unknown`
+  with `git_dirty: false`. The committed calibration manifests already carry that unknown
+  identity. Recorded argv retains `/tmp/.tmp*` paths that no longer exist, because
+  relativization happens against the final run directory while the tools wrote elsewhere.
+  `verify.rs` substitutes `(0, 0)` when histogram metrics cannot be computed, turning a parse
+  failure into a published zero. Strict verification does not regenerate `REPORT.md` or
+  `hist.tsv` and compare them, and the JSON reconciliation checks thread count and maxima but
+  not sample-count agreement.
+  Also: the 2026-08-28 README cites six events and a 7 us maximum at a 1 us threshold, but no
+  1 us raw capture exists in the repository. Recover it or mark the observation as lacking a
+  published raw capture.
+
+- **Finding 7, open: a failed attempt can vanish, and the interference window is mismatched.**
+  Raw output lives in a temporary directory until the run directory is created, so a capture
+  that fails parsing or reconciliation loses its evidence entirely. Create a durable attempt
+  record before launching instruments and preserve partial output, stderr and exit status.
+  Separately, the interference snapshots bracket cyclictest plus hwlatdetect plus parsing,
+  but the delta is normalised by the requested cyclictest duration alone: a 3600 s cyclictest
+  followed by a 900 s hwlatdetect divides roughly 4500 s of activity by 3600.
+
+- **Finding 8, open: two gates are narrower than their names.** `DeepCstatesDisabled` reads
+  CPU 0 only and cannot establish the state of target CPUs 6-11 after per-CPU tuning.
+  `TracersQuiescent` treats `current_tracer == nop` as quiescence, but event tracing has
+  separate enable controls. Also, the facts fixture is forbidden for publishable classes
+  while the interrupts fixture is not, and reusing it for both snapshots yields zero deltas;
+  it must be forbidden too, or force explicit non-publication.
+
+- **Finding 5, partially open: scope the Screen thermal exemption to a declared profile.**
+  The exemption currently applies to any `Screen` run and is decided after observing that the
+  temperature exceeded the ceiling, so an unintentionally hot idle screen is exempted too.
+  Declare a hot-screen measurement profile up front and key the exemption on that instead.
+
+- **Findings 9 and 10, open, both in unexecuted plans.** Plan 01-12 assigns the ~3.8 ms
+  maximum to the isolated events rather than the sustained burst, an association the captures
+  cannot support; says `--tracemark` "arms ftrace" when the flags mark and stop tracing at a
+  threshold without enabling a diagnostic event set; and claims rtla runs "alongside" when the
+  foreground pipeline completes first. Plan 01-14 instructs unavailable hwlat percentiles to be
+  filled with the maximum, and its regression guard uses `merge-base origin/main HEAD`, which
+  on a main-branch push makes the diff empty and lets through exactly the simultaneous
+  baseline change it exists to prohibit.
