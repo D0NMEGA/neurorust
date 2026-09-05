@@ -89,7 +89,7 @@ Plans:
 - [x] 01-16-PLAN.md - Harness identity, argv provenance, and the re-derivation guard [wave 8]
 - [ ] 01-17-PLAN.md - The durable attempt record and per-instrument interference windows [wave 9]
 - [ ] 01-18-PLAN.md - Gate audit: every precondition establishes what its name claims [wave 10]
-- [ ] 01-19-PLAN.md - Verification that recomputes: no substituted zeros, reports re-derived [wave 8]
+- [x] 01-19-PLAN.md - Verification that recomputes: no substituted zeros, reports re-derived [wave 8]
 - [ ] 01-20-PLAN.md - rtla hwnoise parser, SMI manifest fields, CPU-distribution standing check [wave 12]
 - [ ] 01-21-PLAN.md - Wire hwnoise and MSR_SMI_COUNT into nrmeasure run [wave 13]
 - [ ] 01-22-PLAN.md - Rig entry point: sudoers rule, root scripts, msr-tools, format probes [wave 11]

@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: 01-16 complete (PASS); wave 8 continues with 01-19
-last_updated: "2026-09-05T16:39:31.876Z"
-last_activity: 2026-09-05 -- 01-16 finished (PASS)
+stopped_at: Completed 01-19-PLAN.md
+last_updated: "2026-09-05T17:20:09.681Z"
+last_activity: 2026-09-05
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 23
-  completed_plans: 12
-  percent: 52
+  completed_plans: 13
+  percent: 57
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 01 (trustworthy-measurement) — EXECUTING
-Plan: 12 of 23 done (01-16 just finished); wave 8 continues with 01-19
+Plan: 13 of 23 done (01-19 just finished); wave 8 complete, wave 9 continues with 01-17
 Status: Executing Phase 01
-Last activity: 2026-09-05 -- 01-16 finished (PASS)
+Last activity: 2026-09-05 -- 01-19 finished (PASS)
 
-Progress: [█████░░░░░] 52%
+Progress: [██████░░░░] 57%
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Progress: [█████░░░░░] 52%
 | Phase 01 P09 | 4min | 2 tasks | 5 files |
 | Phase 01 P10 | 23min | 3 tasks | 6 files |
 | Phase 01 P16 | 32min | 3 tasks | 14 files |
+| Phase 01 P19 | 38min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -117,6 +118,8 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-16: Extended reconstruct.rs's own standalone harness_info() with the full build-time-identity fix rather than a minimal stub, since it is documented as mirroring run.rs's function and stubbing it would leave finding 6's exact defect alive in a second code path.
 - [Phase 01]: 01-16: redact_home_prefix splits an argv token on its first '=' before matching (mirroring KernelInfo::redact_cmdline), after a self-caught bug showed a whole-string prefix check never fires for a --histfile=<path> token.
 - [Phase 01]: 01-16: state advance-plan's Current Position counter is a naive sequential index unaware of wave-based/replanned execution; it set Plan to 2 of 23 after completing 01-16 (the 12th plan). Hand-corrected the Current Position and Session Continuity body lines to name 01-16 and 01-19, matching the precedent already logged for the same class of tooling gap in 01-02/01-03.
+- [Phase 01]: 01-19: Split tasks 1 and 2 into genuinely independent commits by temporarily stripping task 2's additions back out of the shared verify.rs, verifying task 1 alone, committing, then restoring task 2's code and verifying+committing it separately, since git's hunk-based staging could not cleanly separate two tasks intermixed in the same function.
+- [Phase 01]: 01-19: reconcile's new sample-count check immediately caught a real, previously invisible defect in fake-cyclictest.sh (flat 3000000 cycles per thread never matched the real committed .hist's true per-thread totals of ~2999300); corrected to the real computed values and re-pinned the one dependent snapshot.
 
 ### Pending Todos
 
@@ -135,8 +138,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-05T16:37:52.222Z
-Stopped at: 01-16 complete (PASS); wave 8 continues with 01-19
-Resume file: .planning/phases/01-trustworthy-measurement/01-19-PLAN.md
+Last session: 2026-09-05T17:20:03.158Z
+Stopped at: Completed 01-19-PLAN.md
+Resume file: .planning/phases/01-trustworthy-measurement/01-17-PLAN.md
 
-Next: `/donny-execute-phase 1` (wave 8 remainder: plan 01-19)
+Next: `/donny-execute-phase 1` (wave 9: plan 01-17)
