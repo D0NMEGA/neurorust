@@ -61,7 +61,42 @@ if systemctl is-active --quiet "$UNIT.service"; then
     exit 3
 fi
 
+# Bound the unit's runtime so a capture that never returns cannot wedge the rig.
+#
+# This is not hypothetical. On 2026-09-04 a D-18 arm was launched with
+# `--duration 0`, which the runbook meant as "hwlatdetect only" but which
+# cyclictest reads as "run forever". cyclictest held SCHED_FIFO priority 99 on the
+# isolated CPUs for 24 minutes, hwlatdetect never started, and nothing short of the
+# operator's own password could stop it: this script's NOPASSWD grant covers
+# starting a measurement, not stopping one, and `systemctl stop` on a system unit
+# needs interactive polkit auth. Bounding the runtime prevents the runaway instead
+# of requiring a way to recover from it.
+#
+# The bound is derived from the durations the caller actually asked for, plus a
+# fixed margin for tool startup, the two interference snapshots, the environment
+# snapshot and artifact checksumming. It is a backstop, not a schedule: a healthy
+# run finishes far inside it.
+DURATION=0
+HWLAT_DURATION=0
+prev=""
+for arg in "$@"; do
+    case "$prev" in
+        --duration) DURATION="$arg" ;;
+        --hwlatdetect-duration) HWLAT_DURATION="$arg" ;;
+    esac
+    case "$arg" in
+        --duration=*) DURATION="${arg#*=}" ;;
+        --hwlatdetect-duration=*) HWLAT_DURATION="${arg#*=}" ;;
+    esac
+    prev="$arg"
+done
+case "$DURATION$HWLAT_DURATION" in
+    *[!0-9]*) echo "nr-run-measurement: non-numeric duration" >&2; exit 2 ;;
+esac
+RUNTIME_MAX=$(( DURATION + HWLAT_DURATION + 600 ))
+
 echo "nr-run-measurement: starting $UNIT.service"
+echo "  runtime bound: ${RUNTIME_MAX}s (measurement ${DURATION}s + hwlatdetect ${HWLAT_DURATION}s + 600s margin)"
 echo "  watch:  journalctl -fu $UNIT"
 echo "  status: systemctl status $UNIT"
 
@@ -69,6 +104,7 @@ exec systemd-run \
     --unit="$UNIT" \
     --collect \
     --property=Type=oneshot \
+    --property=RuntimeMaxSec="$RUNTIME_MAX" \
     --property=StandardOutput=journal \
     --property=StandardError=journal \
     "$BIN" "$@" \
