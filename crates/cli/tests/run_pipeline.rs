@@ -13,7 +13,7 @@
 use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
-use nr_manifest::{PreconditionStatus, RunManifest};
+use nr_manifest::{GitShaSource, PreconditionStatus, RunManifest};
 
 const CLEAN_FACTS: &str = include_str!("../../capture/tests/fixtures/probe-sysfs-tuning.txt");
 const VIOLATED_FACTS: &str = include_str!("../../capture/tests/fixtures/violated-sysfs-tuning.txt");
@@ -542,4 +542,137 @@ fn bad_thresholds_path_fails_before_the_measurement_runs() {
         .expect("read_dir")
         .count();
     assert_eq!(entries, 0, "no run directory may be written");
+}
+
+// ---------------------------------------------------------------------------------
+// Harness identity: compiled in by crates/cli/build.rs, not re-derived from the
+// working directory at run time (finding 6 of 01-EXTERNAL-AUDIT.md). Seven of the
+// eight committed manifests recorded `git_sha: "unknown"` because the run's working
+// directory was never inside a git checkout (systemd-run); the eighth carried the
+// checkout's sha rather than the binary's own. These three tests guard the fix.
+// ---------------------------------------------------------------------------------
+
+/// A run launched with a working directory outside any git checkout (the
+/// systemd-run shape that produced seven "unknown" manifests) still records the
+/// real 40-character commit the binary was built from, because `git_sha` is now
+/// embedded at compile time rather than read from the process's cwd at run time.
+#[test]
+fn harness_identity_is_compiled_in() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let facts_path = write_fixture(temp.path(), "facts.txt", &tuned_facts_text());
+    let interrupts_path = write_fixture(temp.path(), "interrupts.txt", INTERRUPTS);
+    let measurements_root = temp.path().join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+    // A second, unrelated tempdir: outside this repository's git checkout, exactly
+    // the systemd-run shape (no working directory inside the checkout) that
+    // produced seven "unknown" manifests.
+    let outside_checkout = tempfile::tempdir().expect("a second, unrelated tempdir");
+
+    let output = base_run_command(&measurements_root)
+        .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
+        .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+        .args(["--class", "recon"])
+        .current_dir(outside_checkout.path())
+        .output()
+        .expect("nrmeasure runs");
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let entries: Vec<_> = std::fs::read_dir(&measurements_root)
+        .expect("read_dir")
+        .filter_map(|entry| entry.ok())
+        .collect();
+    assert_eq!(entries.len(), 1, "exactly one run directory is written");
+    let manifest: RunManifest = serde_json::from_str(
+        &std::fs::read_to_string(entries[0].path().join("manifest.json"))
+            .expect("read manifest.json"),
+    )
+    .expect("manifest.json parses");
+
+    assert_eq!(
+        manifest.harness.git_sha.len(),
+        40,
+        "expected a 40-character commit sha, got {:?}",
+        manifest.harness.git_sha
+    );
+    assert!(
+        manifest
+            .harness
+            .git_sha
+            .chars()
+            .all(|c| c.is_ascii_hexdigit()),
+        "git_sha must be hex: {:?}",
+        manifest.harness.git_sha
+    );
+    assert_ne!(manifest.harness.git_sha, "unknown");
+    assert_eq!(
+        manifest.harness.invoked_from_git_sha, None,
+        "the process had no git checkout as its working directory, so the invoked-from \
+         identifier must be absent, distinctly from the compiled-in git_sha above"
+    );
+}
+
+/// The manifest's `harness.executable_blake3` is an independently computed blake3 of
+/// the exact `nrmeasure` binary that produced it, not a value merely trusted from the
+/// harness's own internal bookkeeping.
+#[test]
+fn harness_records_executable_hash() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let run_dir = run_full_pipeline(temp.path());
+    let manifest: RunManifest = serde_json::from_str(
+        &std::fs::read_to_string(run_dir.join("manifest.json")).expect("read manifest.json"),
+    )
+    .expect("manifest.json parses");
+
+    let nrmeasure_path = assert_cmd::cargo::cargo_bin("nrmeasure");
+    let expected_hash = nr_manifest::blake3_file(&nrmeasure_path)
+        .expect("hash the exact nrmeasure binary this test invoked");
+    let expected_bytes = std::fs::metadata(&nrmeasure_path)
+        .expect("stat the nrmeasure binary")
+        .len();
+
+    assert_eq!(
+        manifest.harness.executable_blake3.as_deref(),
+        Some(expected_hash.as_str()),
+        "the manifest's executable_blake3 must equal an independently computed hash of the \
+         binary that actually ran"
+    );
+    assert_eq!(manifest.harness.executable_bytes, Some(expected_bytes));
+}
+
+/// `git_sha_source` makes the previous "unknown git_sha, git_dirty: false" pair, which
+/// asserted a clean tree nobody observed (seven committed manifests carry exactly that
+/// pair), representable as an honest "we could not tell". For a build inside a real git
+/// checkout (this one), `git_dirty` must equal the independently observed state of the
+/// working tree, never a hardcoded default.
+#[test]
+fn harness_git_sha_source_is_explicit() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let run_dir = run_full_pipeline(temp.path());
+    let manifest: RunManifest = serde_json::from_str(
+        &std::fs::read_to_string(run_dir.join("manifest.json")).expect("read manifest.json"),
+    )
+    .expect("manifest.json parses");
+
+    assert_eq!(
+        manifest.harness.git_sha_source,
+        Some(GitShaSource::BuildTime),
+        "this repository's own build always has git available"
+    );
+
+    let status = std::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .expect("git status runs in this checkout");
+    let actually_dirty = !String::from_utf8_lossy(&status.stdout).trim().is_empty();
+    assert_eq!(
+        manifest.harness.git_dirty, actually_dirty,
+        "git_dirty must be the real, independently observed state, never a silent default (the \
+         previous code reported false unconditionally whenever git could not be read)"
+    );
 }
