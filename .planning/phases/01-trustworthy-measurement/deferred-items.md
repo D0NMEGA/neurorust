@@ -59,6 +59,17 @@ originating plan; noted here for a future plan or maintenance pass to pick up.
   repo, on the rig) should fix the path. Meanwhile, any in-repo precondition
   code (`nr-capture`, plan 01-05) must use the correct path directly rather
   than copying the scripts' query.
+  **CLOSED, commit `1c5051d` (plan 01-22 task 1).** Both scripts were pulled
+  back from the rig into `scripts/nr-recon` and `scripts/nr-probe` and are now
+  version controlled. They already read the correct
+  `/sys/devices/system/cpu/intel_pstate/no_turbo` path when pulled: someone
+  fixed the path directly on the rig, out of band, sometime after this entry
+  was filed, so this plan's own instruction to edit the path was a no-op by
+  the time it ran. Confirmed by `grep -n no_turbo scripts/nr-recon
+  scripts/nr-probe`, which shows only the correct `cpu/` path in both files
+  and zero occurrences of the wrong one. `nr-capture`'s own precondition code
+  was unaffected either way, since it already used the correct path directly
+  per this entry's original instruction.
 
 ## From 01-10 (discovered while re-verifying `cargo test --workspace` before publishing)
 
@@ -221,9 +232,18 @@ audit record and the fix can be read together.
   isolated cores, and stop misreading its exit code): `scripts/nr-run-measurement` in this
   repository now passes `--property=TimeoutStartSec="$RUNTIME_MAX"`, not `RuntimeMaxSec`;
   `grep -c TimeoutStartSec scripts/nr-run-measurement` reports 3 (the property plus two
-  explanatory comment lines added by the same commit). **The rig still runs the old,
-  pre-`TimeoutStartSec` installed copy**; re-installing all four scripts (including this
-  one) is plan 01-22 task 1, per STATE.md's "Rig root access" blocker.
+  explanatory comment lines added by the same commit).
+  **Fully CLOSED, commit `1c5051d` (plan 01-22 task 1).** `sudo
+  ./deploy/sudoers/install.sh` replaced all four scripts on the rig, confirmed by `stat`
+  (`/usr/local/sbin/nr-run-measurement` is `755 root:root`) and `diff` (all four installed
+  copies byte-identical to `scripts/`). The runaway guard was then confirmed live: a launch
+  through the entry point printed the exec banner (sha256
+  `a4f8d9cd622cdcc861ee83569a0aeb7409cd91f0767ae68bd899c5469e7da7d8`, mode 755) and started
+  `nr-measurement.service` with a 630 s bound; the journal for that launch window carries
+  zero `RuntimeMaxSec` warnings. Four such warnings remain in the journal from before the
+  fix, which is why the check was scoped to the launch's own timestamp window rather than
+  the whole journal, a method note worth keeping for future verifications of the same
+  guard.
 
 - **`hwlatdetect` exits 1 when it finds latency above the hard limit, and the harness reports
   that as a tool failure.** `warn_on_tool_failure` printed `warning: hwlatdetect exited with
@@ -287,6 +307,14 @@ audit record and the fix can be read together.
   build, but filed it as settling plan 01-12's instrument only. Nobody connected that
   `hwnoise` is the per-CPU replacement for `hwlatdetect`, and three arms were spent
   discovering the limitation the hard way.
+  **Still OPEN, owner: plan 01-20.** Plan 01-22 took a real 60 s `rtla hwnoise -c 6-11
+  -H 0-5 -P f:99` probe and committed it as `docs/rig/recon-2026-09-05/probe-rtla-hwnoise.txt`,
+  described in full in the FINDINGS.md beside it. Two format details a parser needs and this
+  entry did not anticipate: the default live redraw repeats a full header once per second and
+  is preceded by a terminal reset artifact (`-q/--quiet` avoids both, and plan 01-20 should use
+  it), and the per-CPU `Runtime` column, not the wall-clock `duration` header, is the real
+  per-CPU exposure figure. This entry stays open until 01-20 builds the parser against that
+  probe and 01-23 re-takes D-18 with it.
 
 - **Install `msr-tools` and read `MSR_SMI_COUNT` (0x34) around every firmware screen.**
   `rdmsr -p <cpu> 0x34` is an exact per-CPU SMI counter. Sampled before and after a run it
@@ -296,6 +324,13 @@ audit record and the fix can be read together.
   could not.
   It also gives the harness a cheap, exact provenance field: SMI count per isolated CPU over
   the run, recordable in the manifest beside the interference counters.
+  **CLOSED, commit `1c5051d` (plan 01-22 task 2).** `msr-tools` 1.3+git20220805.7d78c80-1build1
+  is installed and the `msr` module is loaded (`stress-ng` was already installed from the
+  01-11 session-2 D-18 arms, so this task only needed `msr-tools`). `rdmsr -p <cpu> 0x34` read
+  `0xfa6` (4006 decimal) uniformly on CPUs 0, 5, 6, 7, 8, 9, 10 and 11, committed as
+  `docs/rig/recon-2026-09-05/probe-rdmsr-smi-count.txt` and described in the FINDINGS.md
+  beside it: the counter is non-zero on every isolated core, which is the fact three
+  `hwlatdetect` arms could not establish.
 
 ## From 01-18 (finding 8: `TracersQuiescent` now requires four controls, not one)
 
