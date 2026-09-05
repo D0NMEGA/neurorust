@@ -409,6 +409,140 @@ fn fixture_facts_refused_for_publishable_classes() {
     );
 }
 
+/// The facts fixture and the interrupts fixture must be refused identically for
+/// headline, weekly and soak: reusing one fixture text for both the before and the
+/// after interference snapshot makes every delta it produces exactly zero, which
+/// reads as a perfectly quiet machine rather than as a value that was never measured.
+/// Finding 8 of `01-EXTERNAL-AUDIT.md`.
+#[test]
+fn interrupts_fixture_is_refused_for_publishable_classes() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let interrupts_path = write_fixture(temp.path(), "interrupts.txt", INTERRUPTS);
+    let measurements_root = temp.path().join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+
+    for class in ["headline", "weekly", "soak"] {
+        let output = base_run_command(&measurements_root)
+            .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+            .args(["--class", class])
+            .output()
+            .unwrap_or_else(|_| panic!("nrmeasure runs for class {class}"));
+
+        assert!(
+            !output.status.success(),
+            "class {class} must be refused when NRMEASURE_INTERRUPTS_FIXTURE is set"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("NRMEASURE_INTERRUPTS_FIXTURE cannot be used with run class"),
+            "stderr for class {class}: {stderr}"
+        );
+    }
+
+    assert_eq!(
+        std::fs::read_dir(&measurements_root)
+            .expect("read_dir")
+            .count(),
+        0,
+        "no run directory may be written for any publishable class"
+    );
+}
+
+/// Runs a `calibration-clean`-class measurement with both fixture seams active (a
+/// class where a fixture is legitimately allowed) and returns the resulting manifest.
+/// Task 2 of finding 8, `01-EXTERNAL-AUDIT.md`: `fixtures_used`, `exclusion_reason`
+/// and the verdict's own reason must all name the fixtures used, and the run must
+/// always be forced out of the series.
+fn run_fixture_driven_calibration(temp_root: &Path) -> RunManifest {
+    let facts_path = write_fixture(temp_root, "facts.txt", &tuned_facts_text());
+    let interrupts_path = write_fixture(temp_root, "interrupts.txt", INTERRUPTS);
+    let measurements_root = temp_root.join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+
+    let output = base_run_command(&measurements_root)
+        .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
+        .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+        .args(["--class", "calibration-clean"])
+        .output()
+        .expect("nrmeasure runs");
+
+    assert!(
+        output.status.success(),
+        "a fixture-driven calibration-clean run must still succeed: stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let entries: Vec<_> = std::fs::read_dir(&measurements_root)
+        .expect("read_dir")
+        .filter_map(|entry| entry.ok())
+        .collect();
+    assert_eq!(entries.len(), 1, "exactly one run directory is written");
+
+    let manifest_text = std::fs::read_to_string(entries[0].path().join("manifest.json"))
+        .expect("read manifest.json");
+    serde_json::from_str(&manifest_text).expect("manifest.json parses")
+}
+
+#[test]
+fn fixture_run_records_the_fixture_it_used() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let manifest = run_fixture_driven_calibration(temp.path());
+    assert!(
+        manifest
+            .fixtures_used
+            .iter()
+            .any(|f| f == "NRMEASURE_FACTS_FIXTURE"),
+        "fixtures_used should name NRMEASURE_FACTS_FIXTURE: {:?}",
+        manifest.fixtures_used
+    );
+    assert!(
+        manifest
+            .fixtures_used
+            .iter()
+            .any(|f| f == "NRMEASURE_INTERRUPTS_FIXTURE"),
+        "fixtures_used should name NRMEASURE_INTERRUPTS_FIXTURE: {:?}",
+        manifest.fixtures_used
+    );
+}
+
+#[test]
+fn fixture_run_is_excluded_from_series() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let manifest = run_fixture_driven_calibration(temp.path());
+    assert!(
+        manifest.excluded_from_series,
+        "a fixture-driven run must always be excluded_from_series"
+    );
+    let reason = manifest
+        .exclusion_reason
+        .as_ref()
+        .expect("exclusion_reason must be present");
+    assert!(
+        reason.contains("NRMEASURE_FACTS_FIXTURE")
+            || reason.contains("NRMEASURE_INTERRUPTS_FIXTURE"),
+        "exclusion_reason should name a fixture: {reason}"
+    );
+}
+
+/// The reason explains WHY the deltas are zero (a fixture text read repeatedly),
+/// rather than merely naming the fixture, so a reader cannot mistake a fabricated
+/// zero for evidence of a quiet machine.
+#[test]
+fn fixture_run_verdict_states_the_fixture() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let manifest = run_fixture_driven_calibration(temp.path());
+    let reason = manifest
+        .exclusion_reason
+        .as_ref()
+        .expect("exclusion_reason must be present");
+    assert!(
+        reason.contains("zero"),
+        "the reason should explain that fixture-driven deltas are zero by construction, not \
+         evidence of a quiet machine: {reason}"
+    );
+}
+
 /// D-06/D-17/PLAT-02: `--allow-precondition-violation` must be rejected outright
 /// for every run class other than `calibration-contaminated` (checked here for
 /// `headline`, `investigation` and `soak`), and the accepted
