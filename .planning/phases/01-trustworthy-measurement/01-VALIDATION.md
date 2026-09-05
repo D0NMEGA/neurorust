@@ -74,7 +74,7 @@ Written before execution, stating the required coverage per requirement. Left as
 | 01-06-T | 01-06 | 3 | PLAT-03 | - | Report renders total max AND kernel contribution above firmware floor (D-22) | unit | `cargo test -p metrics plat03_report_decomposition` | no W0 | pending |
 | 01-03-T | 01-03 | 1 | D-16 | - | Reconstructed manifest carries `reconstructed` provenance tier, tier non-optional | unit | `cargo test -p manifest provenance_tier_required` | no W0 | pending |
 
-*Two rows above no longer describe the shipped code. The crates were named `nr-manifest`,
+*Fourteen rows above no longer describe the shipped code, in two ways. The crates were named `nr-manifest`,
 `nr-histogram`, `nr-capture`, `nr-metrics` and `nr-cli` in plan 01-01, so the `-p manifest`,
 `-p histogram`, `-p capture` and `-p metrics` selectors do not resolve; and the D-22 decomposition
 in the last PLAT-03 row was withdrawn by finding 1 of the external audit, which is why plan 01-13
