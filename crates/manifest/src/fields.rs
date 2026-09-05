@@ -90,9 +90,47 @@ pub enum InstrumentClass {
 pub struct HarnessInfo {
     /// `env!("CARGO_PKG_VERSION")`.
     pub version: String,
-    /// Full 40-character SHA of the harness commit.
+    /// The commit the binary was BUILT from, embedded at compile time by
+    /// `crates/cli/build.rs`. Never re-derived from the working directory at run
+    /// time: a stale executable running inside a newer checkout would otherwise
+    /// inherit that checkout's identity, and a run launched by systemd-run with no
+    /// working directory inside the checkout would record "unknown". Both happened;
+    /// see finding 6 of `01-EXTERNAL-AUDIT.md`.
     pub git_sha: String,
+    /// Whether the working tree was dirty when the binary was built. Meaningful only
+    /// when `git_sha_source` is `build-time`.
     pub git_dirty: bool,
+    /// How `git_sha` was obtained. Absent on manifests written before this field
+    /// existed. `Unavailable` means the build could not read git at all, and
+    /// `git_dirty` says nothing in that case.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_sha_source: Option<GitShaSource>,
+    /// Lowercase hex blake3 of the executable that produced this manifest, read from
+    /// `std::env::current_exe()`. The only field here that identifies the binary
+    /// itself rather than a checkout. Deliberately NOT paired with the executable's
+    /// absolute path: on the reference rig that path is a home directory
+    /// (`/home/<user>/neurorust/target/release/nrmeasure`), manifests are published,
+    /// and the blake3 plus byte count identify the binary without naming anyone's
+    /// home directory (T-1-06).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executable_blake3: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executable_bytes: Option<u64>,
+    /// The commit of the checkout the harness was INVOKED from, when one could be
+    /// read. Recorded separately from `git_sha` so a stale executable running inside
+    /// a newer checkout is visible rather than disguised. Absent when the process had
+    /// no git checkout as its working directory, which is the normal case under
+    /// systemd-run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invoked_from_git_sha: Option<String>,
+}
+
+/// How [`HarnessInfo::git_sha`] was obtained.
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum GitShaSource {
+    BuildTime,
+    Unavailable,
 }
 
 /// The machine, per BENCH-04's rig-discipline requirement. `rig_slug` is a chosen

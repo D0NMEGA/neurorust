@@ -271,16 +271,58 @@
         "disabled"
       ]
     },
+    "GitShaSource": {
+      "description": "How [`HarnessInfo::git_sha`] was obtained.",
+      "type": "string",
+      "enum": [
+        "build-time",
+        "unavailable"
+      ]
+    },
     "HarnessInfo": {
       "description": "Ties a manifest to the exact harness build that produced it (T-1-10).",
       "type": "object",
       "properties": {
+        "executable_blake3": {
+          "description": "Lowercase hex blake3 of the executable that produced this manifest, read from\n`std::env::current_exe()`. The only field here that identifies the binary\nitself rather than a checkout. Deliberately NOT paired with the executable's\nabsolute path: on the reference rig that path is a home directory\n(`/home/<user>/neurorust/target/release/nrmeasure`), manifests are published,\nand the blake3 plus byte count identify the binary without naming anyone's\nhome directory (T-1-06).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executable_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
         "git_dirty": {
+          "description": "Whether the working tree was dirty when the binary was built. Meaningful only\nwhen `git_sha_source` is `build-time`.",
           "type": "boolean"
         },
         "git_sha": {
-          "description": "Full 40-character SHA of the harness commit.",
+          "description": "The commit the binary was BUILT from, embedded at compile time by\n`crates/cli/build.rs`. Never re-derived from the working directory at run\ntime: a stale executable running inside a newer checkout would otherwise\ninherit that checkout's identity, and a run launched by systemd-run with no\nworking directory inside the checkout would record \"unknown\". Both happened;\nsee finding 6 of `01-EXTERNAL-AUDIT.md`.",
           "type": "string"
+        },
+        "git_sha_source": {
+          "description": "How `git_sha` was obtained. Absent on manifests written before this field\nexisted. `Unavailable` means the build could not read git at all, and\n`git_dirty` says nothing in that case.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GitShaSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "invoked_from_git_sha": {
+          "description": "The commit of the checkout the harness was INVOKED from, when one could be\nread. Recorded separately from `git_sha` so a stale executable running inside\na newer checkout is visible rather than disguised. Absent when the process had\nno git checkout as its working directory, which is the normal case under\nsystemd-run.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "version": {
           "description": "`env!(\"CARGO_PKG_VERSION\")`.",

@@ -19,9 +19,10 @@ use anyhow::Context;
 use clap::{Args as ClapArgs, ValueEnum};
 use nr_manifest::{
     AbsentField, ArtifactKind, ArtifactRecord, ContaminationVerdict, CpuGovernor, CstateSetting,
-    HarnessInfo, HostInfo, InterferenceDelta, InterferenceSnapshot, InterferenceSnapshotPair,
-    KernelInfo, NetworkInfo, OsInfo, PowerInfo, PreconditionResult, ProvenanceTier, RunManifest,
-    ServiceState, SessionKind, StorageLocation, ThermalZone, ToolInvocation, TuningInfo,
+    GitShaSource, HarnessInfo, HostInfo, InterferenceDelta, InterferenceSnapshot,
+    InterferenceSnapshotPair, KernelInfo, NetworkInfo, OsInfo, PowerInfo, PreconditionResult,
+    ProvenanceTier, RunManifest, ServiceState, SessionKind, StorageLocation, ThermalZone,
+    ToolInvocation, TuningInfo,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -325,18 +326,30 @@ fn build_notes(operator_note: Option<&str>, auto_notes: &[String]) -> Option<Str
     }
 }
 
-/// Ties the manifest to the exact harness build that ran the reconstruction (T-1-10). Mirrors
-/// `cmd::run::harness_info`, kept as a small standalone copy here since that function is
-/// private to its own module.
+/// Ties the manifest to the exact harness build that ran the reconstruction (T-1-10).
+/// Mirrors `cmd::run::harness_info` exactly, including reading the same
+/// `crates/cli/build.rs`-embedded constants and hashing the same running
+/// executable, kept as a small standalone copy here since that function is private
+/// to its own module.
 fn harness_info() -> HarnessInfo {
-    let git_sha = git_output(&["rev-parse", "HEAD"]).unwrap_or_else(|| "unknown".to_string());
-    let git_dirty = git_output(&["status", "--porcelain"])
-        .map(|status| !status.trim().is_empty())
-        .unwrap_or(false);
+    let (executable_blake3, executable_bytes) = match std::env::current_exe() {
+        Ok(path) => (
+            nr_manifest::blake3_file(&path).ok(),
+            std::fs::metadata(&path).ok().map(|m| m.len()),
+        ),
+        Err(_) => (None, None),
+    };
     HarnessInfo {
         version: env!("CARGO_PKG_VERSION").to_string(),
-        git_sha,
-        git_dirty,
+        git_sha: env!("NR_BUILD_GIT_SHA").to_string(),
+        git_dirty: env!("NR_BUILD_GIT_DIRTY") == "true",
+        git_sha_source: Some(match env!("NR_BUILD_GIT_SHA_SOURCE") {
+            "build-time" => GitShaSource::BuildTime,
+            _ => GitShaSource::Unavailable,
+        }),
+        executable_blake3,
+        executable_bytes,
+        invoked_from_git_sha: git_output(&["rev-parse", "HEAD"]),
     }
 }
 

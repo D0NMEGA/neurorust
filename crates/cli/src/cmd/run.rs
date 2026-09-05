@@ -29,7 +29,7 @@ use nr_capture::{environment, interference, preconditions};
 use nr_histogram::hist::{CyclictestRun, parse_hist_file};
 use nr_histogram::json::{parse_json_file, reconcile};
 use nr_manifest::{
-    ArtifactKind, ArtifactRecord, ContaminationVerdict, HarnessInfo, InstrumentClass,
+    ArtifactKind, ArtifactRecord, ContaminationVerdict, GitShaSource, HarnessInfo, InstrumentClass,
     PreconditionResult, PreconditionStatus, ProvenanceTier, RunClass, RunManifest, StorageLocation,
     ToolInvocation,
 };
@@ -714,18 +714,33 @@ fn live_interference_snapshot(_cpus: &[u32]) -> Result<nr_manifest::Interference
     )
 }
 
-/// Ties the manifest to the exact harness build that produced it (T-1-10). Reads
-/// the checked-out repository's own state; a rig running the harness from a clone
-/// of this repository always has one.
+/// Ties the manifest to the exact harness build that produced it (T-1-10).
+/// `git_sha`/`git_dirty`/`git_sha_source` are embedded at compile time by
+/// `crates/cli/build.rs`, so a stale executable running inside a newer checkout, or
+/// a run launched with no git checkout as its working directory (the systemd-run
+/// case that produced seven "unknown" manifests; finding 6 of
+/// `01-EXTERNAL-AUDIT.md`), still records a real identity. `invoked_from_git_sha` is
+/// the one field that still reads the working directory, kept separate specifically
+/// so the two can be compared.
 fn harness_info() -> HarnessInfo {
-    let git_sha = git_output(&["rev-parse", "HEAD"]).unwrap_or_else(|| "unknown".to_string());
-    let git_dirty = git_output(&["status", "--porcelain"])
-        .map(|status| !status.trim().is_empty())
-        .unwrap_or(false);
+    let (executable_blake3, executable_bytes) = match std::env::current_exe() {
+        Ok(path) => (
+            nr_manifest::blake3_file(&path).ok(),
+            std::fs::metadata(&path).ok().map(|m| m.len()),
+        ),
+        Err(_) => (None, None),
+    };
     HarnessInfo {
         version: env!("CARGO_PKG_VERSION").to_string(),
-        git_sha,
-        git_dirty,
+        git_sha: env!("NR_BUILD_GIT_SHA").to_string(),
+        git_dirty: env!("NR_BUILD_GIT_DIRTY") == "true",
+        git_sha_source: Some(match env!("NR_BUILD_GIT_SHA_SOURCE") {
+            "build-time" => GitShaSource::BuildTime,
+            _ => GitShaSource::Unavailable,
+        }),
+        executable_blake3,
+        executable_bytes,
+        invoked_from_git_sha: git_output(&["rev-parse", "HEAD"]),
     }
 }
 
