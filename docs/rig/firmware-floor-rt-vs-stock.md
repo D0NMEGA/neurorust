@@ -168,12 +168,18 @@ A third arm was taken after the mode was set (`measurements/2026-09-05-precision
 900 s, all 22 CPUs loaded, package 87 C). All 15 of its events named CPU 5, the same as the
 other two.
 
-Measuring the isolated cores therefore needs the hwlat tracer driven directly, writing
-`current_tracer`, `hwlat_detector/mode`, `window`, `width` and `tracing_thresh`, enabling
-`tracing_on`, and reading the trace buffer, rather than shelling out to `hwlatdetect`. That is
-a new instrument in the harness, not a correction to this one, so it is recorded rather than
-attempted here. `per-cpu` mode would additionally give each CPU its own sampling thread and
-therefore real per-CPU exposure, instead of dividing one thread's polling time across the set.
+Measuring the isolated cores needs a different instrument. It does not need a new one:
+`rtla hwnoise` is already installed (rtla 7.0.12, from `linux-tools-common`) and does exactly
+this. It takes `-c/--cpus` to run one osnoise thread per CPU in the list, so every listed CPU
+is sampled by its own thread rather than sharing one migrating thread, and `-H/--house-keeping`
+to keep rtla's own control threads off the cores under test. For this rig that is
+
+    rtla hwnoise -c 6-11 -H 0-5 -P f:99 -d 900s
+
+`msr-tools` is worth adding alongside it. `rdmsr -p <cpu> 0x34` reads `MSR_SMI_COUNT`, an exact
+per-CPU SMI counter. Read before and after a run it answers "did SMIs reach these cores" with
+a count rather than an inference from timing gaps, and it is cheap enough to record in the
+manifest for every run.
 
 Until that exists, no `hwlatdetect` figure from this rig characterises CPUs 6-11, and none
 should be published as if it did.

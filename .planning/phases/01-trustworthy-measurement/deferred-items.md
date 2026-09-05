@@ -254,3 +254,26 @@ audit record and the fix can be read together.
   this was present in the 2026-08-28 raw capture from the day it was taken. A test that reads
   the committed `hwlatdetect.txt` files and asserts which CPUs appear would have failed on
   the baseline immediately.
+
+## From 01-11 (the instrument that was available all along, 2026-09-05)
+
+- **Re-take D-18 with `rtla hwnoise`, not a new tracer driver.** The D-18 document proposes
+  driving the hwlat tracer directly because `hwlatdetect` cannot be made to sample more than
+  one CPU. That is true but the conclusion is wrong: `rtla hwnoise` already does exactly
+  this. It is installed (rtla 7.0.12, from `linux-tools-common`), takes `-c/--cpus` to run
+  one osnoise thread per CPU in the list, and `-H/--house-keeping` to keep its own control
+  threads off the measured cores. `rtla hwnoise -c 6-11 -H 0-5 -P f:99 -d 900s` is the
+  measurement D-18 wanted.
+  STATE.md has recorded since plan 01-02 that rtla ships in `linux-tools-common` and needs no
+  build, but filed it as settling plan 01-12's instrument only. Nobody connected that
+  `hwnoise` is the per-CPU replacement for `hwlatdetect`, and three arms were spent
+  discovering the limitation the hard way.
+
+- **Install `msr-tools` and read `MSR_SMI_COUNT` (0x34) around every firmware screen.**
+  `rdmsr -p <cpu> 0x34` is an exact per-CPU SMI counter. Sampled before and after a run it
+  answers "did SMIs reach CPUs 6-11" directly, with no sampling, no thresholds and no
+  inference from timing gaps, and it costs one `apt install` plus two reads. The `msr` module
+  is already loaded on the rig. This would have settled in seconds what three 15-minute arms
+  could not.
+  It also gives the harness a cheap, exact provenance field: SMI count per isolated CPU over
+  the run, recordable in the manifest beside the interference counters.

@@ -13,11 +13,18 @@ requires:
   - phase: 01-10
     provides: reconstructed 2026-08-28 manifests, corrected README figures, a green provenance gate
 provides:
-  - D-17 calibration pair (clean + contaminated, both duration variants) published under measurements/, taken previously and left untouched this session
-  - D-24 tail-based contamination detector proven by a named regression test (calibration_pair_separates), closing plan 01-11 task 3
-  - --hwlatdetect-cpu-list on nrmeasure run, so a future P-core-restricted hwlatdetect capture is harness-stamped
-  - A precise, evidence-backed rig-access blocker and two remediation options for D-18's two remaining hwlatdetect arms
-affects: ["01-13 (PLAT-03 needs firmware_floor_us from D-18 arm 3)", "01-14 (the weekly systemd timer hits the identical root-access gate)"]
+  - D-17 calibration pair (clean + contaminated, both duration variants) published under measurements/
+  - D-24 tail-based contamination detector proven by a named regression test (calibration_pair_separates)
+  - nr-run-measurement, the narrow NOPASSWD root entry point, installed on the rig; measurement no longer needs the operator's password
+  - Three D-18 screen captures on the installed PREEMPT_RT kernel, published with honest thermal records
+  - docs/rig/firmware-floor-rt-vs-stock.md, which reports that no capture in this repository characterises firmware latency on the isolated cores, and why
+  - An external methodology audit (01-EXTERNAL-AUDIT.md) and seven correctness fixes arising from it
+affects:
+  - "01-13: BLOCKED. Lost both its operation (the firmware-floor subtraction is invalid) and its input (no firmware floor exists for CPUs 6-11)."
+  - "01-12: its rtla instrument is available; note finding 9 of the audit lists three defects in its plan text."
+  - "01-14: inherits the TimeoutStartSec runaway guard; note finding 10 lists two defects in its plan text."
+  - "measurements/2026-08-28-precision3591/README.md: presents a CPU-0 measurement as a machine-wide firmware floor and needs correcting."
+
 
 # Tech tracking
 tech-stack:
@@ -284,6 +291,91 @@ None required to continue reading this SUMMARY. To actually finish task 2, the u
 4. Only then mark this plan's SUMMARY status PASS, run `node "$DONNY_TOOLS" state advance-plan`, `state update-progress`, `state record-metric`, and `roadmap update-plan-progress 1` for real completion.
 
 Plan 01-12 (PLAT-01 investigation) and 01-13 (PLAT-03 verdict, needs `firmware_floor_us`) both depend on this plan's D-18 output and should not start ahead of it. Plan 01-14 (weekly systemd timer) will hit the identical rig-root-access gate documented here; resolving it now (Option A) pays for itself there too.
+
+## Session 2 (2026-09-04 to 2026-09-05): the arms were taken, and D-18 has a negative result
+
+The rig-access blocker recorded above was resolved: the operator installed
+`scripts/nr-run-measurement` as a NOPASSWD entry, so a measurement can now be launched
+without a password. Three D-18 screen captures followed. Task 2's document exists. Its
+central figure does not, and that is the finding.
+
+### What the arms show
+
+    2026-09-05-precision3591-screen      900s, unrestricted     max 15 us, 12 events
+    2026-09-05-precision3591-screen-02   600s, --cpu-list 0-11  max 13 us,  5 events
+    2026-09-05-precision3591-screen-03   900s, mode=round-robin max 16 us, 15 events
+
+All 32 events, across all three arms, named CPU 5. None named CPUs 6-11.
+
+`hwlatdetect` cannot sample more than one CPU on this kernel. The hwlat tracer's `mode`
+governs whether its thread migrates; `none` means it does not, and `isolcpus=6-11` keeps
+the scheduler from ever placing it on an isolated core. The mode cannot be changed around
+`hwlatdetect`: the kernel accepts a write only while `current_tracer` is not `hwlat`, and
+`hwlatdetect`'s startup clears the tracer, resetting the mode before selecting `hwlat`.
+Measured directly, round-robin before a run and none twice during it.
+
+This reaches back: the 2026-08-28 baseline's P-core arm reported all 13 of its events on
+CPU 0. The 22 us figure this project has treated as its firmware floor describes CPU 0
+under load, not the cores the runtime isolates.
+
+### The instrument that was available the whole time
+
+`rtla hwnoise` is installed (rtla 7.0.12, `linux-tools-common`) and takes `-c/--cpus` to
+run one osnoise thread **per CPU** in the list, plus `-H/--house-keeping` to keep its own
+control threads off the measured cores. That is exactly the per-CPU hardware-noise
+measurement D-18 needed, and it would have avoided this entire class of problem.
+
+STATE.md has recorded since plan 01-02 that rtla ships in `linux-tools-common` and needs no
+build. It was filed as settling plan 01-12's instrument, and nobody connected that
+`hwnoise` is the per-CPU replacement for `hwlatdetect`. Whoever re-takes D-18 should use
+`rtla hwnoise -c 6-11 -H 0-5 -d 900s` rather than building a new instrument from the
+tracing filesystem, which is what the D-18 document originally proposed.
+
+`msr-tools` is not installed and is worth one `apt install`: `rdmsr 0x34` reads
+`MSR_SMI_COUNT`, an exact per-CPU SMI counter. Sampled before and after a run it settles
+"do SMIs reach CPUs 6-11" directly, without inferring from timing gaps. The `msr` module is
+already loaded.
+
+### Correctness fixes from the external audit
+
+An adversarial audit (`01-EXTERNAL-AUDIT.md`, codex gpt-6-astra, read-only) was run mid-plan
+after four consecutive defects surfaced. Seven of its findings were fixed here:
+
+  ece44b0  the PLAT-03 "kernel contribution" subtraction is invalid; removed, gate boundary
+           corrected from <= to <
+  137c3c1  the recorded reason the interference counters were abandoned was factually wrong;
+           only device IRQs invert, and the protocol's 60 C ceiling had drifted from the
+           code's 70 C
+  cff91f3  plan 01-11 made "does not describe the carry-over assumption as wrong" an
+           acceptance criterion, which selected the conclusion before the experiment
+  6b10e93  temp_c_start held the END temperature and temp_c_end was never populated
+  152bc1c  the thermal gate refused the very screens D-18 needed
+  2b7a581  hwlatdetect's exit 1 means "found latency", not "failed"
+  f694bb2  nproc counts only CPUs in the caller's affinity, so the cpumask silently dropped
+           CPUs 16-21
+
+Six findings remain open and are carried in `deferred-items.md`.
+
+### Two recurring shapes worth a mechanical guard
+
+Three defects were a claim in prose that the code did not implement: the thermal record, the
+counter inversion, the protocol ceiling. A test that re-derives claimed figures from
+committed artifacts would have caught the counter inversion the day it was written; the
+correct numbers were sitting in two committed manifests the whole time.
+
+Three were the same `isolcpus` trap wearing different clothes: `stress-ng --cpu 22` reaching
+16 of 22 cores, the hwlat tracer never reaching the isolated ones, and `nproc` returning 16.
+Anything on this rig that enumerates or places work across CPUs needs checking against
+`isolcpus` explicitly, and the check is to read the result back rather than trust the write.
+
+### Why this plan is PARTIAL and not PASS
+
+Task 1 is complete. Task 3 is complete. Task 2 produced its document, three published
+captures and a well-evidenced negative result, but not the firmware floor it was for. The
+plan's own acceptance criterion "at least three hwlatdetect captures on the installed RT
+kernel exist and verify --strict --check-index exits 0" is met; the criterion that the
+document name a figure for the isolated cores cannot be met with this instrument, and the
+document says so rather than naming a number that would not mean what it appears to.
 
 ## Self-Check: PASSED
 
