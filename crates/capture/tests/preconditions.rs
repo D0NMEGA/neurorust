@@ -260,7 +260,7 @@ fn epp_and_governor_are_recorded_as_distinct_operating_points() {
          scaling_governor=performance value this check requires: {governor_result:#?}"
     );
 
-    let snap = environment::snapshot(&facts, "test-rig").expect("snapshot succeeds");
+    let snap = environment::snapshot(&facts, "test-rig", None).expect("snapshot succeeds");
     assert!(!snap.tuning.per_cpu_governor.is_empty());
     for cpu_governor in &snap.tuning.per_cpu_governor {
         assert_eq!(
@@ -361,4 +361,59 @@ fn thermal_result(results: &[PreconditionResult]) -> PreconditionResult {
         .find(|r| r.check == PreconditionCheck::ThermalHeadroomAtStart)
         .expect("ThermalHeadroomAtStart result present")
         .clone()
+}
+
+/// The thermal record must describe the run, not the instant the snapshot happened to run.
+///
+/// Until 2026-09-04 `environment::snapshot` was called once, after both instruments finished,
+/// and wrote that single reading into `temp_c_start` while leaving `temp_c_end` permanently
+/// `None`. So the field named "start" held the END temperature, and `package_temp_c_max` was
+/// the maximum across zones at one instant rather than across the run. The 70 C thermal gate's
+/// own justification leaned on those fields making mid-run heating auditable, which they did
+/// not. See finding 5 of 01-EXTERNAL-AUDIT.md.
+#[test]
+fn thermal_record_carries_both_ends_of_the_run() {
+    let cold = FixtureFacts::parse(RIG_AS_FOUND);
+    let start = nr_capture::sources::discover_thermal_zones_c(&cold);
+    assert!(!start.is_empty(), "fixture must have thermal zones");
+
+    // The run heats up: the same zones read hotter when the snapshot is taken at the end.
+    let hot_text = RIG_AS_FOUND.replace("thermal.x86_pkg_temp=64000", "thermal.x86_pkg_temp=92000");
+    let hot = FixtureFacts::parse(&hot_text);
+
+    let snap = environment::snapshot(&hot, "test-rig", Some(&start)).expect("snapshot succeeds");
+    let pkg = snap
+        .power
+        .thermal_zones
+        .iter()
+        .find(|z| z.name == "x86_pkg_temp")
+        .expect("x86_pkg_temp zone present");
+
+    assert_eq!(pkg.temp_c_start, 64.0, "start must be the pre-run reading");
+    assert_eq!(
+        pkg.temp_c_end,
+        Some(92.0),
+        "end must be populated, not left None"
+    );
+    assert_eq!(
+        snap.power.package_temp_c_max,
+        Some(92.0),
+        "the max must span both readings, not just the snapshot instant"
+    );
+}
+
+/// With no pre-run reading (reconstruct, which has only one observation), the end is absent
+/// rather than fabricated, and start carries the single reading that does exist.
+#[test]
+fn thermal_record_without_a_pre_run_reading_leaves_the_end_absent() {
+    let facts = FixtureFacts::parse(RIG_AS_FOUND);
+    let snap = environment::snapshot(&facts, "test-rig", None).expect("snapshot succeeds");
+    let pkg = snap
+        .power
+        .thermal_zones
+        .iter()
+        .find(|z| z.name == "x86_pkg_temp")
+        .expect("x86_pkg_temp zone present");
+    assert_eq!(pkg.temp_c_start, 64.0);
+    assert_eq!(pkg.temp_c_end, None);
 }

@@ -322,8 +322,12 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         None => None,
     };
 
-    // Step 3: the before interference snapshot.
+    // Step 3: the before interference snapshot, and the pre-run thermal reading.
     let before = take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())?;
+    // Taken here, before either instrument runs, so the manifest's temp_c_start is genuinely
+    // the start. The D-14 snapshot at step 8 runs after both instruments finish and supplies
+    // temp_c_end; reading the zones only there put the end temperature in the start field.
+    let thermal_start = nr_capture::sources::discover_thermal_zones_c(facts.as_ref());
 
     // Step 4: execute cyclictest.
     let scratch = tempfile::tempdir().context("failed to create a scratch directory")?;
@@ -385,7 +389,7 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
     .context("failed to compute the D-15/D-24 contamination verdict")?;
 
     // Step 8: the D-14 environment snapshot.
-    let env_snapshot = environment::snapshot(facts.as_ref(), &args.rig_slug)
+    let env_snapshot = environment::snapshot(facts.as_ref(), &args.rig_slug, Some(&thermal_start))
         .context("failed to capture the environment snapshot")?;
 
     let utc_end = OffsetDateTime::now_utc();

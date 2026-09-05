@@ -40,9 +40,17 @@ pub struct EnvironmentSnapshot {
 
 /// Fills the D-14 environment snapshot. `rig_slug` is a chosen label (e.g.
 /// `"precision3591"`), never a network-derived machine name (T-1-06).
+/// `thermal_start` is the thermal-zone reading taken BEFORE the instruments ran, when the
+/// caller has one. Without it this function reads the zones once, at the moment it is called,
+/// which for a live run is after both instruments have finished. Until 2026-09-04 that single
+/// late reading was written into `temp_c_start` while `temp_c_end` was left permanently `None`,
+/// so the field named "start" actually held the end temperature and `package_temp_c_max` was
+/// one instant rather than a span. `reconstruct` legitimately has only one observation and
+/// passes `None`; a live run must pass `Some`. See finding 5 of 01-EXTERNAL-AUDIT.md.
 pub fn snapshot(
     facts: &dyn SystemFacts,
     rig_slug: &str,
+    thermal_start: Option<&[(String, f32)]>,
 ) -> Result<EnvironmentSnapshot, FactsError> {
     let mut absent = Vec::new();
 
@@ -50,7 +58,7 @@ pub fn snapshot(
     let kernel = build_kernel(facts, &mut absent);
     let os = build_os(facts, &mut absent);
     let tuning = build_tuning(facts, &mut absent);
-    let power = build_power(facts, &mut absent);
+    let power = build_power(facts, &mut absent, thermal_start);
     let network = build_network(facts, &mut absent);
 
     Ok(EnvironmentSnapshot {
@@ -627,7 +635,11 @@ fn build_tuning(facts: &dyn SystemFacts, absent: &mut Vec<AbsentField>) -> Tunin
 // PowerInfo
 // ---------------------------------------------------------------------------------
 
-fn build_power(facts: &dyn SystemFacts, absent: &mut Vec<AbsentField>) -> PowerInfo {
+fn build_power(
+    facts: &dyn SystemFacts,
+    absent: &mut Vec<AbsentField>,
+    thermal_start: Option<&[(String, f32)]>,
+) -> PowerInfo {
     let ac_online = match discover_ac_online(facts) {
         Some(value) => Some(value == "1"),
         None => {
@@ -653,20 +665,42 @@ fn build_power(facts: &dyn SystemFacts, absent: &mut Vec<AbsentField>) -> PowerI
         }
     };
 
-    let zones = discover_thermal_zones_c(facts);
-    let thermal_zones: Vec<ThermalZone> = zones
-        .iter()
-        .map(|(name, temp_c)| ThermalZone {
-            name: name.clone(),
-            temp_c_start: *temp_c,
-            temp_c_end: None,
-        })
-        .collect();
-    let package_temp_c_max = if zones.is_empty() {
+    let zones_now = discover_thermal_zones_c(facts);
+    let thermal_zones: Vec<ThermalZone> = match thermal_start {
+        Some(start) => start
+            .iter()
+            .map(|(name, start_c)| ThermalZone {
+                name: name.clone(),
+                temp_c_start: *start_c,
+                temp_c_end: zones_now
+                    .iter()
+                    .find(|(n, _)| n == name)
+                    .map(|(_, end_c)| *end_c),
+            })
+            .collect(),
+        None => zones_now
+            .iter()
+            .map(|(name, temp_c)| ThermalZone {
+                name: name.clone(),
+                temp_c_start: *temp_c,
+                temp_c_end: None,
+            })
+            .collect(),
+    };
+    // The maximum across every reading actually taken. This is two points per zone on a live
+    // run, not a sampled trace, so it bounds only what was observed at the ends of the run; a
+    // spike in between is still invisible here. Stated rather than implied, because the 70 C
+    // gate's justification once leaned on this field being a run maximum.
+    let package_temp_c_max = if thermal_zones.is_empty() {
         note_absent(absent, "power.package_temp_c_max", "no thermal zones found");
         None
     } else {
-        Some(zones.iter().map(|(_, c)| *c).fold(f32::MIN, f32::max))
+        Some(
+            thermal_zones
+                .iter()
+                .flat_map(|z| std::iter::once(z.temp_c_start).chain(z.temp_c_end))
+                .fold(f32::MIN, f32::max),
+        )
     };
 
     PowerInfo {
@@ -821,7 +855,7 @@ microcode\t: 0x28\n";
     #[test]
     fn snapshot_fills_every_required_field() {
         let facts = base_facts();
-        let snap = snapshot(&facts, "precision3591").expect("snapshot succeeds");
+        let snap = snapshot(&facts, "precision3591", None).expect("snapshot succeeds");
 
         assert_eq!(snap.host.rig_slug, "precision3591");
         assert_eq!(snap.host.cpu_model, "Intel(R) Core(TM) Ultra 9 185H");
@@ -842,7 +876,7 @@ microcode\t: 0x28\n";
         // sentinel (a real false-negative from the wrong sysfs path; see
         // docs/rig/recon-2026-08-31/FINDINGS.md).
         let facts = base_facts();
-        let snap = snapshot(&facts, "precision3591").expect("snapshot succeeds");
+        let snap = snapshot(&facts, "precision3591", None).expect("snapshot succeeds");
 
         assert_eq!(snap.tuning.no_turbo, None);
         assert!(
@@ -862,7 +896,7 @@ microcode\t: 0x28\n";
         // not an empty string or a guessed value, and the absence must be recorded
         // rather than silently dropped (D-16).
         let facts = base_facts();
-        let snap = snapshot(&facts, "precision3591").expect("snapshot succeeds");
+        let snap = snapshot(&facts, "precision3591", None).expect("snapshot succeeds");
 
         assert!(!snap.tuning.per_cpu_governor.is_empty());
         assert!(
@@ -885,7 +919,7 @@ microcode\t: 0x28\n";
     #[test]
     fn cmdline_params_are_parsed() {
         let facts = base_facts();
-        let snap = snapshot(&facts, "precision3591").expect("snapshot succeeds");
+        let snap = snapshot(&facts, "precision3591", None).expect("snapshot succeeds");
 
         assert_eq!(snap.kernel.isolcpus.as_deref(), Some("6-11"));
         assert_eq!(snap.kernel.nohz_full.as_deref(), Some("6-11"));
@@ -895,7 +929,7 @@ microcode\t: 0x28\n";
     #[test]
     fn cmdline_param_absent_is_none() {
         let facts = base_facts();
-        let snap = snapshot(&facts, "precision3591").expect("snapshot succeeds");
+        let snap = snapshot(&facts, "precision3591", None).expect("snapshot succeeds");
 
         assert_eq!(snap.kernel.irqaffinity, None);
         assert!(
@@ -910,8 +944,8 @@ microcode\t: 0x28\n";
     #[test]
     fn rig_slug_is_not_hostname() {
         let facts = base_facts();
-        let snap_a = snapshot(&facts, "precision3591").expect("snapshot succeeds");
-        let snap_b = snapshot(&facts, "some-other-rig").expect("snapshot succeeds");
+        let snap_a = snapshot(&facts, "precision3591", None).expect("snapshot succeeds");
+        let snap_b = snapshot(&facts, "some-other-rig", None).expect("snapshot succeeds");
 
         assert_eq!(snap_a.host.rig_slug, "precision3591");
         assert_eq!(snap_b.host.rig_slug, "some-other-rig");
