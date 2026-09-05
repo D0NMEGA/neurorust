@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: 01-11 complete (PARTIAL); phase replanned 2026-09-05, next is wave 8
-last_updated: "2026-09-05T16:00:48.610Z"
-last_activity: 2026-09-05 -- Phase 01 planning complete
+stopped_at: 01-16 complete (PASS); wave 8 continues with 01-19
+last_updated: "2026-09-05T16:39:31.876Z"
+last_activity: 2026-09-05 -- 01-16 finished (PASS)
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 23
-  completed_plans: 11
-  percent: 48
+  completed_plans: 12
+  percent: 52
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 01 (trustworthy-measurement) — EXECUTING
-Plan: 11 of 23
-Status: Ready to execute
-Last activity: 2026-09-05 -- Phase 01 planning complete
+Plan: 12 of 23 done (01-16 just finished); wave 8 continues with 01-19
+Status: Executing Phase 01
+Last activity: 2026-09-05 -- 01-16 finished (PASS)
 
-Progress: [████░░░░░░] 48%
+Progress: [█████░░░░░] 52%
 
 ## Performance Metrics
 
@@ -62,6 +62,7 @@ Progress: [████░░░░░░] 48%
 | Phase 01 P08 | 10min | 3 tasks | 5 files |
 | Phase 01 P09 | 4min | 2 tasks | 5 files |
 | Phase 01 P10 | 23min | 3 tasks | 6 files |
+| Phase 01 P16 | 32min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -112,6 +113,10 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-10: cargo test --workspace surfaced a pre-existing, out-of-scope failure (crates/cli/tests/run_pipeline.rs::full_run_report_matches_snapshot) caused by the wall clock crossing midnight UTC since plan 01-07's snapshot was captured: cmd/run.rs's OffsetDateTime::now_utc() feeds the generated run_id's date, and the test's own redact_report() helper redacts utc_start/utc_end but not the run id line, so the snapshot rots one day after capture regardless of code correctness. Not fixed here (plan 01-07's files, not this plan's); logged to deferred-items.md with the exact fix location. All 148 other workspace tests pass, fmt and clippy are clean, and the provenance gate is green; this is the only reason this plan's SUMMARY status is PARTIAL rather than PASS.
 - [Phase 01]: 01-11 task 3: kept the provisional D-24 detector rather than manufacturing calibrated per-counter thresholds. Added calibration_pair_separates (crates/capture/tests/interference.rs), combining the two already-passing per-arm assertions into the name the plan's own verify command selects. calibration.derived_from left unchanged (2026-09-01-clean, 2026-09-02-contaminated: the true numeric source; report.rs hardcodes 'derived from 2 runs' as part of Thresholds::Provisional's own contract). The later duration-matched confirmatory run (2026-09-03-contaminated, 3600s) is documented in the note field instead: it independently scores Contaminated under the same shipped thresholds (ratio 211.2, spread 3.7%) without being folded into derived_from, since it did not inform the chosen numbers.
 - [Phase 01]: 01-11 task 2: added --hwlatdetect-cpu-list to nrmeasure run (crates/cli/src/cmd/run.rs), the plan's preferred resolution (a) for the P-core-restricted D-18 arm 3, so it will be harness-stamped once captured. Code-only, built and verified on both the dev host and the rig (rsynced and rebuilt there); no rig capture was taken with it yet.
+- [Phase 01]: 01-16: Treated a Rust compile failure as the valid TDD RED state for both tdd=true tasks (HarnessInfo/ToolInvocation fields did not exist yet, so a runtime-only RED was not achievable).
+- [Phase 01]: 01-16: Extended reconstruct.rs's own standalone harness_info() with the full build-time-identity fix rather than a minimal stub, since it is documented as mirroring run.rs's function and stubbing it would leave finding 6's exact defect alive in a second code path.
+- [Phase 01]: 01-16: redact_home_prefix splits an argv token on its first '=' before matching (mirroring KernelInfo::redact_cmdline), after a self-caught bug showed a whole-string prefix check never fires for a --histfile=<path> token.
+- [Phase 01]: 01-16: state advance-plan's Current Position counter is a naive sequential index unaware of wave-based/replanned execution; it set Plan to 2 of 23 after completing 01-16 (the 12th plan). Hand-corrected the Current Position and Session Continuity body lines to name 01-16 and 01-19, matching the precedent already logged for the same class of tooling gap in 01-02/01-03.
 
 ### Pending Todos
 
@@ -130,8 +135,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-04T16:51:28.163Z
-Stopped at: 01-11 complete (PARTIAL); phase replanned 2026-09-05, next is wave 8
-Resume file: .planning/phases/01-trustworthy-measurement/01-16-PLAN.md
+Last session: 2026-09-05T16:37:52.222Z
+Stopped at: 01-16 complete (PASS); wave 8 continues with 01-19
+Resume file: .planning/phases/01-trustworthy-measurement/01-19-PLAN.md
 
-Next: `/donny-execute-phase 1` (wave 8 first: plans 01-16 and 01-19)
+Next: `/donny-execute-phase 1` (wave 8 remainder: plan 01-19)
