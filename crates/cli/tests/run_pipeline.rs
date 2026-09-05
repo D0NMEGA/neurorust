@@ -882,3 +882,261 @@ fn argv_redacts_a_home_directory_prefix() {
     );
     assert!(!mapping.executed_path.contains(&fake_home_str));
 }
+
+// ---------------------------------------------------------------------------------
+// The durable attempt record (finding 7 of 01-EXTERNAL-AUDIT.md, first half): the
+// run directory and ATTEMPT.json exist before the first instrument starts, and no
+// failure between then and the manifest write can delete the evidence. Raw output
+// used to live in a `tempfile::tempdir()` until parsing, reconciliation and the
+// contamination verdict had all succeeded, so any failure among them deleted the
+// capture and an hour of rig time survived only as a line on stderr.
+// ---------------------------------------------------------------------------------
+
+/// While a deliberately slow cyclictest is still running, the run directory and an
+/// `ATTEMPT.json` with `status: in-progress` are already on disk, and no
+/// `manifest.json` exists yet. Polls for a sentinel the fake tool touches before it
+/// sleeps, and confirms the child process has not exited yet, rather than asserting
+/// on timing alone.
+#[test]
+fn attempt_record_exists_before_any_tool_runs() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let facts_path = write_fixture(temp.path(), "facts.txt", &tuned_facts_text());
+    let interrupts_path = write_fixture(temp.path(), "interrupts.txt", INTERRUPTS);
+    let measurements_root = temp.path().join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+    let sentinel = temp.path().join("cyclictest-started");
+
+    // Spawned directly via std::process::Command (not assert_cmd::Command, whose
+    // own spawn() is private): this test needs to observe on-disk state while the
+    // subprocess is still running, which Command::output()/assert_cmd's own
+    // helpers cannot do, since both block until the process exits.
+    let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("nrmeasure"));
+    cmd.env("NRMEASURE_CYCLICTEST", fake_cyclictest_path())
+        .env("NRMEASURE_HWLATDETECT", fake_hwlatdetect_path())
+        .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
+        .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+        .env("FAKE_CYCLICTEST_SENTINEL", &sentinel)
+        .env("FAKE_CYCLICTEST_SLEEP_SECONDS", "2")
+        .arg("run")
+        .args(["--rig-slug", "precision3591"])
+        .args(["--cpus", "6-11"])
+        .args(["--main-cpus", "0,1"])
+        .args(["--duration", "1"])
+        .arg("--thresholds")
+        .arg(thresholds_path())
+        .arg("--measurements-root")
+        .arg(&measurements_root)
+        .args(["--class", "recon"]);
+
+    let mut child = cmd.spawn().expect("nrmeasure spawns");
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !sentinel.exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "cyclictest never started: no sentinel at {} after 5s",
+            sentinel.display()
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+
+    assert!(
+        child.try_wait().expect("try_wait must not error").is_none(),
+        "the fake tool must still be sleeping (and nrmeasure still running) the moment the \
+         sentinel is observed"
+    );
+
+    let entries: Vec<_> = std::fs::read_dir(&measurements_root)
+        .expect("read_dir")
+        .filter_map(|entry| entry.ok())
+        .collect();
+    assert_eq!(
+        entries.len(),
+        1,
+        "the run directory must already exist while the tool is still running"
+    );
+    let run_dir = entries[0].path();
+    assert!(
+        !run_dir.join("manifest.json").is_file(),
+        "no manifest.json may exist while the tool is still running"
+    );
+
+    let attempt: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(run_dir.join("ATTEMPT.json"))
+            .expect("ATTEMPT.json exists before the tool exits"),
+    )
+    .expect("ATTEMPT.json parses as JSON");
+    assert_eq!(attempt["status"], "in-progress");
+
+    let status = child.wait().expect("nrmeasure exits");
+    assert!(status.success(), "the run should finish successfully");
+}
+
+/// A fake cyclictest that writes an unparseable `.hist` leaves the run directory on
+/// disk containing that `.hist`, the tool's stderr, and an `ATTEMPT.json` with
+/// `status: failed`, `failure.stage: "parse"`, and `usable_for_numerical_analysis:
+/// false`.
+#[test]
+fn failed_parse_preserves_raw_output() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let facts_path = write_fixture(temp.path(), "facts.txt", &tuned_facts_text());
+    let interrupts_path = write_fixture(temp.path(), "interrupts.txt", INTERRUPTS);
+    let measurements_root = temp.path().join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+
+    let output = base_run_command(&measurements_root)
+        .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
+        .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+        .env("FAKE_CYCLICTEST_BAD_HIST", "1")
+        .env(
+            "FAKE_CYCLICTEST_STDERR",
+            "cyclictest: a fabricated warning for the test",
+        )
+        .args(["--class", "recon"])
+        .output()
+        .expect("nrmeasure runs");
+
+    assert!(
+        !output.status.success(),
+        "a parse failure must not exit 0: stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let entries: Vec<_> = std::fs::read_dir(&measurements_root)
+        .expect("read_dir")
+        .filter_map(|entry| entry.ok())
+        .collect();
+    assert_eq!(
+        entries.len(),
+        1,
+        "the run directory must survive the parse failure"
+    );
+    let run_dir = entries[0].path();
+
+    assert!(
+        run_dir.join("cyclictest.hist").is_file(),
+        "the raw (unparseable) capture must survive"
+    );
+    assert!(
+        run_dir.join("cyclictest.stderr.txt").is_file(),
+        "cyclictest's stderr must be preserved"
+    );
+    let stderr_text =
+        std::fs::read_to_string(run_dir.join("cyclictest.stderr.txt")).expect("read stderr");
+    assert!(stderr_text.contains("a fabricated warning for the test"));
+
+    let attempt: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(run_dir.join("ATTEMPT.json")).expect("read ATTEMPT.json"),
+    )
+    .expect("ATTEMPT.json parses");
+    assert_eq!(attempt["status"], "failed");
+    assert_eq!(attempt["failure"]["stage"], "parse");
+    assert_eq!(attempt["usable_for_numerical_analysis"], false);
+}
+
+/// The same failed-parse directory contains no `manifest.json`, so a failed
+/// attempt can never be mistaken for a measurement.
+#[test]
+fn failed_attempt_has_no_manifest() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let facts_path = write_fixture(temp.path(), "facts.txt", &tuned_facts_text());
+    let interrupts_path = write_fixture(temp.path(), "interrupts.txt", INTERRUPTS);
+    let measurements_root = temp.path().join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+
+    let output = base_run_command(&measurements_root)
+        .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
+        .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+        .env("FAKE_CYCLICTEST_BAD_HIST", "1")
+        .args(["--class", "recon"])
+        .output()
+        .expect("nrmeasure runs");
+    assert!(!output.status.success());
+
+    let entries: Vec<_> = std::fs::read_dir(&measurements_root)
+        .expect("read_dir")
+        .filter_map(|entry| entry.ok())
+        .collect();
+    assert_eq!(entries.len(), 1);
+    let run_dir = entries[0].path();
+    assert!(
+        !run_dir.join("manifest.json").exists(),
+        "a failed attempt must never carry a manifest.json"
+    );
+}
+
+/// A normal, successful run leaves `ATTEMPT.json` with `status: completed` and
+/// `usable_for_numerical_analysis: true` beside `manifest.json`.
+#[test]
+fn successful_run_marks_the_attempt_completed() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let run_dir = run_full_pipeline(temp.path());
+
+    assert!(run_dir.join("manifest.json").is_file());
+    let attempt: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(run_dir.join("ATTEMPT.json")).expect("read ATTEMPT.json"),
+    )
+    .expect("ATTEMPT.json parses");
+    assert_eq!(attempt["status"], "completed");
+    assert_eq!(attempt["usable_for_numerical_analysis"], true);
+    assert!(
+        attempt["failure"].is_null(),
+        "a completed attempt must carry no failure: {:?}",
+        attempt["failure"]
+    );
+}
+
+/// Every file named in a failed attempt's `ATTEMPT.json` `preserved` array exists
+/// and its recorded blake3 matches the file on disk.
+#[test]
+fn preserved_artifacts_carry_checksums() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let facts_path = write_fixture(temp.path(), "facts.txt", &tuned_facts_text());
+    let interrupts_path = write_fixture(temp.path(), "interrupts.txt", INTERRUPTS);
+    let measurements_root = temp.path().join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+
+    let output = base_run_command(&measurements_root)
+        .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
+        .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+        .env("FAKE_CYCLICTEST_BAD_HIST", "1")
+        .env("FAKE_CYCLICTEST_STDERR", "cyclictest: another fabricated warning")
+        .args(["--class", "recon"])
+        .output()
+        .expect("nrmeasure runs");
+    assert!(!output.status.success());
+
+    let entries: Vec<_> = std::fs::read_dir(&measurements_root)
+        .expect("read_dir")
+        .filter_map(|entry| entry.ok())
+        .collect();
+    let run_dir = entries[0].path();
+    let attempt: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(run_dir.join("ATTEMPT.json")).expect("read ATTEMPT.json"),
+    )
+    .expect("ATTEMPT.json parses");
+
+    let preserved = attempt["preserved"]
+        .as_array()
+        .expect("preserved is a JSON array");
+    assert!(
+        !preserved.is_empty(),
+        "a failed attempt must preserve at least the raw capture"
+    );
+    for entry in preserved {
+        let path = entry["path"].as_str().expect("path is a string");
+        let recorded_blake3 = entry["blake3"].as_str().expect("blake3 is a string");
+        let file_path = run_dir.join(path);
+        assert!(
+            file_path.is_file(),
+            "{path} named in preserved must exist on disk"
+        );
+        let actual =
+            nr_manifest::blake3_file(&file_path).expect("hash the file named in preserved");
+        assert_eq!(
+            &actual, recorded_blake3,
+            "{path}'s recorded blake3 must match the file on disk"
+        );
+    }
+}

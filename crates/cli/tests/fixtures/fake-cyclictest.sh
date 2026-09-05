@@ -15,6 +15,22 @@
 # invoked with (excluding --version calls), one argument per line. A test uses
 # this to assert the manifest records the executed argv byte for byte, rather
 # than trusting a hand-reconstructed expectation of what the harness passed.
+#
+# FAKE_CYCLICTEST_SENTINEL, if set, is touched the moment this script starts its
+# real (non --version) invocation, before FAKE_CYCLICTEST_SLEEP_SECONDS. A test
+# polls for this file to prove the harness's ATTEMPT.json already exists while
+# the tool is still running, rather than asserting on timing alone.
+#
+# FAKE_CYCLICTEST_SLEEP_SECONDS, if set, sleeps that many seconds before writing
+# any output, so a test has a window in which to observe the harness's
+# in-progress state.
+#
+# FAKE_CYCLICTEST_STDERR, if set, is written verbatim to stderr, so a test can
+# assert the harness preserves a tool's stderr to <tool>.stderr.txt.
+#
+# FAKE_CYCLICTEST_BAD_HIST, if set, writes a syntactically invalid .hist file
+# instead of the real capture, so a test can exercise the parse-failure path
+# (finding 7 of 01-EXTERNAL-AUDIT.md) without a real broken tool.
 
 REAL_HIST="$(dirname "$0")/../../../histogram/tests/fixtures/cyclictest-rt-isolated-idle-10m.hist"
 
@@ -45,8 +61,24 @@ if [ -n "$FAKE_CYCLICTEST_ARGV_FILE" ]; then
   done
 fi
 
+if [ -n "$FAKE_CYCLICTEST_SENTINEL" ]; then
+  : > "$FAKE_CYCLICTEST_SENTINEL"
+fi
+
+if [ -n "$FAKE_CYCLICTEST_SLEEP_SECONDS" ]; then
+  sleep "$FAKE_CYCLICTEST_SLEEP_SECONDS"
+fi
+
+if [ -n "$FAKE_CYCLICTEST_STDERR" ]; then
+  printf '%s\n' "$FAKE_CYCLICTEST_STDERR" >&2
+fi
+
 if [ -n "$histfile" ]; then
-  cp "$REAL_HIST" "$histfile"
+  if [ -n "$FAKE_CYCLICTEST_BAD_HIST" ]; then
+    printf 'this is not a valid cyclictest histogram\n' > "$histfile"
+  else
+    cp "$REAL_HIST" "$histfile"
+  fi
 fi
 
 if [ -n "$jsonfile" ]; then
