@@ -230,6 +230,9 @@ pub fn run(args: Args) -> anyhow::Result<i32> {
         tail_metrics: None,
         thresholds_provisional: None,
         verdict: args.verdict.into(),
+        // A reconstructed manifest was never measured live: there is no per-instrument
+        // timing to recover, only the absence itself.
+        windows: Vec::new(),
     };
 
     let (excluded_from_series, exclusion_reason) = match args.verdict {

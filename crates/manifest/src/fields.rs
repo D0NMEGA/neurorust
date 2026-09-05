@@ -496,6 +496,38 @@ pub struct InterferenceSnapshotPair {
     /// admitting a run to the headline series on the strength of `verdict` alone.
     pub thresholds_provisional: Option<bool>,
     pub verdict: ContaminationVerdict,
+    /// One entry per instrument, in execution order. Empty on manifests written before this
+    /// field existed (every manifest committed before this plan). The whole-run `before`/
+    /// `after`/`delta` above are retained as the outer bracket (reusing the first window's
+    /// `before` and the last window's `after`); the D-15/D-24 verdict is computed from the
+    /// cyclictest window's own measured elapsed time, not from the requested duration. Finding
+    /// 7 of `01-EXTERNAL-AUDIT.md`.
+    #[serde(default)]
+    pub windows: Vec<InstrumentWindow>,
+}
+
+/// One instrument's own interference bracket.
+///
+/// The counters used to be sampled once before cyclictest and once after everything, while the
+/// per-run-hour normalisation divided by the requested cyclictest duration alone. A 3600 s
+/// cyclictest followed by a 900 s firmware screen therefore divided roughly 4500 s of counter
+/// accumulation by 3600, and an early-terminated investigation run had the mismatch in the
+/// other direction. Finding 7 of `01-EXTERNAL-AUDIT.md`.
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct InstrumentWindow {
+    /// The tool this window brackets, matching a `tools[].name`.
+    pub instrument: String,
+    /// Measured with `std::time::Instant`, from immediately before the process is spawned to
+    /// immediately after it exits. Not the requested duration: a tool can exit early, late, or
+    /// not at all.
+    pub elapsed_seconds: f64,
+    /// What the operator asked for, when the tool takes a duration. Recorded beside the
+    /// measured value so a divergence is visible rather than absorbed.
+    pub requested_seconds: Option<u64>,
+    pub before: InterferenceSnapshot,
+    pub after: InterferenceSnapshot,
+    pub delta: InterferenceDelta,
 }
 
 /// Maps a path that appeared in an executed argv to the artifact it became in the run

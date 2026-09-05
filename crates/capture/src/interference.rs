@@ -638,6 +638,11 @@ pub fn verdict(
             tail_metrics: Some(tail_metrics),
             thresholds_provisional: Some(thresholds_provisional),
             verdict: contamination,
+            // Per-instrument windows are built by the caller (`nr-cli`, which knows which
+            // tools ran and brackets each one individually) and spliced into the returned
+            // `pair` afterward; this function only ever computes the single, whole-run
+            // before/after/delta it was handed.
+            windows: Vec::new(),
         },
         reason,
     })

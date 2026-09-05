@@ -180,13 +180,23 @@ fn full_run_produces_valid_run_dir() {
 }
 
 /// Strips the fields that legitimately differ on every run (wall-clock
-/// timestamps, and the manifest blake3 fingerprint that changes whenever any of
-/// those timestamps does) so the snapshot is stable across runs and commits.
+/// timestamps, the manifest blake3 fingerprint that changes whenever any of
+/// those timestamps does, and the D-24 overflow rate) so the snapshot is stable
+/// across runs and commits.
 ///
 /// The run id carries a wall-clock date too, which is easy to miss because it
 /// does not look like a timestamp. Leaving it unredacted made this test fail on
 /// the first UTC day after the snapshot was captured, rather than on any real
 /// change. Only the date is redacted; the rig slug and run class stay asserted.
+///
+/// The overflow rate is redacted for a different reason (finding 7 of
+/// `01-EXTERNAL-AUDIT.md`): it is now `overflow_count / cyclictest window's
+/// measured elapsed time`, and that elapsed time is real subprocess wall-clock
+/// duration, not the fixed `--duration` this fixture's fake tool used to be
+/// divided by. A few milliseconds of scheduling noise around an
+/// almost-instant fake tool changes the fourth significant figure between
+/// runs; the other tail metrics on the same table row (tail excursion ratio,
+/// thread-max spread) do not depend on elapsed time and stay asserted.
 fn redact_report(report: &str) -> String {
     report
         .lines()
@@ -197,6 +207,8 @@ fn redact_report(report: &str) -> String {
                 "utc end: [redacted]".to_string()
             } else if line.starts_with("manifest blake3: ") {
                 "manifest blake3: [redacted]".to_string()
+            } else if line.starts_with("| overflow rate |") {
+                "| overflow rate | [redacted]/s |".to_string()
             } else if let Some(run_id) = line.strip_prefix("run id: ") {
                 format!("run id: {}", redact_leading_date(run_id))
             } else {

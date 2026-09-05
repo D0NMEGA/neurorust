@@ -20,7 +20,7 @@
 //! [`execute`] and [`precondition_waiver_reason`].
 
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use clap::{Args as ClapArgs, ValueEnum};
@@ -438,22 +438,26 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
     )
     .context("failed to write the initial ATTEMPT.json")?;
 
-    // Step 4: the before interference snapshot, and the pre-run thermal reading.
-    let before = take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())?;
-    // Taken here, before either instrument runs, so the manifest's temp_c_start is genuinely
-    // the start. The D-14 snapshot at step 8 runs after both instruments finish and supplies
-    // temp_c_end; reading the zones only there put the end temperature in the start field.
+    // Step 4: the pre-run thermal reading, before either instrument runs, so the
+    // manifest's temp_c_start is genuinely the start. The D-14 snapshot at step 9
+    // runs after both instruments finish and supplies temp_c_end; reading the
+    // zones only there put the end temperature in the start field.
     let thermal_start = nr_capture::sources::discover_thermal_zones_c(facts.as_ref());
 
-    // Every fallible step from here (the first tool spawn) through the manifest
-    // write is staged: on an `Err`, the match below rewrites ATTEMPT.json with the
-    // failing stage, the verbatim error, every tool invoked so far, and
+    // Every fallible step from here (the first interference snapshot) through the
+    // manifest write is staged: on an `Err`, the match below rewrites ATTEMPT.json
+    // with the failing stage, the verbatim error, every tool invoked so far, and
     // usable_for_numerical_analysis: false, then returns a non-zero exit code. The
     // directory is never deleted and manifest.json is never written on this path.
     let attempt_result: Result<(RunManifest, CyclictestRun), StagedError> = (|| {
         let mut tool_invocations: Vec<ToolInvocation> = Vec::new();
         let mut artifacts: Vec<ArtifactRecord> = Vec::new();
         let mut run_bytes = 0u64;
+        // One entry per instrument, in execution order: each brackets exactly one
+        // `tools::run_tool` call with its own before/after snapshot and a
+        // monotonic elapsed time, with nothing else between the two snapshots.
+        // Finding 7 of `01-EXTERNAL-AUDIT.md`.
+        let mut windows: Vec<nr_manifest::InstrumentWindow> = Vec::new();
         // Paired with each placed artifact's executed path, so the argv
         // finalization below can name which argv element became which artifact
         // without re-deriving either.
@@ -470,6 +474,11 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
             &hist_path.display().to_string(),
             &json_path.display().to_string(),
         );
+        let cyclictest_before =
+            take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())
+                .context("failed to snapshot interference before cyclictest")
+                .stage(Stage::Verdict, &tool_invocations)?;
+        let cyclictest_start = Instant::now();
         let cyclictest_output = tools::run_tool(
             "cyclictest",
             cyclictest_path,
@@ -478,6 +487,12 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         )
         .context("failed to execute cyclictest")
         .stage(Stage::ToolSpawn, &tool_invocations)?;
+        let cyclictest_elapsed = cyclictest_start.elapsed();
+        let cyclictest_after =
+            take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())
+                .context("failed to snapshot interference after cyclictest")
+                .stage(Stage::Verdict, &tool_invocations)?;
+
         warn_on_tool_failure(&cyclictest_output);
         tool_invocations.push(cyclictest_output.invocation);
         if let Some(record) = capture_stderr_sidecar(
@@ -490,15 +505,34 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         {
             artifacts.push(record);
         }
+        windows.push(nr_manifest::InstrumentWindow {
+            instrument: "cyclictest".to_string(),
+            elapsed_seconds: cyclictest_elapsed.as_secs_f64(),
+            requested_seconds: Some(args.duration),
+            delta: window_delta(&cyclictest_before, &cyclictest_after),
+            before: cyclictest_before,
+            after: cyclictest_after,
+        });
 
         // Step 6: execute hwlatdetect next, never concurrently, if requested (D-09).
         if args.with_hwlatdetect {
             let version = hwlatdetect_version.expect("captured above when with_hwlatdetect is set");
             let hwlatdetect_argv = build_hwlatdetect_argv(&args);
+            let hwlatdetect_before =
+                take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())
+                    .context("failed to snapshot interference before hwlatdetect")
+                    .stage(Stage::Verdict, &tool_invocations)?;
+            let hwlatdetect_start = Instant::now();
             let hwlatdetect_output =
                 tools::run_tool("hwlatdetect", hwlatdetect_path, &version, hwlatdetect_argv)
                     .context("failed to execute hwlatdetect")
                     .stage(Stage::ToolSpawn, &tool_invocations)?;
+            let hwlatdetect_elapsed = hwlatdetect_start.elapsed();
+            let hwlatdetect_after =
+                take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())
+                    .context("failed to snapshot interference after hwlatdetect")
+                    .stage(Stage::Verdict, &tool_invocations)?;
+
             warn_on_tool_failure(&hwlatdetect_output);
             tool_invocations.push(hwlatdetect_output.invocation);
             if let Some(record) = capture_stderr_sidecar(
@@ -527,6 +561,14 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
                 .stage(Stage::ToolExit, &tool_invocations)?,
             );
             placed_paths.push((hwlat_path.display().to_string(), "hwlatdetect.txt"));
+            windows.push(nr_manifest::InstrumentWindow {
+                instrument: "hwlatdetect".to_string(),
+                elapsed_seconds: hwlatdetect_elapsed.as_secs_f64(),
+                requested_seconds: Some(args.hwlatdetect_duration),
+                delta: window_delta(&hwlatdetect_before, &hwlatdetect_after),
+                before: hwlatdetect_before,
+                after: hwlatdetect_after,
+            });
         }
 
         // Checksum cyclictest's own captures now that both instruments (if two
@@ -559,7 +601,9 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         // Step 7: parse the raw captures and reconcile them. Ahead of the D-15/D-24
         // verdict below (it used to follow it): D-24's tail metrics need the parsed
         // histogram, and nothing in between depends on the other's output, so
-        // parsing here costs nothing.
+        // parsing here costs nothing. Parsing, reconciliation and the artifact
+        // checksums above all sit outside every window pushed so far, which is
+        // what keeps each window a measure of its own instrument alone.
         let cyclictest_run: CyclictestRun = parse_hist_file(&hist_path, Some(args.histogram_max))
             .context("failed to parse cyclictest's .hist output")
             .stage(Stage::Parse, &tool_invocations)?;
@@ -574,20 +618,32 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         write_hist_tsv(&run_dir.path, &cyclictest_run)
             .stage(Stage::ManifestWrite, &tool_invocations)?;
 
-        // Step 8: the after interference snapshot and the D-15/D-24 verdict.
-        let after = take_interference_snapshot(&target_cpus, interrupts_fixture.as_deref())
-            .context("failed to snapshot interference after the measurement")
-            .stage(Stage::Verdict, &tool_invocations)?;
+        // Step 8: the D-15/D-24 verdict. The outer before/after bracket reuses the
+        // first window's before and the last window's after, so the top-level
+        // fields keep their whole-run meaning for readers and for committed
+        // manifests; the denominator is the cyclictest window's own measured
+        // elapsed time, never the requested --duration (finding 7,
+        // 01-EXTERNAL-AUDIT.md: a firmware screen run after cyclictest used to
+        // inflate this denominator's numerator without inflating the denominator
+        // itself).
+        let outer_before = windows[0].before.clone();
+        let outer_after = windows
+            .last()
+            .expect("the cyclictest window is always pushed before this point")
+            .after
+            .clone();
+        let cyclictest_elapsed_seconds = windows[0].elapsed_seconds;
         // `thresholds` was loaded in step 1, before the measurement ran.
-        let outcome = interference::verdict(
-            before,
-            after,
+        let mut outcome = interference::verdict(
+            outer_before,
+            outer_after,
             &cyclictest_run,
             &thresholds,
-            Duration::from_secs(args.duration),
+            Duration::from_secs_f64(cyclictest_elapsed_seconds),
         )
         .context("failed to compute the D-15/D-24 contamination verdict")
         .stage(Stage::Verdict, &tool_invocations)?;
+        outcome.pair.windows = windows;
 
         // Step 9: the D-14 environment snapshot.
         let env_snapshot =
@@ -1043,6 +1099,39 @@ fn take_interference_snapshot(
     match fixture_text {
         Some(text) => Ok(interference::snapshot_from_text(text, cpus)?),
         None => live_interference_snapshot(cpus),
+    }
+}
+
+/// The after-minus-before difference for each counter family, saturating at zero. Mirrors
+/// `nr_capture::interference::compute_delta` (private to that crate) rather than exposing it:
+/// building one [`nr_manifest::InstrumentWindow`] per instrument here is the only place outside
+/// `interference::verdict` itself that needs a delta, so a small, local duplicate costs less
+/// than widening that crate's public API for one caller.
+fn window_delta(
+    before: &nr_manifest::InterferenceSnapshot,
+    after: &nr_manifest::InterferenceSnapshot,
+) -> nr_manifest::InterferenceDelta {
+    fn diff(
+        before: &[nr_manifest::CpuCounter],
+        after: &[nr_manifest::CpuCounter],
+    ) -> Vec<nr_manifest::CpuCounter> {
+        let before_map: std::collections::BTreeMap<u32, u64> =
+            before.iter().map(|c| (c.cpu, c.count)).collect();
+        after
+            .iter()
+            .map(|c| nr_manifest::CpuCounter {
+                cpu: c.cpu,
+                count: c
+                    .count
+                    .saturating_sub(before_map.get(&c.cpu).copied().unwrap_or(0)),
+            })
+            .collect()
+    }
+    nr_manifest::InterferenceDelta {
+        cal_ipis: diff(&before.cal_ipis, &after.cal_ipis),
+        tlb_ipis: diff(&before.tlb_ipis, &after.tlb_ipis),
+        context_switches: diff(&before.context_switches, &after.context_switches),
+        irqs: diff(&before.irqs, &after.irqs),
     }
 }
 

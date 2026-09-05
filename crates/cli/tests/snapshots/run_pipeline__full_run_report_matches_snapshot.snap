@@ -68,7 +68,7 @@ tail metrics (D-24):
 |--------|-------|
 | tail excursion ratio (max / p99) | 422.9 |
 | thread-max spread | 3.3% |
-| overflow rate | 888.0000/s |
+| overflow rate | [redacted]/s |
 
 counter deltas per isolated cpu:
 

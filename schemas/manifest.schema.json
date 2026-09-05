@@ -435,6 +435,47 @@
         "investigation"
       ]
     },
+    "InstrumentWindow": {
+      "description": "One instrument's own interference bracket.\n\nThe counters used to be sampled once before cyclictest and once after everything, while the\nper-run-hour normalisation divided by the requested cyclictest duration alone. A 3600 s\ncyclictest followed by a 900 s firmware screen therefore divided roughly 4500 s of counter\naccumulation by 3600, and an early-terminated investigation run had the mismatch in the\nother direction. Finding 7 of `01-EXTERNAL-AUDIT.md`.",
+      "type": "object",
+      "properties": {
+        "after": {
+          "$ref": "#/$defs/InterferenceSnapshot"
+        },
+        "before": {
+          "$ref": "#/$defs/InterferenceSnapshot"
+        },
+        "delta": {
+          "$ref": "#/$defs/InterferenceDelta"
+        },
+        "elapsed_seconds": {
+          "description": "Measured with `std::time::Instant`, from immediately before the process is spawned to\nimmediately after it exits. Not the requested duration: a tool can exit early, late, or\nnot at all.",
+          "type": "number",
+          "format": "double"
+        },
+        "instrument": {
+          "description": "The tool this window brackets, matching a `tools[].name`.",
+          "type": "string"
+        },
+        "requested_seconds": {
+          "description": "What the operator asked for, when the tool takes a duration. Recorded beside the\nmeasured value so a divergence is visible rather than absorbed.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instrument",
+        "elapsed_seconds",
+        "before",
+        "after",
+        "delta"
+      ]
+    },
     "InterferenceDelta": {
       "description": "The after-minus-before difference for each counter family in [`InterferenceSnapshot`].",
       "type": "object",
@@ -552,6 +593,14 @@
         },
         "verdict": {
           "$ref": "#/$defs/ContaminationVerdict"
+        },
+        "windows": {
+          "description": "One entry per instrument, in execution order. Empty on manifests written before this\nfield existed (every manifest committed before this plan). The whole-run `before`/\n`after`/`delta` above are retained as the outer bracket (reusing the first window's\n`before` and the last window's `after`); the D-15/D-24 verdict is computed from the\ncyclictest window's own measured elapsed time, not from the requested duration. Finding\n7 of `01-EXTERNAL-AUDIT.md`.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/InstrumentWindow"
+          }
         }
       },
       "additionalProperties": false,

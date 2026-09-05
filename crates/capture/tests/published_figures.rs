@@ -50,10 +50,17 @@ fn sum_over_isolated_cpus(counters: &[CpuCounter]) -> u64 {
         .sum()
 }
 
-/// The run's own recorded wall-clock duration, in hours. Plan 01-17 adds a
-/// measured elapsed time to the manifest; until then, `utc_end - utc_start` is
-/// the manifest's own denominator, the same one `nrmeasure run` itself computes
-/// these two runs from.
+/// The run's own recorded wall-clock duration, in hours.
+///
+/// Plan 01-17 adds `InterferenceSnapshotPair.windows`, an `InstrumentWindow` per
+/// instrument with its own measured `elapsed_seconds`, and makes the D-15/D-24
+/// verdict normalise by the cyclictest window's elapsed time rather than
+/// `utc_end - utc_start`. Both of these two committed manifests predate that
+/// field (`windows` is empty on each), so the eight published per-run-hour
+/// figures below were derived, and stay derived, from `utc_start`/`utc_end`: that
+/// was the only denominator `nrmeasure run` computed for either of them at
+/// capture time, and re-deriving from a field that did not exist yet would not
+/// be a re-derivation at all.
 fn duration_hours(manifest: &RunManifest) -> f64 {
     (manifest.utc_end - manifest.utc_start).as_seconds_f64() / 3600.0
 }
