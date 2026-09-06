@@ -350,6 +350,20 @@ above). An investigation run's numbers never feed the regression series
 different question (which code path is responsible) under different, heavier
 instrumentation, and are never averaged together with a headline-series run.
 
+Firmware screening follows the same two-instrument split, for a different reason: on this
+kernel, only one of the two instruments can see the isolated cores at all. `hwlatdetect`'s
+tracer runs a single non-migrating thread that `isolcpus=6-11` keeps off cpus 6 to 11
+entirely, so no `hwlatdetect` figure from this rig characterises those cores; every
+committed `hwlatdetect*.txt` capture names a housekeeping core instead. `rtla hwnoise`
+(`--with-hwnoise`) is the instrument for a figure about cpus 6 to 11: it runs one osnoise
+sampling thread per cpu named in its `-c` list, so every isolated core gets its own thread
+rather than sharing one migrating thread with the rest of the system. `MSR_SMI_COUNT`
+(register `0x34`) is recorded before and after every run regardless of which firmware
+instrument, if any, also ran: an exact per-cpu census of system management interrupts, with
+no sampling and no threshold, and a register it could not read is a stated reason rather
+than a substituted zero. See `docs/rig/firmware-floor-rt-vs-stock.md` for the evidence
+behind this split.
+
 ## Reproducing on different hardware
 
 A third party reproducing this protocol on different hardware changes: the CPU list

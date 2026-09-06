@@ -1,7 +1,9 @@
 use nr_histogram::hist::{CyclictestRun, parse_hist_file};
-use nr_manifest::RunManifest;
+use nr_manifest::{CpuExposure, FirmwareScreen, RunManifest};
 use nr_metrics::index::{RunOutcome, RunSummary, render_index};
-use nr_metrics::report::{HwlatObservation, Plat03Input, render_plat03_verdict, render_run_report};
+use nr_metrics::report::{
+    FirmwareObservation, Plat03Input, render_plat03_verdict, render_run_report,
+};
 
 /// A hand-built manifest, adapted from the reviewed worked example
 /// (`crates/manifest/tests/fixtures/minimal-manifest.json`), covering every RunManifest field
@@ -169,6 +171,60 @@ fn sample_manifest() -> RunManifest {
     serde_json::from_str(SAMPLE_MANIFEST_JSON).expect("the hand-built fixture manifest parses")
 }
 
+/// `sample_manifest()` with `firmware_screens` set to a single screen, for the tests below that
+/// need a manifest carrying one. `SAMPLE_MANIFEST_JSON` predates `FirmwareScreen`/`SmiCounts`
+/// entirely (no such keys in the JSON above), so `firmware_screens` and `smi_counts` deserialize
+/// to their schema defaults (empty/`None`) before this helper sets the one field each test
+/// actually varies.
+fn manifest_with_firmware_screen(screen: FirmwareScreen) -> RunManifest {
+    let mut manifest = sample_manifest();
+    manifest.firmware_screens = vec![screen];
+    manifest
+}
+
+/// A realistic `rtla-hwnoise` screen: one osnoise sampling thread per requested cpu, matching
+/// the committed 2026-09-05 probe plan 01-20 parses.
+fn hwnoise_screen(requested_cpus: Vec<u32>, observed_cpus: Vec<u32>) -> FirmwareScreen {
+    FirmwareScreen {
+        instrument: "rtla-hwnoise".to_string(),
+        tool_version: "7.0.12".to_string(),
+        argv: vec![
+            "rtla".to_string(),
+            "hwnoise".to_string(),
+            "-c".to_string(),
+            "6-11".to_string(),
+        ],
+        requested_cpus,
+        per_cpu_exposure_seconds: observed_cpus
+            .iter()
+            .map(|&cpu| CpuExposure {
+                cpu,
+                seconds: 44.25,
+            })
+            .collect(),
+        observed_cpus,
+        max_us: Some(1),
+        max_population: "the largest Max Single value across the observed cpus".to_string(),
+        events_recorded: 18,
+    }
+}
+
+/// A realistic `hwlatdetect` screen: one non-migrating tracer thread, so per-CPU exposure has
+/// no basis and is reported as empty, exactly like every committed `hwlatdetect*.txt` capture.
+fn hwlatdetect_screen() -> FirmwareScreen {
+    FirmwareScreen {
+        instrument: "hwlatdetect".to_string(),
+        tool_version: "2.80".to_string(),
+        argv: vec!["hwlatdetect".to_string(), "--duration=900".to_string()],
+        requested_cpus: vec![6, 7, 8, 9, 10, 11],
+        observed_cpus: vec![5],
+        per_cpu_exposure_seconds: vec![],
+        max_us: Some(22),
+        max_population: "the observed maximum across all reported events".to_string(),
+        events_recorded: 13,
+    }
+}
+
 /// The committed 2026-08-28 fixture: 6 threads, 17,994,956 binned samples, 888 overflows,
 /// 3,806 us maximum. The same fixture nr-histogram's own test suite is built against.
 fn sample_run() -> CyclictestRun {
@@ -195,8 +251,11 @@ fn plat03_reports_both_figures_without_subtracting_them() {
     let under_gate = render_plat03_verdict(&Plat03Input {
         observed_max_us: 27,
         gate_us: 30,
-        hwlat: Some(HwlatObservation {
-            max_us: 22,
+        firmware: Some(FirmwareObservation {
+            instrument: "hwlatdetect".to_string(),
+            max_us: Some(22),
+            max_population: "the observed maximum across all reported events".to_string(),
+            observed_cpus: vec![0],
             source_run_id: "2026-08-31-precision3591-firmware-floor-001".to_string(),
             conditions: "P-cores 0-11, 22 logical CPUs loaded, package 93 to 95 C".to_string(),
         }),
@@ -233,11 +292,11 @@ fn plat03_reports_both_figures_without_subtracting_them() {
     let over_gate = render_plat03_verdict(&Plat03Input {
         observed_max_us: 45,
         gate_us: 30,
-        hwlat: None,
+        firmware: None,
         p99_us: 9,
         p50_us: 2,
     })
-    .expect("a verdict renders without any hwlat observation");
+    .expect("a verdict renders without any firmware observation");
     assert!(
         over_gate.contains("total observed maximum: 45 us against the 30 us gate"),
         "got: {over_gate}"
@@ -251,7 +310,7 @@ fn plat03_reports_both_figures_without_subtracting_them() {
         "got: {over_gate}"
     );
     assert!(
-        over_gate.contains("no paired hwlatdetect observation"),
+        over_gate.contains("no paired firmware observation"),
         "a missing observation is stated, not silently omitted: {over_gate}"
     );
 }
@@ -264,7 +323,7 @@ fn plat03_gate_boundary_is_at_or_above() {
     let exactly_at_gate = render_plat03_verdict(&Plat03Input {
         observed_max_us: 30,
         gate_us: 30,
-        hwlat: None,
+        firmware: None,
         p99_us: 9,
         p50_us: 2,
     })
@@ -281,7 +340,7 @@ fn plat03_gate_boundary_is_at_or_above() {
     let just_under = render_plat03_verdict(&Plat03Input {
         observed_max_us: 29,
         gate_us: 30,
-        hwlat: None,
+        firmware: None,
         p99_us: 9,
         p50_us: 2,
     })
@@ -417,4 +476,150 @@ fn index_never_omits() {
 fn headline_report_snapshot() {
     let report = render_run_report(&sample_manifest(), &sample_run()).expect("renders");
     insta::assert_snapshot!("headline_report", report);
+}
+
+/// Every line in a rendered report's firmware section that opens with the bullet marker this
+/// module writes the three finding-3 statements with.
+fn extract_caveats(report: &str) -> Vec<&str> {
+    report
+        .lines()
+        .filter(|line| line.starts_with("- "))
+        .collect()
+}
+
+/// A report rendered from a manifest carrying an `rtla-hwnoise` screen states all three
+/// finding-3 statements (`01-EXTERNAL-AUDIT.md` finding 3), written for that instrument.
+#[test]
+fn firmware_section_states_all_three_caveats() {
+    let manifest = manifest_with_firmware_screen(hwnoise_screen(
+        vec![6, 7, 8, 9, 10, 11],
+        vec![6, 7, 8, 9, 10, 11],
+    ));
+    let report = render_run_report(&manifest, &sample_run()).expect("renders");
+
+    assert!(report.contains("## Firmware screen"), "got:\n{report}");
+    assert!(
+        report.contains("not uniquely identified SMIs"),
+        "statement 1 (execution gaps are not uniquely identified SMIs) is missing: {report}"
+    );
+    assert!(
+        report.contains("one osnoise sampling thread per CPU"),
+        "statement 2 (per-CPU figures come from one sampling thread each) is missing: {report}"
+    );
+    assert!(
+        report.contains("per-CPU exposure above is what the tool reports"),
+        "statement 3 (exposure is not a divided wall-clock duration) is missing: {report}"
+    );
+}
+
+/// The three statements rendered for `hwlatdetect` and for `rtla-hwnoise` are not identical
+/// strings: copying one instrument's caveats onto the other would either understate or
+/// overstate what its own output actually supports. The hwnoise exposure sentence specifically
+/// names one sampling thread per CPU, the exact difference from hwlatdetect's single
+/// non-migrating tracer thread on this rig.
+#[test]
+fn firmware_caveats_differ_by_instrument() {
+    let hwlat_report = render_run_report(
+        &manifest_with_firmware_screen(hwlatdetect_screen()),
+        &sample_run(),
+    )
+    .expect("renders");
+    let hwnoise_report = render_run_report(
+        &manifest_with_firmware_screen(hwnoise_screen(
+            vec![6, 7, 8, 9, 10, 11],
+            vec![6, 7, 8, 9, 10, 11],
+        )),
+        &sample_run(),
+    )
+    .expect("renders");
+
+    let hwlat_caveats = extract_caveats(&hwlat_report);
+    let hwnoise_caveats = extract_caveats(&hwnoise_report);
+    assert_eq!(hwlat_caveats.len(), 3, "got:\n{hwlat_report}");
+    assert_eq!(hwnoise_caveats.len(), 3, "got:\n{hwnoise_report}");
+    assert_ne!(
+        hwlat_caveats, hwnoise_caveats,
+        "the two instruments' three statements must not be the same strings"
+    );
+    assert!(
+        hwnoise_caveats
+            .iter()
+            .any(|line| line.contains("one osnoise sampling thread per CPU")),
+        "the hwnoise exposure sentence must name one sampling thread per cpu: {hwnoise_caveats:?}"
+    );
+    assert!(
+        hwlat_caveats
+            .iter()
+            .any(|line| line.contains("wall-clock duration is not per-CPU exposure")),
+        "the hwlatdetect exposure sentence must state that duration is not exposure: \
+         {hwlat_caveats:?}"
+    );
+}
+
+/// The section prints both the requested and the observed CPU lists, and warns when a
+/// requested CPU produced nothing: the exact shape of defect that cost three D-18 arms before
+/// plan 01-20's coverage test caught it in code.
+#[test]
+fn firmware_section_names_observed_cpus() {
+    let manifest = manifest_with_firmware_screen(hwnoise_screen(
+        vec![6, 7, 8, 9, 10, 11, 12],
+        vec![6, 7, 8, 9, 10, 11],
+    ));
+    let report = render_run_report(&manifest, &sample_run()).expect("renders");
+
+    assert!(
+        report.contains("requested cpus: 6,7,8,9,10,11,12"),
+        "got:\n{report}"
+    );
+    assert!(
+        report.contains("observed cpus: 6,7,8,9,10,11"),
+        "got:\n{report}"
+    );
+    assert!(
+        report.contains("warning: requested but not observed: 12"),
+        "expected a warning naming the uncovered cpu 12: {report}"
+    );
+}
+
+/// A cyclictest-only manifest (no firmware screen; `sample_manifest()`'s underlying JSON
+/// predates `FirmwareScreen` entirely) renders no firmware section at all, not an empty one
+/// with just a heading.
+#[test]
+fn report_omits_the_section_when_no_screen_ran() {
+    let report = render_run_report(&sample_manifest(), &sample_run()).expect("renders");
+    assert!(
+        !report.contains("Firmware screen"),
+        "a cyclictest-only run must render no firmware section: {report}"
+    );
+}
+
+/// `render_plat03_verdict` prints the instrument name alongside its observation, and still
+/// states plainly that the two figures are not combined (finding 1, `01-EXTERNAL-AUDIT.md`).
+#[test]
+fn plat03_observation_names_its_instrument() {
+    let report = render_plat03_verdict(&Plat03Input {
+        observed_max_us: 27,
+        gate_us: 30,
+        firmware: Some(FirmwareObservation {
+            instrument: "rtla-hwnoise".to_string(),
+            max_us: Some(1),
+            max_population: "the largest Max Single value across the observed cpus".to_string(),
+            observed_cpus: vec![6, 7, 8, 9, 10, 11],
+            source_run_id: "2026-09-05-precision3591-screen".to_string(),
+            conditions: "cpus 6-11, 22 logical cpus loaded, package 85 to 87 C".to_string(),
+        }),
+        p99_us: 9,
+        p50_us: 2,
+    })
+    .expect("renders");
+
+    assert!(
+        report.contains("independent rtla-hwnoise maximum"),
+        "the instrument name must appear with the observation: {report}"
+    );
+    assert!(report.contains("1 us"), "got: {report}");
+    assert!(
+        report.contains("not subtracted"),
+        "the report must still say the two figures are not combined: {report}"
+    );
 }

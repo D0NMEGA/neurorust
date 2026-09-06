@@ -32,28 +32,38 @@ pub enum ReportError {
 
 /// The PLAT-03 verdict input.
 ///
-/// The `hwlat` observation is `Option` on purpose. It used to be a required scalar, which
+/// The `firmware` observation is `Option` on purpose. It used to be a required scalar, which
 /// forced every caller to supply a "firmware floor" and made subtracting it look like the
 /// intended use. A verdict is perfectly reportable without one: the scheduling maximum against
-/// the gate stands on its own, and a missing hwlat observation is printed as missing rather
+/// the gate stands on its own, and a missing firmware observation is printed as missing rather
 /// than defaulted to zero.
 #[derive(Debug, Clone)]
 pub struct Plat03Input {
     pub observed_max_us: u64,
     /// The gate PLAT-03 measures against. 30 in this project.
     pub gate_us: u64,
-    /// An independent `hwlatdetect` observation, when a paired one exists. Reported alongside
-    /// the scheduling maximum and never combined with it; see [`render_plat03_verdict`].
-    pub hwlat: Option<HwlatObservation>,
+    /// An independent firmware observation, when a paired one exists. Reported alongside the
+    /// scheduling maximum and never combined with it; see [`render_plat03_verdict`].
+    pub firmware: Option<FirmwareObservation>,
     pub p99_us: u64,
     pub p50_us: u64,
 }
 
-/// A hardware-gap observation from `hwlatdetect`, carried so PLAT-03 can report it beside the
-/// scheduling maximum while keeping the two visibly distinct.
+/// An independent firmware observation, carried so PLAT-03 can report it beside the
+/// scheduling maximum while keeping the two visibly distinct. Never combined with it; see
+/// `render_plat03_verdict`. Named for the instrument that produced it rather than one fixed
+/// tool: `hwlatdetect` and `rtla hwnoise` measure different things, and their numbers are not
+/// interchangeable, so the name travels with the figure.
 #[derive(Debug, Clone)]
-pub struct HwlatObservation {
-    pub max_us: u64,
+pub struct FirmwareObservation {
+    /// The instrument, e.g. `rtla-hwnoise` or `hwlatdetect`.
+    pub instrument: String,
+    /// `None` when the run observed nothing above threshold.
+    pub max_us: Option<u64>,
+    /// What `max_us` is a maximum over, in words.
+    pub max_population: String,
+    /// The CPUs that actually produced a row or an event.
+    pub observed_cpus: Vec<u32>,
     /// The run directory this was observed in. A figure with no named source is not reportable.
     pub source_run_id: String,
     /// The conditions it was observed under, in the operator's words: CPU placement, load and
@@ -62,7 +72,7 @@ pub struct HwlatObservation {
 }
 
 /// Renders the PLAT-03 verdict: the observed scheduling maximum against the gate, and separately
-/// any paired `hwlatdetect` observation.
+/// any paired firmware observation, named for the instrument that produced it.
 ///
 /// # Why there is no subtraction here
 ///
@@ -107,21 +117,31 @@ pub fn render_plat03_verdict(input: &Plat03Input) -> Result<String, ReportError>
         input.observed_max_us, input.gate_us
     ));
     out.push_str(&format!("jitter (p99 minus p50): {jitter_us} us\n"));
-    match &input.hwlat {
-        Some(h) => {
+    match &input.firmware {
+        Some(f) => {
+            let max_str = match f.max_us {
+                Some(us) => format!("{us} us ({})", f.max_population),
+                None => "none observed above threshold".to_string(),
+            };
+            let cpus = f
+                .observed_cpus
+                .iter()
+                .map(u32::to_string)
+                .collect::<Vec<_>>()
+                .join(",");
             out.push_str(&format!(
-                "independent hwlatdetect maximum: {} us (run {}, conditions: {})\n",
-                h.max_us, h.source_run_id, h.conditions
+                "independent {} maximum: {max_str}, cpus {cpus} (run {}, conditions: {})\n",
+                f.instrument, f.source_run_id, f.conditions
             ));
-            out.push_str(
+            out.push_str(&format!(
                 "the two figures above are not subtracted: they come from different \
-                 instruments, on different CPUs, under different conditions, and firmware \
-                 stalls do not compose additively with scheduling delay\n",
-            );
+                 instruments ({} versus the scheduling maximum), on different CPUs, under \
+                 different conditions, and firmware stalls do not compose additively with \
+                 scheduling delay\n",
+                f.instrument
+            ));
         }
-        None => {
-            out.push_str("independent hwlatdetect maximum: no paired hwlatdetect observation\n")
-        }
+        None => out.push_str("independent firmware maximum: no paired firmware observation\n"),
     }
     out.push_str(&format!("verdict: {verdict_word}\n"));
     Ok(out)
@@ -139,6 +159,7 @@ pub fn render_run_report(
     out.push_str(&render_rig_and_tuning(manifest));
     out.push_str(&render_preconditions(manifest));
     out.push_str(&render_contamination(manifest));
+    out.push_str(&render_firmware_screens(manifest));
     out.push_str(&render_results(run)?);
     out.push_str(&render_histogram(run));
     out.push_str(&render_overflow_convention());
@@ -370,6 +391,134 @@ fn render_contamination(manifest: &RunManifest) -> String {
         ));
     }
     out.push('\n');
+    out
+}
+
+/// The comma-joined CPU list a firmware section names, e.g. `6,7,8,9,10,11`.
+fn format_cpu_list(cpus: &[u32]) -> String {
+    cpus.iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// The three finding-3 statements about what `instrument`'s own output actually supports
+/// (`.planning/phases/01-trustworthy-measurement/01-EXTERNAL-AUDIT.md` finding 3). Written out
+/// per instrument, never shared between them: an `hwlatdetect` caveat copied onto `rtla hwnoise`
+/// would understate what its per-CPU sampling threads establish about the isolated cores, and
+/// the reverse would overstate what the eight already-committed `hwlatdetect` captures actually
+/// show. Any instrument name this project has not written statements for yet falls back to the
+/// `hwlatdetect` set, which is the conservative (more caveated) choice.
+fn firmware_caveats(instrument: &str) -> [&'static str; 3] {
+    match instrument {
+        "rtla-hwnoise" => [
+            "it measures hardware-related noise, the execution gaps left after software noise \
+             is accounted for. those are not uniquely identified SMIs either; the exact \
+             MSR_SMI_COUNT recorded alongside this screen is the census, and this is not",
+            "its per-CPU figures come from one osnoise sampling thread per CPU in the -c list, \
+             so a CPU absent from the observed list was sampled and reported nothing, rather \
+             than never being sampled. that is the specific difference from hwlatdetect on \
+             this rig",
+            "per-CPU exposure above is what the tool reports; when it reports none, the \
+             exposure is unstated rather than a wall-clock duration divided by a CPU count",
+        ],
+        _ => [
+            "it detects execution gaps. those are not uniquely identified SMIs: NMI accounting \
+             and other hardware effects contribute",
+            "its output counts sampling records whose polling interval contained a gap above \
+             the threshold, not a census of firmware invocations. several gaps can land inside \
+             one record",
+            "wall-clock duration is not per-CPU exposure. one non-migrating tracer thread polls \
+             for the sample width inside each window, on whichever CPU it sits on. on this rig \
+             that is one CPU for the whole run",
+        ],
+    }
+}
+
+/// The firmware screen section: one block per `FirmwareScreen` the run took, each carrying its
+/// own three finding-3 statements, plus the exact `MSR_SMI_COUNT` delta when the manifest
+/// carries one. Entirely omitted, not rendered as an empty heading, when the run took no
+/// firmware screen (`report_omits_the_section_when_no_screen_ran`): a `## Firmware screen`
+/// heading naming zero instruments would be worse than no section at all.
+fn render_firmware_screens(manifest: &RunManifest) -> String {
+    if manifest.firmware_screens.is_empty() {
+        return String::new();
+    }
+
+    let mut out = String::new();
+    out.push_str("## Firmware screen\n\n");
+    for screen in &manifest.firmware_screens {
+        out.push_str(&format!("instrument: {}\n", screen.instrument));
+        out.push_str(&format!("tool version: {}\n", screen.tool_version));
+        out.push_str(&format!("invocation: {}\n", screen.argv.join(" ")));
+        out.push_str(&format!(
+            "requested cpus: {}\n",
+            format_cpu_list(&screen.requested_cpus)
+        ));
+        out.push_str(&format!(
+            "observed cpus: {}\n",
+            format_cpu_list(&screen.observed_cpus)
+        ));
+        let uncovered: Vec<u32> = screen
+            .requested_cpus
+            .iter()
+            .copied()
+            .filter(|cpu| !screen.observed_cpus.contains(cpu))
+            .collect();
+        if !uncovered.is_empty() {
+            out.push_str(&format!(
+                "warning: requested but not observed: {}\n",
+                format_cpu_list(&uncovered)
+            ));
+        }
+        if screen.per_cpu_exposure_seconds.is_empty() {
+            out.push_str("per-cpu exposure: the instrument reports none\n");
+        } else {
+            let exposure = screen
+                .per_cpu_exposure_seconds
+                .iter()
+                .map(|e| format!("cpu{}={:.2}s", e.cpu, e.seconds))
+                .collect::<Vec<_>>()
+                .join(" ");
+            out.push_str(&format!("per-cpu exposure: {exposure}\n"));
+        }
+        match screen.max_us {
+            Some(us) => out.push_str(&format!("maximum: {us} us ({})\n", screen.max_population)),
+            None => out.push_str("maximum: none observed above threshold\n"),
+        }
+        out.push_str(&format!("events recorded: {}\n\n", screen.events_recorded));
+        for statement in firmware_caveats(&screen.instrument) {
+            out.push_str(&format!("- {statement}\n"));
+        }
+        out.push('\n');
+    }
+
+    if let Some(smi) = &manifest.smi_counts {
+        match &smi.unavailable_reason {
+            Some(reason) => out.push_str(&format!(
+                "MSR_SMI_COUNT ({}) over this run: unavailable ({reason})\n",
+                smi.register
+            )),
+            None => {
+                let deltas = smi
+                    .delta
+                    .iter()
+                    .map(|c| format!("cpu{}={}", c.cpu, c.count))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                out.push_str(&format!(
+                    "MSR_SMI_COUNT ({}) over this run: {deltas}\n",
+                    smi.register
+                ));
+            }
+        }
+        out.push_str(
+            "the count above is exact and says how many SMIs reached each cpu; it says \
+             nothing about how long any of them took\n",
+        );
+        out.push('\n');
+    }
+
     out
 }
 
