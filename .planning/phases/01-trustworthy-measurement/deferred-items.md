@@ -394,3 +394,47 @@ audit record and the fix can be read together.
   on the rig, unless a future plan deliberately installs `git` there first (itself a `sudo
   apt install`, i.e. another password-gated step, for a machine that has managed fine without
   it so far).
+
+## From 01-23 (a killed rtla leaves osnoise kthreads that D-06 cannot see, 2026-09-06)
+
+- **`TracersQuiescent` cannot observe `rtla`'s own tracing instance, so orphaned osnoise
+  kthreads silently starve the next run's cyclictest.** Arm 1 of the D-18 re-take was taken
+  twice on 2026-09-06. The first attempt was terminated by systemd at exactly 660s
+  (the `--hwnoise-duration` timeout-bound defect, fixed in `b29e819`), which SIGTERMed
+  `rtla` mid-session. The second attempt then produced a run
+  (`measurements/2026-09-06-precision3591-screen-02`) whose cyclictest reads:
+
+  ```
+  p50=2us p95=4us p99=9us max=750021us samples=450314 overflow=360
+  contamination verdict: Contaminated   tail excursion ratio=83335.7
+  thread 0: cpu=6  cycles=75055 avg=602.03 max=750016
+  thread 5: cpu=11 cycles=75051 avg=602.21 max=750020
+  ```
+
+  All six threads lost the same ~75% of their cycles (75,051 of an expected 300,000) and
+  all six stalled at ~750,000us. That number is not a coincidence: `/sys/kernel/tracing/
+  osnoise/runtime_us` reads `750000` with `period_us=1000000` and `cpus=6-11`, which rtla
+  wrote and left behind. Osnoise sampling threads run at the requested SCHED_FIFO priority
+  and spin for `runtime_us` of every `period_us`, so orphans left on 6-11 take 75% of each
+  period from anything sharing those cores at the same priority.
+
+  The harness is not at fault: `crates/cli/src/cmd/run.rs` runs cyclictest and the firmware
+  screen strictly sequentially ("never concurrently", line 7), confirmed by artifact mtimes
+  (cyclictest 21:25:02-21:26:02, hwnoise 21:26:02-21:41:02). The orphans predated the run.
+
+  The gap is in the assertion list. Plan 01-18 widened `TracersQuiescent` to require all four
+  top-level controls, but `rtla` drives osnoise through **its own tracing instance**, so the
+  top-level `current_tracer` still reads `nop` and all four checks pass while osnoise kthreads
+  are spinning on the measured CPUs. The D-06 list therefore certifies a machine that is not
+  quiet.
+
+  Suggested fix, for whichever plan next touches `crates/capture/src/preconditions.rs`: add a
+  check that no `osnoise/` or `timerlat/` kthread exists on any CPU in `--cpus`, and/or that
+  `/sys/kernel/tracing/instances/` contains no live tracer. Both are readable without root.
+  A stopgap guard now lives in the operator-side `~/nr-arm.sh` on the rig, which refuses to
+  launch an arm when such kthreads are present, but that is a runbook aid, not the mechanism.
+
+  Note also that the contaminated run is retained rather than deleted, per this plan's own
+  rule that every arm attempted appears under `measurements/`, including failures. Its
+  hwnoise half is good (rows for all of 6-11, max single event 1us on five cores and 7us on
+  cpu 7, NMI 0, SMI delta 0 on every isolated core); only its cyclictest half is starved.
