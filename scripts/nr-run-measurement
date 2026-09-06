@@ -108,27 +108,39 @@ fi
 # oneshot unit the whole run is the start phase, so TimeoutStartSec is the bound that
 # applies. Caught only because systemd prints that warning; check for its absence when
 # changing this.
+#
+# Every instrument that extends the run must be summed into this bound. On
+# 2026-09-06 plan 01-23's arm 1 was killed at exactly 660s, mid-hwnoise, because
+# the bound knew only about --hwlatdetect-duration: plan 01-21 added --with-hwnoise
+# and --hwnoise-duration to the harness and nothing taught this script about them,
+# so a 60s + 900s run was bounded at 60 + 0 + 600. The journal said "start
+# operation timed out. Terminating." A new instrument flag needs a line here or its
+# run is silently truncated. --with-hwnoise and --with-hwlatdetect are mutually
+# exclusive, so summing both is safe; the unused one stays 0.
 DURATION=0
 HWLAT_DURATION=0
+HWNOISE_DURATION=0
 prev=""
 for arg in "$@"; do
     case "$prev" in
         --duration) DURATION="$arg" ;;
         --hwlatdetect-duration) HWLAT_DURATION="$arg" ;;
+        --hwnoise-duration) HWNOISE_DURATION="$arg" ;;
     esac
     case "$arg" in
         --duration=*) DURATION="${arg#*=}" ;;
         --hwlatdetect-duration=*) HWLAT_DURATION="${arg#*=}" ;;
+        --hwnoise-duration=*) HWNOISE_DURATION="${arg#*=}" ;;
     esac
     prev="$arg"
 done
-case "$DURATION$HWLAT_DURATION" in
+case "$DURATION$HWLAT_DURATION$HWNOISE_DURATION" in
     *[!0-9]*) echo "nr-run-measurement: non-numeric duration" >&2; exit 2 ;;
 esac
-RUNTIME_MAX=$(( DURATION + HWLAT_DURATION + 600 ))
+RUNTIME_MAX=$(( DURATION + HWLAT_DURATION + HWNOISE_DURATION + 600 ))
 
 echo "nr-run-measurement: starting $UNIT.service"
-echo "  runtime bound: ${RUNTIME_MAX}s (measurement ${DURATION}s + hwlatdetect ${HWLAT_DURATION}s + 600s margin)"
+echo "  runtime bound: ${RUNTIME_MAX}s (measurement ${DURATION}s + hwlatdetect ${HWLAT_DURATION}s + hwnoise ${HWNOISE_DURATION}s + 600s margin)"
 echo "  watch:  journalctl -fu $UNIT"
 echo "  status: systemctl status $UNIT"
 
