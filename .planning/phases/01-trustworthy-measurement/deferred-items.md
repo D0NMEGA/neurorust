@@ -166,6 +166,16 @@ audit record and the fix can be read together.
   establish an observed 22 us maximum on the runtime's own isolated CPUs 6-11, which is
   what plan 01-13 wanted to consume.
 
+  **Reporting half CLOSED, commit `364aa29` (plan 01-21 task 3).** `render_run_report` gains
+  `render_firmware_screens`, printing three statements written separately for `hwlatdetect`
+  and `rtla-hwnoise` (never one string shared between them; asserted to differ by
+  `firmware_caveats_differ_by_instrument`), plus the exact `MSR_SMI_COUNT` delta when the
+  manifest carries one. `render_plat03_verdict`'s `FirmwareObservation` (generalised from
+  `HwlatObservation`) names whichever instrument produced a paired figure. The coverage half
+  stays open: every statement is now correctly worded, but no committed capture has yet named
+  an isolated core; that is plan 01-23's job, using the `--with-hwnoise` harness plan 01-21
+  task 1 (commit `d621383`) also wired up.
+
 - **Finding 6, open: provenance does not yet support "every claim is reproducible".**
   `run.rs` derives harness identity from `git rev-parse HEAD` in the working directory, so a
   stale executable can inherit a newer checkout's identity, and a failure records `unknown`
@@ -316,10 +326,14 @@ audit record and the fix can be read together.
   real per-CPU exposure figure. `crates/capture/src/hwnoise.rs` (`parse_hwnoise`,
   `parse_hwnoise_file`) parses both correctly, tested against a byte-identical copy of that
   probe; `nr_manifest::FirmwareScreen`/`SmiCounts` can now record the result honestly.
-  **Wiring and re-take half still OPEN, owner: plan 01-21 (wiring into `nrmeasure run`) and
-  01-23 (re-taking D-18 with both instruments live on the rig).** Nothing in this repository
-  has driven `rtla hwnoise` or `rdmsr` from the harness itself yet, and no new firmware
-  capture exists beyond the two probes plan 01-22 took.
+  **Wiring half CLOSED, commits `d621383`/`4a27ee1`/`364aa29` (plan 01-21).** `nrmeasure run
+  --with-hwnoise` runs `rtla hwnoise` through the harness (its own `InstrumentWindow`, a
+  checksummed `rtla-hwnoise.txt` artifact, a parsed `FirmwareScreen`), and every run brackets
+  an `rdmsr -p <cpu> 0x34` read before and after regardless of which firmware instrument, if
+  any, also ran. REPORT.md now states the three finding-3 statements per instrument. **Re-take
+  half still OPEN, owner: plan 01-23** (re-taking D-18 with both instruments live on the rig).
+  No new firmware capture exists yet beyond the two probes plan 01-22 took; every event either
+  instrument reports will need to name an isolated core before this item is fully closed.
 
 - **Install `msr-tools` and read `MSR_SMI_COUNT` (0x34) around every firmware screen.**
   `rdmsr -p <cpu> 0x34` is an exact per-CPU SMI counter. Sampled before and after a run it
