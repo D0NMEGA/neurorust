@@ -19,6 +19,21 @@ const CLEAN_FACTS: &str = include_str!("../../capture/tests/fixtures/probe-sysfs
 const VIOLATED_FACTS: &str = include_str!("../../capture/tests/fixtures/violated-sysfs-tuning.txt");
 const INTERRUPTS: &str = include_str!("../../capture/tests/fixtures/probe-proc-interrupts.txt");
 
+/// `MSR_SMI_COUNT` on cpus 6-11, the hex lines only from
+/// `docs/rig/recon-2026-09-05/probe-rdmsr-smi-count.txt`. That probe's separate `-d`
+/// (decimal) lines for cpu 6 and cpu 11 are deliberately excluded: the harness's own
+/// invocation (`rdmsr -p <cpu> 0x34`, never `-d`) always produces hex, and
+/// `parse_rdmsr_value` always parses as hex, so including a decimal "4006" line would
+/// silently be read as 0x4006 instead of the real 0xfa6 reading.
+const SMI_COUNTS: &str = "\
+cpu 6  0x34 = fa6
+cpu 7  0x34 = fa6
+cpu 8  0x34 = fa6
+cpu 9  0x34 = fa6
+cpu 10 0x34 = fa6
+cpu 11 0x34 = fa6
+";
+
 /// `probe-sysfs-tuning.txt` carries only the sysfs tuning probe; it has no
 /// `/proc/cpuinfo`, `/proc/meminfo`, `/proc/cmdline`, or `/etc/os-release` data at
 /// all. Appended to `tuned_facts_text`'s output so the D-14 host/kernel/os fields
@@ -1650,5 +1665,125 @@ fn hwnoise_warns_on_uncovered_requested_cpus() {
     assert!(
         stderr.contains("12"),
         "stderr should name the uncovered cpu 12: {stderr}"
+    );
+}
+
+/// A `recon`-class run driven by `NRMEASURE_SMI_FIXTURE` (alongside the facts and
+/// interrupts fixtures every fixture-driven test in this suite already needs, since
+/// neither has a live path on macOS). Class `recon` rather than `headline`/`weekly`/
+/// `soak`: those three classes already refuse the facts and interrupts fixtures
+/// outright (finding 8, `01-EXTERNAL-AUDIT.md`), independent of what this test is
+/// actually exercising.
+fn run_smi_fixture_pipeline(temp_root: &Path) -> RunManifest {
+    let facts_path = write_fixture(temp_root, "facts.txt", &tuned_facts_text());
+    let interrupts_path = write_fixture(temp_root, "interrupts.txt", INTERRUPTS);
+    let smi_path = write_fixture(temp_root, "smi.txt", SMI_COUNTS);
+    let measurements_root = temp_root.join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+
+    let output = base_run_command(&measurements_root)
+        .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
+        .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+        .env("NRMEASURE_SMI_FIXTURE", &smi_path)
+        .args(["--class", "recon"])
+        .output()
+        .expect("nrmeasure runs");
+
+    assert!(
+        output.status.success(),
+        "a run driven by the SMI fixture must still succeed: stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let entries: Vec<_> = std::fs::read_dir(&measurements_root)
+        .expect("read_dir")
+        .filter_map(|entry| entry.ok())
+        .collect();
+    assert_eq!(entries.len(), 1, "exactly one run directory is written");
+
+    let manifest_text = std::fs::read_to_string(entries[0].path().join("manifest.json"))
+        .expect("read manifest.json");
+    serde_json::from_str(&manifest_text).expect("manifest.json parses")
+}
+
+/// D-27: `MSR_SMI_COUNT` brackets every run, `before` and `after`, for every isolated
+/// CPU, with a `delta` genuinely computed as their difference. The difference is zero
+/// here because a fixture-driven read sees the same text for both snapshots, exactly
+/// like every other fixture seam in this suite; that is the real, correct answer for
+/// two identical readings, not a fabricated one.
+#[test]
+fn smi_counts_bracket_the_run() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let manifest = run_smi_fixture_pipeline(temp.path());
+
+    let smi = manifest
+        .smi_counts
+        .as_ref()
+        .expect("a run must always carry smi_counts, fixture-driven or not");
+    assert_eq!(smi.register, "0x34");
+    assert!(
+        smi.unavailable_reason.is_none(),
+        "every requested cpu is covered by the fixture: {:?}",
+        smi.unavailable_reason
+    );
+
+    for cpu in 6..=11u32 {
+        let before = smi.before.iter().find(|c| c.cpu == cpu).unwrap_or_else(|| {
+            panic!("cpu {cpu} missing from smi_counts.before: {:?}", smi.before)
+        });
+        let after =
+            smi.after.iter().find(|c| c.cpu == cpu).unwrap_or_else(|| {
+                panic!("cpu {cpu} missing from smi_counts.after: {:?}", smi.after)
+            });
+        let delta =
+            smi.delta.iter().find(|c| c.cpu == cpu).unwrap_or_else(|| {
+                panic!("cpu {cpu} missing from smi_counts.delta: {:?}", smi.delta)
+            });
+
+        assert_eq!(
+            before.count, 4006,
+            "cpu {cpu}: the fixture's 0xfa6 reading is 4006 decimal"
+        );
+        assert_eq!(
+            after.count, before.count,
+            "cpu {cpu}: one fixture text is read once and reused for both snapshots"
+        );
+        assert_eq!(
+            delta.count,
+            after.count.saturating_sub(before.count),
+            "cpu {cpu}: delta must be the real after-minus-before difference"
+        );
+    }
+}
+
+/// A run driven by `NRMEASURE_SMI_FIXTURE` records the seam in `fixtures_used` and is
+/// forced `excluded_from_series`, the same rule plan 01-18 applied to the facts and
+/// interrupts fixture seams (finding 8, `01-EXTERNAL-AUDIT.md`): fixture-driven data
+/// must never reach the series as if it were a real measurement.
+#[test]
+fn smi_fixture_forces_exclusion() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let manifest = run_smi_fixture_pipeline(temp.path());
+
+    assert!(
+        manifest
+            .fixtures_used
+            .iter()
+            .any(|f| f == "NRMEASURE_SMI_FIXTURE"),
+        "fixtures_used should name NRMEASURE_SMI_FIXTURE: {:?}",
+        manifest.fixtures_used
+    );
+    assert!(
+        manifest.excluded_from_series,
+        "a run driven by the SMI fixture seam must be excluded_from_series"
+    );
+    let reason = manifest
+        .exclusion_reason
+        .as_ref()
+        .expect("exclusion_reason must be present");
+    assert!(
+        reason.contains("NRMEASURE_SMI_FIXTURE"),
+        "exclusion_reason should name the SMI fixture: {reason}"
     );
 }

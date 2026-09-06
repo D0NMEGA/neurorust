@@ -9,4 +9,5 @@ pub mod firmware;
 pub mod hwnoise;
 pub mod interference;
 pub mod preconditions;
+pub mod smi;
 pub mod sources;

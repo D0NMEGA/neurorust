@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use clap::{Args as ClapArgs, ValueEnum};
 use nr_capture::sources::{FixtureFacts, SystemFacts, parse_cpu_list};
-use nr_capture::{environment, hwnoise, interference, preconditions};
+use nr_capture::{environment, hwnoise, interference, preconditions, smi};
 use nr_histogram::hist::{CyclictestRun, parse_hist_file};
 use nr_histogram::json::{parse_json_file, reconcile};
 use nr_manifest::{
@@ -50,6 +50,12 @@ const FACTS_FIXTURE_ENV: &str = "NRMEASURE_FACTS_FIXTURE";
 /// `<interfaces>` block; see the plan summary). Points at a `/proc/interrupts`
 /// shaped text file, reused for both the before and after snapshot in a test.
 const INTERRUPTS_FIXTURE_ENV: &str = "NRMEASURE_INTERRUPTS_FIXTURE";
+
+/// Third and last of the fixture-text seams: stands in for a live `MSR_SMI_COUNT` read,
+/// read once and reused for both the before and after snapshot of a run, exactly like
+/// [`INTERRUPTS_FIXTURE_ENV`]. Not a fake-binary path like `RTLA_PATH_ENV`: reading a
+/// register needs no realistic subprocess output to fake, only the value itself.
+const SMI_FIXTURE_ENV: &str = "NRMEASURE_SMI_FIXTURE";
 
 #[derive(ValueEnum, Clone, Copy, Debug)]
 pub enum RunClassArg {
@@ -247,6 +253,7 @@ pub struct Args {
 struct Overrides {
     facts_fixture_path: Option<PathBuf>,
     interrupts_fixture_path: Option<PathBuf>,
+    smi_fixture_path: Option<PathBuf>,
     cyclictest_path: PathBuf,
     hwlatdetect_path: PathBuf,
     rtla_path: PathBuf,
@@ -259,6 +266,7 @@ impl Overrides {
             interrupts_fixture_path: std::env::var(INTERRUPTS_FIXTURE_ENV)
                 .ok()
                 .map(PathBuf::from),
+            smi_fixture_path: std::env::var(SMI_FIXTURE_ENV).ok().map(PathBuf::from),
             cyclictest_path: tools::resolve_tool_path(CYCLICTEST_PATH_ENV, "cyclictest"),
             hwlatdetect_path: tools::resolve_tool_path(HWLATDETECT_PATH_ENV, "hwlatdetect"),
             rtla_path: tools::resolve_tool_path(RTLA_PATH_ENV, "rtla"),
@@ -509,6 +517,13 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         })?),
         None => None,
     };
+    let smi_fixture =
+        match &overrides.smi_fixture_path {
+            Some(path) => Some(std::fs::read_to_string(path).with_context(|| {
+                format!("failed to read {SMI_FIXTURE_ENV} at {}", path.display())
+            })?),
+            None => None,
+        };
 
     // Step 3: create the run directory and its ATTEMPT.json immediately, before
     // either instrument runs. Nothing in the directory name depends on the
@@ -588,6 +603,14 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
         // (--with-hwnoise and --with-hwlatdetect's own hwlatdetect.txt artifact are mutually
         // exclusive), but a Vec because a manifest may carry more than one over time.
         let mut firmware_screens: Vec<nr_manifest::FirmwareScreen> = Vec::new();
+
+        // MSR_SMI_COUNT (D-27) brackets the whole run, immediately before the first
+        // interference snapshot and (below) immediately after the last instrument's window
+        // closes: a provenance field independent of which instrument, if any, also ran.
+        // Never fallible at this call site: an unreadable register is a stated reason inside
+        // the returned tuple, not an Err that would abort a run over a provenance field.
+        let (smi_before, smi_before_reason) =
+            take_smi_snapshot(&target_cpus, smi_fixture.as_deref());
 
         // Step 5: execute cyclictest, writing its output directly into the run
         // directory. There is no scratch directory left to write into: the run
@@ -813,6 +836,20 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
             });
         }
 
+        // The MSR_SMI_COUNT bracket's other half: the last instrument's window has now
+        // closed, whichever one (if any) that was.
+        let (smi_after, smi_after_reason) = take_smi_snapshot(&target_cpus, smi_fixture.as_deref());
+        let smi_counts = nr_manifest::SmiCounts {
+            register: smi::SMI_COUNT_REGISTER.to_string(),
+            delta: smi::delta(&smi_before, &smi_after),
+            before: smi_before,
+            after: smi_after,
+            // Only one reason fits this field; a failure on the before read is named ahead
+            // of one on the after read; either way it says why, never leaving a silent zero
+            // for the CPUs it names.
+            unavailable_reason: smi_before_reason.or(smi_after_reason),
+        };
+
         // Checksum cyclictest's own captures now that both instruments (if two
         // were requested) have run to completion.
         artifacts.push(
@@ -986,7 +1023,7 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
             tools: tool_invocations,
             artifacts,
             firmware_screens,
-            smi_counts: None,
+            smi_counts: Some(smi_counts),
             absent_fields: env_snapshot.absent_fields,
             excluded_from_series,
             exclusion_reason,
@@ -1232,6 +1269,19 @@ fn print_summary(run_dir: &RunDir, run: &CyclictestRun, manifest: &RunManifest) 
             tail.overflow_rate_per_s
         );
     }
+    if let Some(smi) = &manifest.smi_counts {
+        match &smi.unavailable_reason {
+            Some(reason) => println!("SMI count over the run: unavailable ({reason})"),
+            None => {
+                let deltas: Vec<String> = smi
+                    .delta
+                    .iter()
+                    .map(|c| format!("cpu{}={}", c.cpu, c.count))
+                    .collect();
+                println!("SMI count over the run: {}", deltas.join(" "));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -1423,6 +1473,23 @@ fn take_interference_snapshot(
     match fixture_text {
         Some(text) => Ok(interference::snapshot_from_text(text, cpus)?),
         None => live_interference_snapshot(cpus),
+    }
+}
+
+/// `MSR_SMI_COUNT` on every CPU in `cpus`: the fixture text (read once, reused for both the
+/// before and after snapshot of a fixture-driven run) when one is given, the live reader
+/// otherwise. Unlike [`take_interference_snapshot`], never fallible at this call site:
+/// `smi::read_smi_counts`/`smi::parse_smi_snapshot` are already infallible by design (an
+/// unreadable register is a stated reason inside the returned tuple), and `smi::read_smi_counts`
+/// is itself gated for both Linux and non-Linux hosts, so there is no separate live wrapper to
+/// write here.
+fn take_smi_snapshot(
+    cpus: &[u32],
+    fixture_text: Option<&str>,
+) -> (Vec<nr_manifest::CpuCounter>, Option<String>) {
+    match fixture_text {
+        Some(text) => smi::parse_smi_snapshot(text, cpus),
+        None => smi::read_smi_counts(cpus),
     }
 }
 
@@ -1730,6 +1797,9 @@ fn fixtures_used_names(overrides: &Overrides) -> Vec<String> {
     if overrides.interrupts_fixture_path.is_some() {
         names.push(INTERRUPTS_FIXTURE_ENV.to_string());
     }
+    if overrides.smi_fixture_path.is_some() {
+        names.push(SMI_FIXTURE_ENV.to_string());
+    }
     names
 }
 
@@ -1906,6 +1976,7 @@ VERSION=\"26.04.1 LTS\"
         Overrides {
             facts_fixture_path,
             interrupts_fixture_path,
+            smi_fixture_path: None,
             cyclictest_path,
             hwlatdetect_path: PathBuf::from("hwlatdetect"),
             rtla_path: PathBuf::from("rtla"),
