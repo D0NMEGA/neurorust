@@ -63,9 +63,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Depends on**: Nothing (RIG-01 through RIG-04 are already validated)
 **Requirements**: PLAT-01, PLAT-02, PLAT-03, BENCH-04, BENCH-05, BENCH-06, BENCH-08
 **Success Criteria** (what must be TRUE):
-  1. The kernel path responsible for the ~3.8 ms global stall is named, with the ftrace and `cyclictest --tracemark` capture that identifies it committed next to the claim
+  1. The ~3.8 ms global stall reaches one of two stated outcomes, with its evidence committed next to the claim: either the responsible kernel path is named, with the ftrace and `cyclictest --tracemark` capture that identifies it; or it is not reproduced under the armed-tracing protocol, in which case the protocol, the total exposure, and what that exposure does and does not bound are committed, PLAT-01 stays open rather than closed, and every published latency figure carries the unexplained stall as an explicit limitation. Non-reproduction is not a cause and may not be recorded as one.
   2. A third party can follow the documented measurement protocol (no remote shell activity during a run, defined system state) and reproduce a run under the same conditions rather than guessing at them
-  3. Worst-case scheduling latency on isolated cores is either under 30 us on a clean run, or the residual is attributed to a named platform cause and published as a stated limitation
+  3. Worst-case scheduling latency on isolated cores is under 30 us on a clean run; or, failing that, the residual is either attributed to a named platform cause, or published as an explicitly unattributed limitation with the run, its raw capture, and the reason attribution failed committed alongside. An unattributed residual does not become attributed by being described.
   4. Every published figure is stamped by the capture harness with rig, kernel, BIOS revision, and tuning state, ships as a histogram with its raw capture alongside, and losing configurations appear rather than being omitted
   5. A CI job commits a weekly metrics JSON carrying p50, p95, and p99 for every stage instrumented so far
 **Plans**: 23 plans in 18 waves (single operator; waves express dependency, not parallel staffing). Expanded from 15 on 2026-09-05: an external adversarial audit (`01-EXTERNAL-AUDIT.md`) found ten methodology and implementation defects, and executing D-18 showed that `hwlatdetect` cannot sample the isolated cores at all on this kernel. Plans 01-16 through 01-23 close those gaps and build the replacement instrument; plans 01-12 through 01-15 were rewritten in place and now run last. Plan numbers no longer match wave order, so each unexecuted plan below carries its wave.
@@ -94,6 +94,14 @@ Plans:
 - [x] 01-21-PLAN.md - Wire hwnoise and MSR_SMI_COUNT into nrmeasure run [wave 13]
 - [x] 01-22-PLAN.md - Rig entry point: sudoers rule, root scripts, msr-tools, format probes [wave 11]
 - [x] 01-23-PLAN.md - Re-take D-18 on the isolated cores and correct the published firmware record [wave 14]
+
+**Criteria note (2026-09-07)**: criteria 1 and 3 were rewritten. Both previously mandated a
+positive finding (a named kernel path, a named platform cause), which no amount of disciplined
+investigation can guarantee. That left two ways to close the phase: relabel an open question as
+a named cause, or hold the phase open indefinitely. Both are worse than an honest negative. The
+criteria now fix the standard of evidence and require the negative to be stated as a negative,
+which is the outcome `01-REVIEW-2026-09-06.md` found the remaining plans were drifting toward
+recording as a pass.
 
 **Notes**: The cargo workspace and the CI pipeline are created here as enabling work for the weekly metrics job; later phases add gates to the same pipeline (Kani in Phase 2, loom and criterion in Phase 4). The contaminated `cyclictest-rt-isolated-idle-10m.hist` run is the starting evidence, not a publishable figure. The harness and provenance fixes (plans 01-16 through 01-19) run before any new rig capture, because a capture taken through a harness that can lose its raw evidence or stamp an unknown identity would have to be retaken.
 
