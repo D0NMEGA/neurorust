@@ -1315,7 +1315,7 @@ fn print_summary(run_dir: &RunDir, run: &CyclictestRun, manifest: &RunManifest) 
 }
 
 /// BENCH-06: a tool failure is recorded, not hidden. A non-zero exit does not
-/// abort the write (the manifest records it, see [`determine_exclusion`]), but the
+/// abort the write (the manifest records it, see [`determine_admission`]), but the
 /// tool's own stderr is surfaced immediately so the operator does not have to go
 /// digging for it.
 /// Whether a nonzero exit actually means the tool failed.

@@ -1,5 +1,8 @@
 use nr_histogram::hist::{CyclictestRun, parse_hist_file};
-use nr_manifest::{CpuExposure, FirmwareScreen, RunManifest};
+use nr_manifest::{
+    AdmissionDisposition, AdmissionEvidence, AdmissionEvidenceSource, CpuExposure, FirmwareScreen,
+    RunManifest, SeriesAdmission,
+};
 use nr_metrics::index::{RunOutcome, RunSummary, render_index};
 use nr_metrics::report::{
     FirmwareObservation, Plat03Input, render_plat03_verdict, render_run_report,
@@ -179,6 +182,15 @@ fn sample_manifest() -> RunManifest {
 fn manifest_with_firmware_screen(screen: FirmwareScreen) -> RunManifest {
     let mut manifest = sample_manifest();
     manifest.firmware_screens = vec![screen];
+    manifest
+}
+
+/// `sample_manifest()` with `series_admission` set, for the two tests below that need a
+/// manifest carrying one. `SAMPLE_MANIFEST_JSON` predates the field entirely (no such key in
+/// the JSON above), so it deserializes to `None` before this helper sets it (D-28).
+fn manifest_with_series_admission(admission: SeriesAdmission) -> RunManifest {
+    let mut manifest = sample_manifest();
+    manifest.series_admission = Some(admission);
     manifest
 }
 
@@ -373,6 +385,62 @@ fn report_states_overflow_convention() {
 
     assert!(report.contains("recorded at the histogram bound"));
     assert!(report.contains("therefore conservative"));
+}
+
+/// A rendered report for a manifest carrying `series_admission` shows the admitted verdict
+/// and one table row per evidence source consulted (D-28), as two statements separate from
+/// the D-24 contamination verdict.
+#[test]
+fn series_admission_section_shows_admitted_and_every_evidence_source() {
+    let admission = SeriesAdmission {
+        admitted: true,
+        exclusions: vec![],
+        evidence: vec![
+            AdmissionEvidence {
+                source: AdmissionEvidenceSource::Preconditions,
+                observed: "14 pass, 0 fail, 0 not-applicable, 0 unavailable".to_string(),
+                disposition: AdmissionDisposition::Clean,
+            },
+            AdmissionEvidence {
+                source: AdmissionEvidenceSource::ToolExitCodes,
+                observed: "cyclictest=0".to_string(),
+                disposition: AdmissionDisposition::Clean,
+            },
+        ],
+    };
+    let manifest = manifest_with_series_admission(admission);
+    let report = render_run_report(&manifest, &sample_run()).expect("renders");
+
+    assert!(report.contains("## Series admission"), "got:\n{report}");
+    assert!(report.contains("admitted: yes"), "got:\n{report}");
+    assert!(
+        report.contains(
+            "| preconditions | 14 pass, 0 fail, 0 not-applicable, 0 unavailable | clean |"
+        ),
+        "expected a table row for the preconditions evidence source: {report}"
+    );
+    assert!(
+        report.contains("| tool-exit-codes | cyclictest=0 | clean |"),
+        "expected a table row for the tool exit codes evidence source: {report}"
+    );
+}
+
+/// A rendered report for a manifest with no `series_admission` (every manifest committed
+/// before plan 01-24) states plainly that it predates the record, and synthesises no verdict
+/// from `excluded_from_series`: a reconstructed verdict is not an observed one (D-16).
+#[test]
+fn series_admission_section_states_absence_plainly() {
+    let report = render_run_report(&sample_manifest(), &sample_run()).expect("renders");
+
+    assert!(report.contains("## Series admission"), "got:\n{report}");
+    assert!(
+        report.contains("not recorded: this manifest predates the admission record (D-28)"),
+        "got:\n{report}"
+    );
+    assert!(
+        !report.contains("admitted: yes") && !report.contains("admitted: no"),
+        "no verdict may be synthesised for a manifest that predates the record: {report}"
+    );
 }
 
 /// The report contains a header line naming the manifest blake3 it was generated from.

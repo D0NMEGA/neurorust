@@ -538,8 +538,10 @@ pub struct InterferenceSnapshotPair {
     /// True when `verdict` was computed against provisional (not yet calibrated)
     /// tail-metric thresholds; see `Thresholds::Provisional` in
     /// `crates/capture/src/interference.rs`. Never conflate a provisional `Clean` with
-    /// a calibrated one: `nr-cli`'s `determine_exclusion` checks this before ever
-    /// admitting a run to the headline series on the strength of `verdict` alone.
+    /// a calibrated one. This field, `verdict` and `tail_metrics` are all recorded and
+    /// rendered but play no part in admission to the headline series (D-28):
+    /// `nr-cli`'s `determine_admission` is never handed any of the three, and decides
+    /// admission from evidence causally upstream of the measured latency instead.
     pub thresholds_provisional: Option<bool>,
     pub verdict: ContaminationVerdict,
     /// One entry per instrument, in execution order. Empty on manifests written before this

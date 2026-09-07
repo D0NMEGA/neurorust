@@ -279,9 +279,10 @@ is duration-sensitive (a longer clean run has more chances to catch a rare excur
 so the clean arm's own 8.7 ratio is a lower bound on what a clean 4 hour headline run
 might show). The shipped thresholds are therefore marked `"status": "provisional"`,
 both in that file and in every manifest's `interference.thresholds_provisional` field,
-and a provisional verdict is never enough on its own to admit a run to the headline
-series (see "What invalidates a run" below); only a properly calibrated threshold set,
-derived from many runs, may do that.
+and a provisional verdict never admits or excludes a run from the headline series on its
+own (D-28): admission is decided from evidence upstream of the measured latency (see
+"What invalidates a run" below), and this verdict, provisional or not, plays no part in
+that decision.
 
 ## What invalidates a run
 
@@ -292,14 +293,22 @@ derived from many runs, may do that.
   written in full (BENCH-06: a losing configuration is retained, never dropped), but the
   manifest marks `excluded_from_series: true` with the tool's name and exit code as the
   reason.
-- A non-clean contamination verdict, or a verdict reached against provisional
-  thresholds: the same treatment, excluded from the series with a reason, never omitted
-  from `measurements/INDEX.md`. `config/contamination-thresholds.json` ships with
-  `"status": "provisional"`, derived from exactly the D-17 calibration pair (n=2, see
-  "What the contamination detector measures" above); every run is marked excluded from
-  the series regardless of whether its own D-24 tail metrics score clean or
-  contaminated, because a provisional threshold set is not trusted to admit a run on
-  its own. Only a properly calibrated threshold set (many runs, not two) changes this.
+- A non-clean contamination verdict (D-15/D-24), or one reached against provisional
+  thresholds: recorded on the manifest and rendered in `REPORT.md`, never omitted from
+  `measurements/INDEX.md`, but never enough on its own to exclude a run from the series
+  and never a reason a run is dropped.
+- One of the seven upstream evidence sources `determine_admission` consults finding a
+  problem, in this fixed order: the `--allow-precondition-violation` waiver, fixture use,
+  tool exit codes (`hwlatdetect` exiting 1 is the one documented exception, a finding
+  rather than a failure), the 15 preconditions themselves, the interference-counter
+  deltas against a calibrated per-run-hour limit when one exists, the `MSR_SMI_COUNT`
+  delta, and the recorded thermal maximum. The first five can exclude a run; the SMI
+  delta and the thermal maximum are always recorded and rendered but never exclude,
+  because no calibrated ceiling exists yet for either. A run is never excluded for the
+  shape of the number it measured: a genuine platform regression produces the same
+  tail-metric signature as contamination (a rare excursion landing at nearly the same
+  value on every isolated thread), so admitting or excluding on that signal would
+  silently drop the exact results the series exists to catch (D-28).
 - A tracer armed during a `headline-series` run: refused outright by `TracersQuiescent`,
   because tracer overhead inflates the very numbers being published.
 - Running cyclictest and hwlatdetect concurrently: not possible through `nrmeasure run`

@@ -158,6 +158,7 @@ pub fn render_run_report(
     out.push_str(&render_header(manifest)?);
     out.push_str(&render_rig_and_tuning(manifest));
     out.push_str(&render_preconditions(manifest));
+    out.push_str(&render_series_admission(manifest));
     out.push_str(&render_contamination(manifest));
     out.push_str(&render_firmware_screens(manifest));
     out.push_str(&render_results(run)?);
@@ -317,6 +318,56 @@ fn render_preconditions(manifest: &RunManifest) -> String {
     out
 }
 
+/// D-28: whether this run is admitted to the headline regression series, decided from
+/// evidence upstream of the measured latency, and every evidence source consulted.
+/// Rendered before `## Contamination verdict`, so a reader meets the two questions in the
+/// order they are decided: was this run taken under the documented conditions, and
+/// separately, does its shape look like the global-stall signature.
+fn render_series_admission(manifest: &RunManifest) -> String {
+    let mut out = String::new();
+    out.push_str("## Series admission\n\n");
+
+    let Some(admission) = &manifest.series_admission else {
+        // D-16: a reconstructed verdict is not an observed one. A manifest written before
+        // this field existed says so plainly rather than having one synthesised from
+        // excluded_from_series.
+        out.push_str("not recorded: this manifest predates the admission record (D-28)\n\n");
+        return out;
+    };
+
+    out.push_str(&format!(
+        "admitted: {}\n",
+        if admission.admitted { "yes" } else { "no" }
+    ));
+    out.push_str(
+        "decided from evidence upstream of the measured latency; the contamination verdict \
+         below is recorded and does not decide this.\n\n",
+    );
+    out.push_str("| evidence | observed | disposition |\n");
+    out.push_str("|----------|----------|-------------|\n");
+    for entry in &admission.evidence {
+        out.push_str(&format!(
+            "| {} | {} | {} |\n",
+            kebab(&entry.source),
+            entry.observed,
+            kebab(&entry.disposition)
+        ));
+    }
+    out.push('\n');
+
+    if admission.exclusions.is_empty() {
+        out.push_str("exclusions: none\n\n");
+    } else {
+        out.push_str("exclusions:\n");
+        for reason in &admission.exclusions {
+            out.push_str(&format!("- {reason}\n"));
+        }
+        out.push('\n');
+    }
+
+    out
+}
+
 fn counter_for(counters: &[CpuCounter], cpu: u32) -> u64 {
     counters
         .iter()
@@ -351,6 +402,10 @@ fn render_contamination(manifest: &RunManifest) -> String {
             }
         }
     }
+    out.push_str(
+        "this verdict is an inference from the shape of this run's own measured latency; it \
+         does not by itself remove the run from the series (see Series admission above).\n",
+    );
     if pair.thresholds_provisional == Some(true) {
         out.push_str(
             "thresholds: provisional (derived from 2 runs, not a calibrated set; see \

@@ -374,12 +374,13 @@ pub enum Thresholds {
     ///
     /// [`verdict`] still reports a genuine, metric-driven `Clean`/`Contaminated`
     /// outcome under this variant, rather than a flat `Uncalibrated` regardless of how
-    /// extreme a run's own numbers are: that outcome is real, human-readable evidence.
-    /// What it is not is a licence to publish: `nr-cli`'s `determine_exclusion` checks
-    /// [`nr_manifest::InterferenceSnapshotPair::thresholds_provisional`] and never
-    /// admits a run to the headline series on the strength of a provisional verdict
-    /// alone. Only a future threshold set calibrated from many runs, not two, may do
-    /// that.
+    /// extreme a run's own numbers are: that outcome is real, human-readable evidence,
+    /// recorded on every run and rendered in `REPORT.md`. What it is not is an
+    /// admission or exclusion decision: it never removes a run from the headline series
+    /// by itself, and it never admits one either. Admission is decided elsewhere, by
+    /// `nr-cli`'s `determine_admission` (D-28), from evidence causally upstream of the
+    /// measured latency; this verdict, being an inference from the shape of that
+    /// latency, is never among the evidence it consults.
     Provisional(TailThresholds),
     Calibrated(CalibratedThresholds),
 }

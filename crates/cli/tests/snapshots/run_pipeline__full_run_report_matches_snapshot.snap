@@ -56,10 +56,29 @@ nic_wifi:     absent driver=absent
 | no-package-manager-activity | pass | none | no apt, dpkg, unattended-upgrade or snapd process |
 | tracers-quiescent | pass | current_tracer=nop events/enable=unavailable set_event=unavailable tracing_on=unavailable | current_tracer=nop, events/enable=0, set_event=(empty), tracing_on=0 |
 
+## Series admission
+
+admitted: no
+decided from evidence upstream of the measured latency; the contamination verdict below is recorded and does not decide this.
+
+| evidence | observed | disposition |
+|----------|----------|-------------|
+| precondition-waiver | not given | clean |
+| fixture-use | excluded_from_series forced true: this run was driven by fixture data (NRMEASURE_FACTS_FIXTURE, NRMEASURE_INTERRUPTS_FIXTURE) rather than the real machine; a fixture text is read repeatedly for every interference snapshot, so every delta it produces is exactly zero, which must never be read as evidence of a quiet machine | excluding |
+| tool-exit-codes | cyclictest=0 | clean |
+| preconditions | 15 pass, 0 fail, 0 not-applicable, 0 unavailable | clean |
+| interference-counters | cal max 0 on cpu11, tlb max 0 on cpu11, res max 0 on cpu11, irq max 0 on cpu11, over 0s | not-thresholded |
+| smi-delta | reading MSR_SMI_COUNT requires Linux; set NRMEASURE_SMI_FIXTURE to run against a fixture on this host | unavailable |
+| thermal-maximum | 40.0 C | not-thresholded |
+
+exclusions:
+- excluded_from_series forced true: this run was driven by fixture data (NRMEASURE_FACTS_FIXTURE, NRMEASURE_INTERRUPTS_FIXTURE) rather than the real machine; a fixture text is read repeatedly for every interference snapshot, so every delta it produces is exactly zero, which must never be read as evidence of a quiet machine
+
 ## Contamination verdict
 
 verdict: contaminated
 reason: excluded_from_series forced true: this run was driven by fixture data (NRMEASURE_FACTS_FIXTURE, NRMEASURE_INTERRUPTS_FIXTURE) rather than the real machine; a fixture text is read repeatedly for every interference snapshot, so every delta it produces is exactly zero, which must never be read as evidence of a quiet machine
+this verdict is an inference from the shape of this run's own measured latency; it does not by itself remove the run from the series (see Series admission above).
 thresholds: provisional (derived from 2 runs, not a calibrated set; see config/contamination-thresholds.json)
 
 tail metrics (D-24):

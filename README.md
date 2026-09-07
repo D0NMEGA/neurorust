@@ -28,10 +28,12 @@ every later latency claim depends on, and it is not finished either.
 | Node graph, transport, filters, decoder | Not started |
 | Wire protocol, LSL compatibility | Not started |
 
-Phase 1 of 8 is open. The headline scheduling-latency figure has not been taken, the ~3.8 ms
-global stall seen on all six isolated threads is not yet explained, and no run currently enters
-the regression series because the contamination thresholds are still marked provisional. Those
-are tracked, not glossed.
+Phase 1 of 8 is open. The headline scheduling-latency figure has not been taken, and the ~3.8 ms
+global stall seen on all six isolated threads is not yet explained. Run admission is decided
+from evidence upstream of the measurement, not from the shape of the latency it measured; the
+contamination thresholds are still marked provisional, and a provisional verdict is recorded on
+every run and rendered in the report, but it plays no part in that decision. Those are tracked,
+not glossed.
 
 ## What the harness does
 

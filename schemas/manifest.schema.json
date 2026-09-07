@@ -786,7 +786,7 @@
           ]
         },
         "thresholds_provisional": {
-          "description": "True when `verdict` was computed against provisional (not yet calibrated)\ntail-metric thresholds; see `Thresholds::Provisional` in\n`crates/capture/src/interference.rs`. Never conflate a provisional `Clean` with\na calibrated one: `nr-cli`'s `determine_exclusion` checks this before ever\nadmitting a run to the headline series on the strength of `verdict` alone.",
+          "description": "True when `verdict` was computed against provisional (not yet calibrated)\ntail-metric thresholds; see `Thresholds::Provisional` in\n`crates/capture/src/interference.rs`. Never conflate a provisional `Clean` with\na calibrated one. This field, `verdict` and `tail_metrics` are all recorded and\nrendered but play no part in admission to the headline series (D-28):\n`nr-cli`'s `determine_admission` is never handed any of the three, and decides\nadmission from evidence causally upstream of the measured latency instead.",
           "type": [
             "boolean",
             "null"

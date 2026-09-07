@@ -56,7 +56,9 @@ is operationalised:
 - No run directory is ever deleted, and no run is ever left out of `measurements/INDEX.md`.
 - A run kept out of the headline series carries `excluded_from_series: true` and a
   non-empty `exclusion_reason` in its manifest; the manifest fails validation without the
-  reason.
+  reason. Both are derived from `series_admission` (D-28), the manifest's own record of
+  which upstream evidence sources were consulted and which of them excluded the run; a
+  manifest whose two summary fields disagree with that record fails validation too.
 - `INDEX.md` has one row per run directory: its date, run id, class, instrument class,
   provenance tier, contamination verdict, p99, maximum, whether it is in the series, and
   the exclusion reason when it is not.

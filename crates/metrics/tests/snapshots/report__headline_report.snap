@@ -55,9 +55,14 @@ nic_wifi:     wlp0s20f3 driver=iwlwifi
 | no-package-manager-activity | pass | no lock held | no lock held |
 | tracers-quiescent | pass | nop | nop |
 
+## Series admission
+
+not recorded: this manifest predates the admission record (D-28)
+
 ## Contamination verdict
 
 verdict: clean
+this verdict is an inference from the shape of this run's own measured latency; it does not by itself remove the run from the series (see Series admission above).
 
 tail metrics (D-24):
 
