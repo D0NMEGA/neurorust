@@ -235,15 +235,24 @@
       ]
     },
     "AdmissionEvidenceSource": {
-      "type": "string",
-      "enum": [
-        "preconditions",
-        "tool-exit-codes",
-        "fixture-use",
-        "precondition-waiver",
-        "interference-counters",
-        "smi-delta",
-        "thermal-maximum"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "preconditions",
+            "tool-exit-codes",
+            "fixture-use",
+            "precondition-waiver",
+            "interference-counters",
+            "smi-delta",
+            "thermal-maximum"
+          ]
+        },
+        {
+          "description": "The `instrument_class` the run was taken under. An `investigation` run arms a\ntracer that measurably inflates the very latency being measured, so the\ntwo-instrument rule in `docs/measurement-protocol.md` says its numbers never feed\nthe regression series or count toward a published headline figure. Which\ninstrument was used is a fact about how the run was taken, not about what it\nmeasured, so it belongs in this gate rather than beside the contamination verdict.",
+          "type": "string",
+          "const": "instrument-class"
+        }
       ]
     },
     "ArtifactKind": {

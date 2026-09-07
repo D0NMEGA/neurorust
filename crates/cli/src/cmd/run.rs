@@ -1827,7 +1827,7 @@ fn format_counter_deltas(delta: &nr_manifest::InterferenceDelta, run_duration: D
 
 /// D-28: decides admission to the headline regression series from upstream evidence only.
 fn determine_admission(inputs: &AdmissionInputs<'_>) -> SeriesAdmission {
-    let mut evidence = Vec::with_capacity(7);
+    let mut evidence = Vec::with_capacity(8);
     let mut exclusions = Vec::new();
 
     // 1. PreconditionWaiver. D-17 makes this unconditional and it stays unconditional: a
@@ -2020,6 +2020,36 @@ fn determine_admission(inputs: &AdmissionInputs<'_>) -> SeriesAdmission {
             source: AdmissionEvidenceSource::ThermalMaximum,
             observed: "not recorded".to_string(),
             disposition: AdmissionDisposition::Unavailable,
+        }),
+    }
+
+    // 8. InstrumentClass. Categorical in the same way source 2 is: an investigation run
+    // can never reach the series whatever every other source finds, because it arms a
+    // tracer that inflates the latency it is measuring. docs/measurement-protocol.md,
+    // "The two-instrument rule": an investigation run's numbers never feed the regression
+    // series or count toward a published headline figure.
+    //
+    // This belongs here and not beside the contamination verdict, and the distinction is
+    // the whole of D-28: which instrument was used is a fact about how the run was taken,
+    // decided before it started and knowable without looking at its result. Nothing here
+    // reads the number.
+    match inputs.instrument_class {
+        InstrumentClass::Investigation => {
+            let reason = "instrument class investigation: a traced run inflates the latency it \
+                          measures, so its numbers never feed the regression series (the \
+                          two-instrument rule, docs/measurement-protocol.md)"
+                .to_string();
+            evidence.push(AdmissionEvidence {
+                source: AdmissionEvidenceSource::InstrumentClass,
+                observed: "investigation".to_string(),
+                disposition: AdmissionDisposition::Excluding,
+            });
+            exclusions.push(reason);
+        }
+        InstrumentClass::HeadlineSeries => evidence.push(AdmissionEvidence {
+            source: AdmissionEvidenceSource::InstrumentClass,
+            observed: "headline-series".to_string(),
+            disposition: AdmissionDisposition::Clean,
         }),
     }
 
@@ -2631,10 +2661,81 @@ VERSION=\"26.04.1 LTS\"
             smi: &benign_smi(),
             package_temp_c_max: Some(45.0),
         });
+        // An investigation run is always excluded by its instrument class (the
+        // two-instrument rule), so `admitted` cannot distinguish the two cases here.
+        // What this test is about is the precondition source: an unavailable check must
+        // not be what excludes an investigation run.
         assert!(
-            investigation.admitted,
-            "an investigation run may proceed with an unavailable check: {:?}",
+            !investigation
+                .exclusions
+                .iter()
+                .any(|reason| reason.starts_with("preconditions:")),
+            "an unavailable check must not exclude an investigation run: {:?}",
             investigation.exclusions
+        );
+        assert_eq!(
+            investigation
+                .evidence
+                .iter()
+                .find(|e| e.source == AdmissionEvidenceSource::Preconditions)
+                .map(|e| &e.disposition),
+            Some(&AdmissionDisposition::Clean),
+            "the precondition source itself should be clean for an investigation run: {:?}",
+            investigation.evidence
+        );
+    }
+
+    /// The two-instrument rule, enforced rather than documented: an investigation run
+    /// arms a tracer that inflates the latency it measures, so it never reaches the
+    /// regression series however clean everything else about it is. Before this, a
+    /// traced run with every precondition passing was marked series-eligible; the real
+    /// PLAT-01 cycle 1 capture on 2026-09-07 recorded `excluded_from_series: false`.
+    #[test]
+    fn an_investigation_run_never_reaches_the_series() {
+        let investigation = determine_admission(&AdmissionInputs {
+            preconditions: &all_pass_preconditions(),
+            instrument_class: &InstrumentClass::Investigation,
+            tools: &[invocation("cyclictest", 0)],
+            fixtures_used: &[],
+            precondition_waiver: None,
+            interference_delta: &empty_delta(),
+            counter_thresholds: None,
+            run_duration: Duration::from_secs(1800),
+            smi: &benign_smi(),
+            package_temp_c_max: Some(45.0),
+        });
+        assert!(
+            !investigation.admitted,
+            "an investigation run must never be admitted, however clean: {:?}",
+            investigation.evidence
+        );
+        assert!(
+            investigation
+                .exclusions
+                .iter()
+                .any(|reason| reason.contains("two-instrument rule")),
+            "the exclusion must name the rule it enforces: {:?}",
+            investigation.exclusions
+        );
+
+        // The same inputs under headline-series are admitted, so the instrument class is
+        // demonstrably the only thing that changed the verdict.
+        let headline = determine_admission(&AdmissionInputs {
+            preconditions: &all_pass_preconditions(),
+            instrument_class: &InstrumentClass::HeadlineSeries,
+            tools: &[invocation("cyclictest", 0)],
+            fixtures_used: &[],
+            precondition_waiver: None,
+            interference_delta: &empty_delta(),
+            counter_thresholds: None,
+            run_duration: Duration::from_secs(1800),
+            smi: &benign_smi(),
+            package_temp_c_max: Some(45.0),
+        });
+        assert!(
+            headline.admitted,
+            "the same inputs under headline-series must be admitted: {:?}",
+            headline.exclusions
         );
     }
 

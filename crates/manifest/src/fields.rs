@@ -828,6 +828,13 @@ pub enum AdmissionEvidenceSource {
     InterferenceCounters,
     SmiDelta,
     ThermalMaximum,
+    /// The `instrument_class` the run was taken under. An `investigation` run arms a
+    /// tracer that measurably inflates the very latency being measured, so the
+    /// two-instrument rule in `docs/measurement-protocol.md` says its numbers never feed
+    /// the regression series or count toward a published headline figure. Which
+    /// instrument was used is a fact about how the run was taken, not about what it
+    /// measured, so it belongs in this gate rather than beside the contamination verdict.
+    InstrumentClass,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
@@ -1166,17 +1173,24 @@ mod tests {
         assert_eq!(restored, admission);
     }
 
-    /// Every manifest under `measurements/` predates `series_admission` (plan 01-24 is the
-    /// first plan to write the field) and must keep deserialising with it absent. Walks the
-    /// directory rather than a hardcoded list, so a manifest committed later is covered without
-    /// editing this test: unlike `firmware_screens`/`smi_counts`, no manifest can carry
-    /// `series_admission` before this plan's own harness change ships, so there is no "predates"
-    /// split to maintain.
+    /// Every committed manifest must deserialise, whether or not it carries
+    /// `series_admission`. Walks the directory rather than a hardcoded list so a manifest
+    /// committed later is covered without editing this test.
+    ///
+    /// This test originally asserted that NO committed manifest carried the field, on the
+    /// reasoning that plan 01-24 was the first to write it and nothing taken before that
+    /// could have it. That premise expired the moment a run was taken with the new harness:
+    /// `2026-09-07-precision3591-recon` carries it, and the assertion failed. The split it
+    /// said would not need maintaining does need maintaining, so it is maintained here
+    /// rather than removed, because the property that actually matters is that a manifest
+    /// written before the field existed still parses.
     #[test]
-    fn committed_manifests_parse_without_series_admission() {
+    fn committed_manifests_parse_with_or_without_series_admission() {
         let measurements_dir =
             std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../measurements"));
         let mut checked = 0;
+        let mut predating = 0;
+        let mut carrying = 0;
         for entry in std::fs::read_dir(measurements_dir)
             .expect("measurements/ must exist for this test to mean anything")
         {
@@ -1185,25 +1199,41 @@ mod tests {
             let Ok(text) = std::fs::read_to_string(&manifest_path) else {
                 continue; // a failed-attempt directory has no manifest.json at all
             };
-            assert!(
-                !text.contains("series_admission"),
-                "{}: expected to predate series_admission; if it now carries the field, this \
-                 test's premise (nothing committed yet carries it) no longer holds",
-                manifest_path.display()
-            );
+            let carries_field = text.contains("\"series_admission\"");
             let manifest: RunManifest = serde_json::from_str(&text).unwrap_or_else(|err| {
                 panic!("{} failed to deserialize: {err}", manifest_path.display())
             });
-            assert!(
-                manifest.series_admission.is_none(),
-                "{} predates series_admission and must default to absent",
-                manifest_path.display()
-            );
+            if carries_field {
+                assert!(
+                    manifest.series_admission.is_some(),
+                    "{} has the field in its text but it deserialised to None",
+                    manifest_path.display()
+                );
+                carrying += 1;
+            } else {
+                assert!(
+                    manifest.series_admission.is_none(),
+                    "{} predates series_admission and must default to absent",
+                    manifest_path.display()
+                );
+                predating += 1;
+            }
             checked += 1;
         }
         assert!(
             checked >= 12,
             "expected at least the twelve manifests committed before plan 01-24; found {checked}"
+        );
+        assert!(
+            predating >= 12,
+            "the twelve manifests taken before plan 01-24 must still parse with the field \
+             absent; found {predating}"
+        );
+        assert!(
+            carrying >= 1,
+            "at least one run has been taken with the new harness, so at least one manifest \
+             should carry series_admission; found {carrying}. If this fails, the field is not \
+             being written and the D-28 record is silently missing."
         );
     }
 
