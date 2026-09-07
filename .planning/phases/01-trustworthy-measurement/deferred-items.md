@@ -568,3 +568,28 @@ recorded with an owner.
   the label already promises and the one a reader can reproduce, and to correct the
   `manifest_blake3` doc comment. Note this makes the eleven reports change again, so it
   belongs with a rewrite pass rather than on its own.
+
+## From 01-27 (a rig rebuild produces a binary the root script will not exec, 2026-09-07)
+
+- **Every `cargo build` on the rig produces a group-writable binary, which
+  `nr-run-measurement` then refuses to exec, and no runbook says so.** Observed on the rig
+  2026-09-07 during plan 01-27 task 2: immediately after `cargo build -p nr-cli --release`, the
+  first capture attempt died with `refusing to exec
+  /home/d0nmega/neurorust/target/release/nrmeasure: mode 775 is group- or world-writable`. The
+  guard is correct and must stay: the script runs as root under NOPASSWD, so exec'ing a binary a
+  non-root process can rewrite would convert permission to take a measurement into a root shell.
+  The cause is the rig's umask of 002, which cargo's output inherits, so this recurs on every
+  rebuild rather than being a one-off. The manual fix the script prints (`chmod go-w <bin>`)
+  works and only the binary's own mode is checked, not its parent directories.
+
+  What is missing is that no document tells the operator this. `docs/measurement-protocol.md`
+  says to build on the rig and then run a capture, with nothing in between, so a first-time
+  third party following the published protocol hits a hard refusal on their first run with no
+  warning that it is expected. That is a defect against success criterion 2, which is that a
+  third party can follow the documented protocol and reproduce a run rather than guessing at it.
+
+  Owner: plan 01-15 (the rig install runbook) should carry the `chmod go-w` step immediately
+  after the build, in `docs/measurement-protocol.md` as well as in the plan. Worth considering
+  instead, and cheaper for everyone: have `nr-run-measurement` narrow the mode itself when the
+  file is owned by the invoking user, or have the build step in the protocol be a single wrapper
+  that builds and chmods, so the two cannot be separated.
