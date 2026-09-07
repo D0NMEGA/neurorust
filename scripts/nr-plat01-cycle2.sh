@@ -61,9 +61,21 @@ fi
 
 # Refuse to spend ninety minutes against a tracer that is not actually recording. Cycle 1
 # established that this check is the difference between an instrument and a hope.
-if [ "$(cat /sys/kernel/tracing/tracing_on 2>/dev/null || echo 0)" != "1" ]; then
-    echo "nr-plat01-cycle2.sh: tracing_on is not 1; arm it first:" >&2
-    echo "  sudo sh ~/neurorust/scripts/nr-arm-trace.sh" >&2
+#
+# Asked through nr-measure-mode, not by reading tracefs directly. This script runs as the
+# operator; only the nr-run-measurement it execs is root. tracefs is root-only, so a direct
+# `cat /sys/kernel/tracing/tracing_on` here returns permission denied, and the first
+# version's `|| echo 0` fallback turned that into a refusal every single time, whatever
+# the tracer was actually doing. It refused a cycle 2 launch on 2026-09-07 with tracing on
+# and armed. nr-measure-mode is one of the four NOPASSWD grants and prints tracing_on in
+# its status block, so this reads the real value without needing a password or root here.
+TRACING_ON=$(sudo -n /usr/local/sbin/nr-measure-mode status 2>/dev/null \
+    | awk '$1 == "tracing_on" { print $3 }')
+if [ "$TRACING_ON" != "1" ]; then
+    echo "nr-plat01-cycle2.sh: tracing_on is '${TRACING_ON:-unreadable}', not 1." >&2
+    echo "  Arm the tracer first: sudo sh ~/neurorust/scripts/nr-arm-trace.sh" >&2
+    echo "  If it reads 'unreadable', nr-measure-mode status itself failed; check the" >&2
+    echo "  sudoers grant with: sudo -n /usr/local/sbin/nr-measure-mode status" >&2
     exit 1
 fi
 
