@@ -185,8 +185,10 @@ corrected here.
 
 Not a firmware floor, and not a subtraction.
 
-There is no `firmware_floor_us` value to hand plan 01-13, because no capture in this repository
-establishes a firmware observation on CPUs 6-11. An earlier version of this document was
+There is no `firmware_floor_us` value to hand plan 01-13. The three 2026-09-06 arms do now
+establish firmware observations on CPUs 6-11 (see the re-take section above), but an observed
+noise ceiling over three 900 second arms is not a floor: it bounds what those arms saw, under
+those conditions, not what the machine can do. An earlier version of this document was
 required to name one, and to state headroom arithmetic of the form "against a 30 us gate, a
 floor of n us leaves 30 minus n us for everything the kernel does". That arithmetic is invalid
 independently of the coverage problem: `cyclictest` and `hwlatdetect` measure different things,
