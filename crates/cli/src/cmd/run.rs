@@ -1126,7 +1126,9 @@ fn write_attempt(run_dir: &Path, record: &AttemptRecord) -> Result<()> {
 /// tracked list. A file that cannot be stat'd or hashed (a symlink race, in
 /// practice unreachable here) is silently skipped rather than failing the whole
 /// failure-reporting path a second time.
-fn scan_preserved_files(run_dir: &Path) -> Vec<ArtifactRecord> {
+// `pub(crate)`: `cmd::attempt` reuses this to close out an attempt the harness itself
+// never got to finish (a killed process, not a normal failure exit).
+pub(crate) fn scan_preserved_files(run_dir: &Path) -> Vec<ArtifactRecord> {
     let Ok(entries) = std::fs::read_dir(run_dir) else {
         return Vec::new();
     };

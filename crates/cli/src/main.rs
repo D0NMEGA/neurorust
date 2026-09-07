@@ -28,6 +28,8 @@ enum Command {
     Reconstruct(cmd::reconstruct::Args),
     /// Append runs to the metrics series and compare against the baseline
     Series(cmd::series::Args),
+    /// Mark an orphaned in-progress ATTEMPT.json as failed, with a stated reason
+    Attempt(cmd::attempt::Args),
 }
 
 fn main() {
@@ -38,6 +40,7 @@ fn main() {
         Command::Verify(args) => cmd::verify::run(args),
         Command::Reconstruct(args) => cmd::reconstruct::run(args),
         Command::Series(args) => cmd::series::run(args),
+        Command::Attempt(args) => cmd::attempt::run(args),
     };
 
     match result {
@@ -65,9 +68,9 @@ mod tests {
     }
 
     #[test]
-    fn help_text_lists_all_four_subcommands() {
+    fn help_text_lists_all_five_subcommands() {
         let help = Cli::command().render_help().to_string();
-        for name in ["run", "verify", "reconstruct", "series"] {
+        for name in ["run", "verify", "reconstruct", "series", "attempt"] {
             assert!(help.contains(name), "help text missing subcommand {name:?}");
         }
     }
