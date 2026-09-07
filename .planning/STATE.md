@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 1 replanned 2026-09-07 against 01-REVIEW-2026-09-06.md. 27 plans, 19 complete, 8 pending in waves 15 through 22. Plan-checker returned no blockers. Next action is /donny-execute-phase 1, starting at plan 01-24.
-last_updated: "2026-09-07T06:39:15.197Z"
-last_activity: 2026-09-07 -- Phase 1 planning complete
+stopped_at: 01-24 complete. All three tasks committed (6d5447a, 899ad7f, 8e121fc); the D-28 admission gate is live and every stale published description of the old behaviour is corrected.
+last_updated: "2026-09-07T07:47:15.725Z"
+last_activity: 2026-09-07 -- 01-24 executed
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 27
-  completed_plans: 19
-  percent: 70
+  completed_plans: 20
+  percent: 74
 ---
 
 # Project State
@@ -25,34 +25,22 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 
 ## Current Position
 
-Phase: 01 (trustworthy-measurement), 19 of 27 plans done (wave 14 of the roadmap). The frontmatter progress block still reads 19 of 23; donny tooling owns it and it is left for `state update-progress` to correct rather than hand-edited here.
-Plan: 01-23-PLAN.md (re-taking D-18 on the real rig and correcting every published figure
-  that described one CPU as a machine-wide firmware floor) is COMPLETE. All three tasks
-  committed. A second independent review (01-REVIEW-2026-09-06.md) found three further
-  overstatements in Task 2's corrected record (findings B1/B2/B3, fixed in 8442cb2); one
-  further conflict was flagged rather than resolved (a fix request targeting a sentence
-  inside a section this plan's own task text protected); the human operator confirmed the
-  protection instruction had been self-contradictory and authorized a narrow, precisely
-  scoped exception (fixed in 9066bdf, `git diff` confirmed to touch only that one sentence).
-  Task 3 (checkpoint:human-verify) is approved. PLAT-03 was deliberately NOT marked
-  complete despite appearing in this plan's own requirements frontmatter: its gate needs
-  either a clean headline cyclictest capture (plan 01-13, unexecuted) or the 3.8ms
-  residual attributed to a named cause (PLAT-01, still Pending); this plan only rules
-  firmware/SMI out as a contributor on CPUs 6-11.
-  Plans 01-12 through 01-15 (PLAT-01 investigation, the PLAT-03 headline capture, the
-  weekly job, the rig install runbook) remain unexecuted and now sit at waves 19 through
-  22, behind the four plans the 2026-09-07 replan added. They were held rather than
-  started: 01-13 could not complete as written until A1 was resolved (provisional
-  contamination thresholds excluded every run from the series, which plan 01-24 fixes),
-  and 01-12 and 01-14 needed the D2 and D1 edits, now made.
-Status: Ready to execute. Replanned 2026-09-07 against `01-REVIEW-2026-09-06.md`. Four new
-  plans (01-24 through 01-27, waves 15 through 18) close the second review's blocking findings;
-  01-12 and 01-14 were edited in place for D2 and D1; 01-12 through 01-15 moved to waves 19
-  through 22. The plan-checker returned no blockers and its three actionable advisories are
-  closed (commit 0138b4f). Start at plan 01-24.
-Last activity: 2026-09-07 -- Phase 1 planning complete
+Phase: 01 (trustworthy-measurement), 20 of 27 plans done (wave 15 of the roadmap).
+Plan: 01-24-PLAN.md (splitting run admission from the D-24 contamination verdict, D-28)
+  is COMPLETE. All three tasks committed: the SeriesAdmission manifest record and its
+  validation rule (6d5447a), determine_admission replacing determine_exclusion
+  (899ad7f), and the Series admission REPORT.md section plus every corrected published
+  description of the removed behaviour (8e121fc). A run whose only problem is the shape
+  of its own latency is now admitted to the series (proven against the real 2026-08-28
+  capture and the real shipped provisional thresholds); plan 01-13's headline capture and
+  01-14's weekly series can proceed as written. See 01-24-SUMMARY.md for the full record.
+Status: Executing Phase 01. Plan 01-25 (wave 16, TracersQuiescent extended to read the
+  tracing instances and the osnoise/timerlat kthreads, closing finding A2) is next,
+  followed by 01-26 (wave 17, C1/B4/B5) and 01-27 (wave 18, D-29 and C2). Plans 01-12
+  through 01-15 remain at waves 19 through 22, held until those four land.
+Last activity: 2026-09-07 -- 01-24 executed
 
-Progress: [███████░░░] 70%
+Progress: [███████░░░] 74%
 
 ## Performance Metrics
 
@@ -91,6 +79,7 @@ Progress: [███████░░░] 70%
 | Phase 01 P22 | 46min | 3 tasks | 11 files |
 | Phase 01 P20 | 22min | 3 tasks | 13 files |
 | Phase 01 P21 | 60min | 3 tasks | 10 files |
+| Phase 01 P24 | 42min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -175,6 +164,11 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-23: `state update-progress` (a body-to-frontmatter sync, not a pure numeric recompute as its one-line description suggests) also rewrote the frontmatter `stopped_at` and `last_updated` fields to mirror this file's own body "Stopped at:" line, verified by reading `syncStateFrontmatter`/`buildStateFrontmatter` in donny-tools' state.cjs directly rather than assuming a bug from an unexpected diff; not a defect, and not logged as one, but recorded here since it is a real (undocumented in this file's own summary comment) side effect worth knowing about before treating an unexpected frontmatter diff as tool corruption.
 - [Phase 01]: replan 2026-09-07 (D-28): run admission is decided only from evidence causally upstream of the measured latency, never from the shape of the latency itself. `nrmeasure run` consults the precondition results, tool exit codes, fixture use, the `--allow-precondition-violation` waiver, the `/proc/interrupts` counter deltas against calibrated thresholds when they exist, the exact MSR_SMI_COUNT delta and the recorded thermal maximum, and records each with what it observed and what it made of it. The D-24 tail verdict is still computed, still recorded and still rendered, and never admits or excludes a run by itself. `determine_exclusion` previously returned excluded_from_series=true unconditionally while the thresholds were provisional, which excluded all three clean D-18 re-take arms and made plan 01-13's headline capture and plan 01-14's weekly series impossible to complete as written. Flipping the threshold file to `calibrated` is the obvious fix and is wrong: D-24 classifies from max/p99 and the per-thread maximum spread, both computed from the run's own histogram, so a genuine platform regression produces the same signature as contamination and the series would silently drop the results it exists to catch. Checked against the code before being relied on: `Thresholds::parse` accepts `calibrated` only when all five per_run_hour values are set, and they are null with a recorded reason, so calibrating needs a body of clean runs, a body of clean runs needs admission, and admission cannot depend on calibration without a circular dependency. Plan 01-24 implements it; the invariant is enforced by the gate's own type signature, which is never handed the verdict or the tail metrics.
 - [Phase 01]: replan 2026-09-07 (D-29): the rig records its source revision from a stamp written into the rsync payload at push time, under its own provenance value `pushed-stamp`, rather than by installing git on the rig or recording the dev-host revision as a build-time read. All three D-18 re-take manifests recorded git_sha "unavailable-at-build-time" because the rig has no git and ~/neurorust there is an rsync mirror with no .git. Installing git fixes nothing on its own, since the mirror still has no repository to read; recording the dev-host sha as `build-time` would assert a provenance nobody observed where the build happened, which is the shape of audit finding 6. A separate value keeps `build-time` meaning what it has always meant. Plan 01-27 implements it with a committed push script carrying an explicit include list and no --delete, so measurements/ on the rig cannot be touched by it, and the rig's environment does not change.
+- [Phase 01]: 01-24: Fixed both RunManifest struct-literal compile sites (reconstruct.rs, run.rs) inside task 1's own commit rather than task 2's, following plan 01-20's own precedent for the same class of problem: reconstruct.rs gets a permanent None (a reconstructed run never went through the live gate), run.rs gets a compile-time placeholder None that task 2 replaces with the real value in the next commit.
+- [Phase 01]: 01-24: The 01-13 case (a bad-looking shape alone does not exclude) is a unit test inside crates/cli/src/cmd/run.rs, not a crates/cli/tests/run_pipeline.rs subprocess test: live_facts() unconditionally refuses on macOS, so every subprocess-level nrmeasure run in this suite structurally requires the facts fixture, and fixture use is itself an excluding evidence source, so a true no-fixtures scenario cannot be exercised through a real subprocess on this dev host. Used the real, committed 2026-08-28 capture (the same file fake-cyclictest.sh serves by default) and the real shipped config/contamination-thresholds.json so the claim is checked against production data, not a hand-picked pair of numbers.
+- [Phase 01]: 01-24: requirements-completed left empty in the SUMMARY. BENCH-04 and BENCH-06 were already marked complete by earlier plans; this plan's own changes don't newly complete either. BENCH-08 needs a real committed weekly JSON metrics file, which is plan 01-14's job (still unexecuted); this plan only removes the blocker that made 01-14 unable to complete as written.
+- [Phase 01]: 01-24: kebab(), this file's own established enum-rendering helper, is reused for the Series admission table's evidence-source and disposition columns in crates/metrics/src/report.rs, giving hyphenated labels like tool-exit-codes rather than the plan's illustrative space-separated example. Consistent with every other enum column already in REPORT.md; not treated as a literal formatting requirement.
+- [Phase 01]: 01-24: Restored a corrupted, uncommitted STATE.md to HEAD before starting any task work. The working tree already carried an incoherent, unstaged edit (Current Position read Plan: 1 of 27 with orphaned prose describing 01-23) contradicting the coherent, committed version naming plan 01-24 as next. Matches this project's own documented donny-tools STATE.md corruption pattern (01-02, 01-16 through 01-19, 01-23); reverted rather than hand-corrected since it predated this plan's own work.
 
 ### Pending Todos
 
@@ -195,8 +189,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-07T05:35:42.000Z
-Stopped at: 01-23 complete. Task 3 approved by the human operator with one authorized exception (commit 9066bdf); all three tasks committed; PLAT-03 deliberately left incomplete (see Blockers/Concerns and Decisions).
-Resume file: .planning/phases/01-trustworthy-measurement/01-23-SUMMARY.md
+Last session: 2026-09-07T07:46:58.928Z
+Stopped at: 01-24 complete. All three tasks committed (6d5447a, 899ad7f, 8e121fc); the D-28 admission gate is live and every stale published description of the old behaviour is corrected.
+Resume file: .planning/phases/01-trustworthy-measurement/01-24-SUMMARY.md
 
-Next: plan 01-24 (wave 15), run admission on evidence upstream of the measured latency. The replan asked for on 2026-09-07 is done: 01-24 through 01-27 close findings A1, A2, C1, C2, B4 and B5, and the D1 and D2 defects were fixed inside plans 01-14 and 01-12. Plans 01-12 through 01-15 now run last, at waves 19 through 22.
+Next: plan 01-25 (wave 16), extending TracersQuiescent to read the tracing instances and the osnoise/timerlat kthreads, closing finding A2. 01-24 (this plan) closed finding A1: run admission is now decided from evidence upstream of the measured latency, never from its shape. 01-26 (wave 17, C1/B4/B5) and 01-27 (wave 18, D-29 and C2) follow. Plans 01-12 through 01-15 run last, at waves 19 through 22.
