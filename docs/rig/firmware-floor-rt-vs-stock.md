@@ -1,8 +1,15 @@
 # Firmware floor: PREEMPT_RT versus stock kernel
 
-Status: the re-measurement was taken and it did not produce a firmware floor for the cores
-this project cares about. The reason is a measurement-coverage defect that also affects the
-2026-08-28 screening this was meant to be compared against. That defect is the result.
+Status: re-taken twice. The first re-measurement (`hwlatdetect`, below) did not produce a
+firmware floor for the cores this project cares about; the reason was a measurement-coverage
+defect that also affects the 2026-08-28 screening this was meant to be compared against, and
+that defect is itself the result of that attempt. The second re-take, with `rtla hwnoise`
+(the section immediately below the coverage defect it fixes), does cover CPUs 6 to 11
+directly: three 900-second arms, idle and under two different loads, each report a maximum
+single event of 1 us on every one of the six isolated CPUs, with a `MSR_SMI_COUNT` delta of
+zero on every one of them in every arm. That is a bound stated with its conditions (this
+duration, these loads, this machine, this firmware revision), not a floor claimed without
+them, and it does not retract or replace finding 1.
 
 ## Why this was re-measured
 
@@ -83,6 +90,46 @@ its events on CPU 0 alone.
 So the 22 us figure characterises CPU 0 under load. It does not characterise CPUs 6-11, and no
 capture in this repository does. The README's reading of the E-core clustering as a sampling
 artifact was closer to right than it knew, for a different reason than it gave.
+
+## The re-take with rtla hwnoise, 2026-09-06
+
+Three arms, each a 900 second `rtla hwnoise -c 6-11 -H 0-5 -P f:99 -d 900s` window on the
+installed PREEMPT_RT system, one osnoise sampling thread per isolated CPU rather than the
+single migrating thread `hwlatdetect` uses. `MSR_SMI_COUNT` (register `0x34`) was read on
+every one of CPUs 6 to 11 immediately before and after each run.
+
+| Arm | Run directory | Load | Package temp at start | Observed CPUs | Max (population) | SMI delta |
+|---|---|---|---|---|---|---|
+| 1, idle | `measurements/2026-09-06-precision3591-screen-03` | none | 58.0 C | 6,7,8,9,10,11 | 1 us (largest Max Single value across the observed CPUs' final rows, 13 events) | 0 on 6,7,8,9,10,11 |
+| 2, 22 CPUs loaded | `measurements/2026-09-06-precision3591-screen-04` | 22 pinned `stress-ng --cpu-method matrixprod` workers, one per logical CPU | 83.1 C | 6,7,8,9,10,11 | 1 us (largest Max Single value across the observed CPUs' final rows, 64 events) | 0 on 6,7,8,9,10,11 |
+| 3, housekeeping loaded | `measurements/2026-09-07-precision3591-screen` | 16 pinned workers on cpus 0-5,12-21; cpus 6-11 otherwise idle | 79.0 C | 6,7,8,9,10,11 | 1 us (largest Max Single value across the observed CPUs' final rows, 44 events) | 0 on 6,7,8,9,10,11 |
+
+Every arm's `rtla hwnoise` rows name all six isolated CPUs, idle and under two different loads.
+The event count rises with load (13, then 64, then 44), but the size of the largest single
+event does not: 1 us in every arm. `MSR_SMI_COUNT` delta is zero on every one of CPUs 6 to 11
+in every arm, read directly before and after each 900 second window.
+
+`rtla hwnoise`'s own three statements, identical across all three arms and stated once here
+rather than per arm: it measures hardware-related noise, the execution gaps left after
+software noise is accounted for, and those are not uniquely identified SMIs either -- the
+`MSR_SMI_COUNT` delta above is the census, this is not. Its per-CPU figures come from one
+osnoise sampling thread per CPU in the `-c` list, so a CPU absent from the observed list was
+sampled and reported nothing, rather than never being sampled, which is the specific
+difference from `hwlatdetect` on this rig. And the per-CPU exposure it reports (674.25 seconds
+per CPU in every arm here) is what the tool itself reports, not a wall-clock duration divided
+across a CPU count the way an unrestricted `hwlatdetect` run would be. None of these three
+statements is the `hwlatdetect` version restated: the exposure argument in particular does not
+carry over, because each listed CPU here has its own sampling thread rather than sharing one
+migrating thread's polling time.
+
+A zero SMI delta across a 900 second window, on two different loads and one idle arm, is a
+stronger and simpler statement than any `hwlatdetect` arm above could make, and it is the
+answer D-18 has been trying to reach since 2026-08-28: no system management interrupt reached
+CPUs 6 to 11 during any of these three windows. State the bound with it, not instead of it:
+900 seconds, under each stated load, on this machine, at this firmware revision (BIOS 1.23.0,
+released 04/24/2026, microcode 0x28). It is not a guarantee that no SMI can ever reach these
+cores, and a longer window, a different load, or a later firmware revision could show
+otherwise.
 
 ## Interpretation
 

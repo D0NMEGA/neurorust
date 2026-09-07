@@ -23,30 +23,49 @@ Core Ultra 9 185H, P-cores 0-11, E-cores 12-21.
 | `hwlatdetect-tuned-underload-15m.txt` | performance, turbo off, C6/C10 off | 22 cores saturated, 91-93 C | **29 us** | 26 |
 | `hwlatdetect-pcore-underload-10m.txt` | as above, sampling restricted to P-cores 0-11 | 22 cores saturated, 93-95 C | **22 us** | 13 / 600 s (~19 / 900 s) |
 
+All 13 events behind the P-core-restricted row's 22 us figure named cpu 0: that figure
+describes cpu 0 under load, not the machine as a whole. See Findings below, and
+`docs/rig/firmware-floor-rt-vs-stock.md` for the coverage defect this reflects and its
+2026-09-06 re-take on the isolated cores this project actually runs on.
+
 Tuning was three sysfs writes: `performance` governor on all CPUs, `no_turbo=1`, and
 disabling C6 and C10 while keeping POLL and C1E.
 
 ## Findings
 
-**Tuning removes almost all firmware latency.** Worst case fell from 125 us to under 10 us,
-an 18x improvement, from sysfs writes alone. The 21 us mode present roughly once per second
-on the stock configuration disappeared entirely.
+**Tuning removes almost all firmware latency.** The observed maximum fell from 125 us to
+under 10 us, an 18x improvement, from sysfs writes alone. The 21 us mode present roughly once
+per second on the stock configuration disappeared entirely.
 
 **Thermal load reintroduces it, bounded.** Saturating all 22 cores to 91-93 C brought back
-26 events, worst case 29 us. This is the load-triggered SMI behaviour that idle screening
+26 events, a maximum of 29 us. This is the load-triggered SMI behaviour that idle screening
 cannot detect, and it is why the idle result alone is not sufficient evidence.
 
-**P-cores are not firmware-clean.** In the whole-machine run every event happened to land on
-an E-core (cpu13, 14, 15, 20, 21), which suggested that isolating P-cores might avoid SMIs
-entirely. A run pinned explicitly to `--cpu-list=0-11` refuted that: 13 events in 600 s with a
-22 us max, a comparable rate to the whole-machine figure. The E-core clustering was a sampling
-artifact of `hwlatdetect` rotating across CPUs, not a property of the hardware. P-cores are
-modestly better (22 us versus 29 us) but not exempt, and no core-isolation choice removes the
-firmware floor.
+**Neither arm characterises the P-cores, or the machine.** In the whole-machine run every
+event happened to land on an E-core (cpu13, 14, 15, 20, 21), which suggested that isolating
+P-cores might avoid SMIs entirely. A run pinned explicitly to `--cpu-list=0-11` refuted that:
+13 events in 600 s with a 22 us max, a comparable rate to the whole-machine figure. The reason
+in both cases is the same: the hwlat tracer's `mode` was `none` in every one of these runs, so
+its thread did not migrate and each arm sampled whichever single CPU the scheduler happened to
+place it on, rather than rotating across the eligible set -- the E-cores above in one arm, cpu
+0 alone in the other. Neither arm characterises the machine, and the comparison between 22 us
+and 29 us is between two single-CPU observations taken under different loads, not a
+P-core-versus-whole-machine comparison. See `docs/rig/firmware-floor-rt-vs-stock.md` for the
+full account of the coverage defect, and its 2026-09-06 re-take with `rtla hwnoise`, an
+instrument that samples every requested CPU with its own thread.
 
 **The 22-core saturation is deliberately pessimistic.** The real workload isolates a handful
-of P-cores and runs a pipeline; it does not saturate the package. 29 us should be read as a
-worst-case bound under adversarial thermal conditions, not as the expected operating point.
+of P-cores and runs a pipeline; it does not saturate the package. 29 us should be read as the
+maximum observed under the stated test conditions, not as the expected operating point.
+
+**Corrected 2026-09-06 under Phase 1 (D-18 re-take, plan 01-23).** Three claims above did not
+survive a second instrument that could actually sample CPUs 6 to 11, the cores this project
+isolates: the P-core-restricted row's 22 us figure is CPU 0 alone, not the P-cores as a group;
+the E-core clustering was the hwlat tracer's non-migrating `mode: none`, not a rotation
+artifact; and an observed maximum does not, by itself, establish a bound on any future run.
+`docs/rig/firmware-floor-rt-vs-stock.md` carries the full account and the new figures. The
+raw `hwlatdetect` captures themselves are unchanged and their checksums are recorded in
+manifest.json.
 
 ## Caveats
 

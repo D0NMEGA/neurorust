@@ -3,9 +3,9 @@
 //! `docs/rig/firmware-floor-rt-vs-stock.md`, "The result: neither set of figures
 //! characterises the isolated cores".
 //!
-//! This test reads the real, already-committed `hwlatdetect*.txt` captures under
-//! `measurements/` by path; it never writes to that directory (D-12: raw captures are
-//! read-only evidence).
+//! This test reads the real, already-committed `hwlatdetect*.txt` captures (by path) and
+//! `manifest.json` files (by their already-parsed `firmware_screens`) under `measurements/`;
+//! it never writes to that directory (D-12: raw captures are read-only evidence).
 
 use nr_capture::firmware::{event_cpus, parse_hwlatdetect_events, uncovered_cpus};
 
@@ -84,16 +84,19 @@ fn committed_captures_have_their_recorded_cpu_distribution() {
     }
 }
 
-/// The uncomfortable fact, asserted rather than left in a paragraph: not one firmware event
-/// in any committed capture names a CPU this project actually isolates (6 through 11).
+/// The uncomfortable fact `hwlatdetect` never overcame on this rig, asserted rather than
+/// left in a paragraph: not one `hwlatdetect` capture's events name a CPU this project
+/// actually isolates (6 through 11). This is permanent, not a placeholder: the hwlat
+/// tracer's `mode` is `none` on this kernel and `hwlatdetect` exposes no way to change that
+/// (`docs/rig/firmware-floor-rt-vs-stock.md`, "Setting the mode was tried, and hwlatdetect
+/// prevents it"), so no future `hwlatdetect` capture will cover these cores either.
 ///
-/// Expected to change the day a future plan (01-23) commits an `rtla hwnoise` capture whose
-/// events, or `crate::hwnoise::HwnoiseRun` rows, name one of those CPUs. Whoever changes
-/// this test at that point must do so deliberately, by adding the new capture to the
-/// evidence this test checks, not by deleting or weakening the assertion because it started
-/// failing.
+/// Renamed from `no_committed_capture_covers_the_isolated_cores` when plan 01-23 committed
+/// the first captures that DO cover these cores: three `rtla hwnoise` arms, asserted by
+/// [`hwnoise_captures_cover_the_isolated_cores`] below, which reads those manifests rather
+/// than re-deriving from `hwlatdetect`'s (unrelated) output format.
 #[test]
-fn no_committed_capture_covers_the_isolated_cores() {
+fn hwlatdetect_captures_still_cover_no_isolated_core() {
     let mut all_cpus = std::collections::BTreeSet::new();
     for &(path, _, _) in COMMITTED_CAPTURES {
         let text = read_capture(path);
@@ -103,11 +106,64 @@ fn no_committed_capture_covers_the_isolated_cores() {
     for isolated in 6..=11u32 {
         assert!(
             !all_cpus.contains(&isolated),
-            "cpu{isolated} appears in a committed firmware capture's events; if a new \
-             instrument capture was just committed, update this test deliberately rather \
-             than deleting it"
+            "cpu{isolated} appears in a committed hwlatdetect capture's events, which the \
+             tracer's own mode should make impossible on this rig; investigate before \
+             assuming this is progress"
         );
     }
+}
+
+/// The new coverage plan 01-23 committed: every manifest whose `firmware_screens` names
+/// `rtla-hwnoise` must report `observed_cpus` covering all six isolated CPUs, because that
+/// instrument runs one osnoise sampling thread per requested CPU rather than one migrating
+/// thread (`docs/rig/firmware-floor-rt-vs-stock.md`, "The re-take with rtla hwnoise"). Reads
+/// each already-parsed `manifest.json` under `measurements/` rather than re-deriving from
+/// `rtla-hwnoise.txt`: the parser itself (`nr_capture::hwnoise::parse_hwnoise`) has its own
+/// tests, and this one is the standing coverage check the 01-11 post-mortem asked for,
+/// applied to the instrument that actually answers it.
+///
+/// If a future arm does not cover all six, this must fail naming the gap, not be weakened to
+/// pass: a coverage regression is exactly what this test exists to catch.
+#[test]
+fn hwnoise_captures_cover_the_isolated_cores() {
+    let repo_root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+    let measurements_dir = format!("{repo_root}/measurements");
+    let requested: Vec<u32> = (6..=11).collect();
+
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&measurements_dir)
+        .unwrap_or_else(|err| panic!("failed to read {measurements_dir}: {err}"))
+    {
+        let entry = entry.expect("readable measurements/ directory entry");
+        let manifest_path = entry.path().join("manifest.json");
+        let Ok(text) = std::fs::read_to_string(&manifest_path) else {
+            continue;
+        };
+        let Ok(manifest) = serde_json::from_str::<nr_manifest::RunManifest>(&text) else {
+            continue;
+        };
+
+        for screen in &manifest.firmware_screens {
+            if screen.instrument != "rtla-hwnoise" {
+                continue;
+            }
+            checked += 1;
+            let missing = uncovered_cpus(&requested, &screen.observed_cpus);
+            assert!(
+                missing.is_empty(),
+                "{}: rtla-hwnoise screen does not cover cpu(s) {missing:?} (observed {:?})",
+                manifest_path.display(),
+                screen.observed_cpus
+            );
+        }
+    }
+
+    assert!(
+        checked >= 3,
+        "expected at least the three D-18 re-take arms (plan 01-23) to carry an rtla-hwnoise \
+         firmware screen; found {checked}. A count of 0 means the re-take captures are \
+         missing from measurements/, not that this test's floor is wrong."
+    );
 }
 
 #[test]
