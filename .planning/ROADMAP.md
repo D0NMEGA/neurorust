@@ -96,7 +96,7 @@ Plans:
 - [x] 01-23-PLAN.md - Re-take D-18 on the isolated cores and correct the published firmware record [wave 14]
 - [x] 01-24-PLAN.md - Run admission decided from evidence upstream of the measured latency (D-28) [wave 15]
 - [x] 01-25-PLAN.md - TracersQuiescent sees rtla's own instance and its sampling threads [wave 16]
-- [ ] 01-26-PLAN.md - Strict verification re-derives firmware figures; the published labels become true [wave 17]
+- [x] 01-26-PLAN.md - Strict verification re-derives firmware figures; the published labels become true [wave 17]
 - [ ] 01-27-PLAN.md - Rig source identity (D-29) and one harness check on the real machine (rig runbook) [wave 18]
 
 **Review note (2026-09-07)**: `01-REVIEW-2026-09-06.md` is the second adversarial review of this

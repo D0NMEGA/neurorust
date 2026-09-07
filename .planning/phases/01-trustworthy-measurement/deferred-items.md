@@ -468,6 +468,14 @@ recorded with an owner.
   `crates/cli/src/cmd/run.rs`) should rename the published label to match the field it
   actually reports, or add a real per-CPU context-switch source and keep RES separate.
 
+  **CLOSED, commit `bf850e7` (plan 01-26 task 2).** `InterferenceSnapshot`/`InterferenceDelta`'s
+  `context_switches` field is renamed to `rescheduling_ipis` with
+  `#[serde(alias = "context_switches")]`, so every committed manifest still deserialises
+  unchanged. The published counter table header now reads `res ipis`, with a line underneath
+  naming what RES is and why no per-CPU context-switch count exists.
+  `config/contamination-thresholds.json`'s `context_switch_delta_max` is deliberately
+  untouched: it names a genuinely different, still-unimplemented quantity.
+
 - **Finding C1. `verify --strict` does not re-derive firmware-screen figures from the raw
   capture.**
   Confirmed directly: `crates/cli/src/cmd/verify.rs` only knows `hwlatdetect*.txt` and
@@ -479,6 +487,14 @@ recorded with an owner.
   parse_hwnoise_file` (and the equivalent `hwlatdetect` parser) against the checksummed raw
   capture and reconcile the result against the manifest, the same reconciliation D-15/D-19
   already do for the cyclictest histogram.
+
+  **CLOSED, commit `c4b2b4c` (plan 01-26 task 1).** `check_firmware_figures` re-parses each
+  run's `rtla-hwnoise.txt` with the existing `nr_capture::hwnoise` parser (no second one
+  written) and compares the re-derived `observed_cpus`, `max_us`, `events_recorded` and
+  per-cpu exposure against both `manifest.json`'s `firmware_screens` and `REPORT.md`'s
+  `## Firmware screen` block. `hwlatdetect` is out of scope: the four committed firmware
+  screens are all `rtla-hwnoise`, and a screen from any other instrument is recorded not
+  re-derivable by name rather than silently skipped.
 
 - **Finding C2. All three new D-18 captures record `harness.git_sha:
   "unavailable-at-build-time"`.**
@@ -508,3 +524,11 @@ recorded with an owner.
   (`crates/metrics/src/report.rs`) should reword the missing-CPU case to say plainly that the
   CPU produced no row and coverage cannot be confirmed for it, rather than asserting sampling
   occurred.
+
+  **CLOSED, commits `c4b2b4c`/`bf850e7` (plan 01-26 tasks 1 and 2).** A requested CPU that
+  produced no row is now a `verify --strict` problem worded as a coverage failure ("coverage
+  cannot be confirmed for it"), never a claim about whether it was sampled (task 1). The
+  rendered `rtla-hwnoise` caveat no longer says "sampled and reported nothing"; it states that
+  a sampled CPU always emits its own row, citing cpu 7's committed row in
+  `2026-09-06-precision3591-screen-03` as the proof, so a missing CPU produced no row at all
+  (task 2).

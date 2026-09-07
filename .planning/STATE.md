@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: 01-25 complete. Both tasks committed (b04c229, 30e49f5, 0b1fa65); TracersQuiescent reads rtla's own tracing instance and the osnoise/timerlat kthreads on the target CPUs, closing finding A2.
-last_updated: "2026-09-07T08:15:02.622Z"
-last_activity: 2026-09-07 -- 01-25 executed
+stopped_at: 01-26 complete. All three tasks committed (c4b2b4c, bf850e7, 472fe44); verify --strict re-derives firmware figures, the RES-IPI field is renamed behind a backward-compatible alias, and all eleven eligible REPORT.md files were regenerated with the numeric-survival check confirming no published figure changed or dropped.
+last_updated: "2026-09-07T09:00:34.325Z"
+last_activity: 2026-09-07 -- 01-26 executed
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 27
-  completed_plans: 21
-  percent: 78
+  completed_plans: 22
+  percent: 81
 ---
 
 # Project State
@@ -25,23 +25,24 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 
 ## Current Position
 
-Phase: 01 (trustworthy-measurement), 21 of 27 plans done (wave 16 of the roadmap).
-Plan: 01-25-PLAN.md (TracersQuiescent extended to read the tracing instances and the
-  osnoise/timerlat kthreads, closing finding A2) is COMPLETE. Both tasks committed:
-  the two new signals, eight new tests naming the real 2026-09-06 capture they exist
-  because of, and a re-pinned report-row snapshot (b04c229, 30e49f5); and the protocol
-  document, README and the rig's own mode script updated to describe and enforce all
-  six signals while every published statement of the fifteen-precondition count stays
-  true (0b1fa65). A machine with an orphaned osnoise or timerlat thread on a measured
-  core, or a live rtla tracing instance, can no longer pass the check. See
-  01-25-SUMMARY.md for the full record.
-Status: Executing Phase 01. Plan 01-26 (wave 17, C1/B4/B5) is next, followed by 01-27
-  (wave 18, D-29 and C2, which also reinstalls the rig's scripts, carrying this plan's
-  scripts/nr-measure-mode change onto the machine). Plans 01-12 through 01-15 remain at
-  waves 19 through 22, held until those two land.
-Last activity: 2026-09-07 -- 01-25 executed
+Phase: 01 (trustworthy-measurement), 22 of 27 plans done (wave 17 of the roadmap).
+Plan: 01-26-PLAN.md (C1/B4/B5: verify --strict re-derives every firmware screen
+  figure from its raw rtla-hwnoise capture, the manifest's RES-rescheduling-IPI
+  field is renamed off its old "context switches" name behind a backward-
+  compatible alias, and the coverage caveat no longer claims a CPU absent from
+  rtla hwnoise's observed list "was sampled and reported nothing") is COMPLETE.
+  All three tasks committed: the firmware re-derivation and coverage check
+  (c4b2b4c); the rescheduling_ipis rename, its two re-pinned snapshots and the
+  two backward-compatibility tests (bf850e7); and the eleven-file
+  --rewrite-reports pass whose numeric-survival check confirmed no published
+  figure changed or dropped (472fe44). See 01-26-SUMMARY.md for the full record.
+Status: Executing Phase 01. Plan 01-27 (wave 18, D-29 and C2, which also
+  reinstalls the rig's scripts, carrying plan 01-25's scripts/nr-measure-mode
+  change onto the machine) is next. Plans 01-12 through 01-15 remain at waves
+  19 through 22, held until it lands.
+Last activity: 2026-09-07 -- 01-26 executed
 
-Progress: [████████░░] 78%
+Progress: [████████░░] 81%
 
 ## Performance Metrics
 
@@ -82,6 +83,7 @@ Progress: [████████░░] 78%
 | Phase 01 P21 | 60min | 3 tasks | 10 files |
 | Phase 01 P24 | 42min | 3 tasks | 15 files |
 | Phase 01 P25 | 23min | 2 tasks | 7 files |
+| Phase 01 P26 | 40min | 3 tasks | 27 files |
 
 ## Accumulated Context
 
@@ -173,6 +175,9 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-24: Restored a corrupted, uncommitted STATE.md to HEAD before starting any task work. The working tree already carried an incoherent, unstaged edit (Current Position read Plan: 1 of 27 with orphaned prose describing 01-23) contradicting the coherent, committed version naming plan 01-24 as next. Matches this project's own documented donny-tools STATE.md corruption pattern (01-02, 01-16 through 01-19, 01-23); reverted rather than hand-corrected since it predated this plan's own work.
 - [Phase 01]: 01-25: check_tracers_quiescent now also lists /sys/kernel/tracing/instances/ and scans /proc/*/comm for an osnoise/<cpu> or timerlat/<cpu> kthread on each target CPU, closing finding A2 (a killed rtla left an orphaned instance that starved measurements/2026-09-06-precision3591-screen-02 while all fifteen preconditions passed). Extends the existing check rather than adding a sixteenth, so every published statement of the count stays true.
 - [Phase 01]: 01-25: requirements-completed left empty (PLAT-02 needs a real rig run, unbroken precedent since 01-09). Fixed the plan's own suggested status-arm shell for scripts/nr-measure-mode rather than copying it verbatim: pgrep/ls piped into tr/sed loses the first command's exit status, so the plan's own || echo none fallback never fires; verified empirically before and after the fix. The plan's own acceptance criterion expecting the doc's '15 precondition' grep count at 2 does not match this repository (already 3 before this plan touched the file, a third true occurrence added by 01-24's same-day D-28 replan); verified unchanged rather than forced to a stale number.
+- [Phase 01]: 01-26: renamed InterferenceSnapshot/InterferenceDelta's context_switches field to rescheduling_ipis via #[serde(alias = "context_switches")] rather than a schema-version bump, so all twelve committed manifests keep deserialising; config/contamination-thresholds.json's context_switch_delta_max (a genuinely different, still-unimplemented quantity) is left unrenamed.
+- [Phase 01]: 01-26: task 2's own literal acceptance grep (context_switches count 0 in schemas/manifest.schema.json) conflicts with the same task's own mandated field doc comment, since schemars propagates Rust doc comments into JSON schema descriptions; verified the schema's live JSON-key surface is clean (zero quoted "context_switches" occurrences, only backtick-quoted history prose) and kept the doc comment.
+- [Phase 01]: 01-26: nrmeasure verify --rewrite-reports rewrote all eleven eligible REPORT.md files; the numeric-survival check flagged only the self-referential manifest-blake3 header line (expected, since reserialising an aliased field always emits the new key), confirmed by an exclusion rerun and by verify --strict --check-index reporting 0 problems; every other hunk was traced to a specific plan (01-24's Series admission section and verdict sentence, a mid-01-11 tail-metrics block, this plan's own res ipis rename) with zero unaccounted-for lines.
 
 ### Pending Todos
 
@@ -193,8 +198,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-07T08:15:02.619Z
-Stopped at: 01-25 complete. Both tasks committed (b04c229, 30e49f5, 0b1fa65); TracersQuiescent reads rtla's own tracing instance and the osnoise/timerlat kthreads on the target CPUs, closing finding A2.
-Resume file: .planning/phases/01-trustworthy-measurement/01-25-SUMMARY.md
+Last session: 2026-09-07T09:00:34.322Z
+Stopped at: 01-26 complete. All three tasks committed (c4b2b4c, bf850e7, 472fe44); verify --strict re-derives firmware figures, the RES-IPI field is renamed behind a backward-compatible alias, and all eleven eligible REPORT.md files were regenerated with the numeric-survival check confirming no published figure changed or dropped.
+Resume file: .planning/phases/01-trustworthy-measurement/01-26-SUMMARY.md
 
-Next: plan 01-26 (wave 17), closing findings C1/B4/B5. 01-25 (this plan) closed finding A2: TracersQuiescent now also reads the tracing instances and the osnoise/timerlat kthreads, so an orphaned rtla sampler can no longer pass the check. 01-27 (wave 18, D-29 and C2) follows. Plans 01-12 through 01-15 run last, at waves 19 through 22.
+Next: plan 01-27 (wave 18), closing D-29 and C2. 01-26 (this plan) closed findings C1/B4/B5: verify --strict now re-derives firmware screen figures from the raw rtla-hwnoise capture, the manifest field is renamed to rescheduling_ipis behind a backward-compatible alias, and the coverage caveat no longer claims a CPU absent from rtla hwnoise's observed list was sampled. Plans 01-12 through 01-15 run last, at waves 19 through 22.
