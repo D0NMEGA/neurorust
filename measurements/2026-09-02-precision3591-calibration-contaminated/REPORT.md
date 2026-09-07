@@ -6,7 +6,7 @@ instrument class: headline-series
 provenance tier: harness-generated
 utc start: 2026-09-02T07:23:59.42739464Z
 utc end: 2026-09-02T07:38:59.567003593Z
-manifest blake3: 206b89a9e488f918160303a65090d492db24bdcb8a3cdf9e6f8588c325ebf4f5
+manifest blake3: 79951ad31fb55a44eae6bec8f7394284a9f6a772953724b658ab66402f371d60
 
 ## Rig and tuning
 
@@ -51,21 +51,32 @@ nic_wifi:     wlp0s20f3 driver=iwlwifi
 | no-package-manager-activity | pass | none | no apt, dpkg, unattended-upgrade or snapd process |
 | tracers-quiescent | pass | nop | nop |
 
+## Series admission
+
+not recorded: this manifest predates the admission record (D-28)
+
 ## Contamination verdict
 
 verdict: uncalibrated
 reason: excluded_from_series forced true: --allow-precondition-violation waived 3 precondition violation(s) for this calibration-contaminated run: NoActiveSshSessions (observed "1", expected "0"); DisplayManagerInactive (observed "gdm.service=active, sddm.service=inactive, lightdm.service=inactive", expected "inactive"); NoGraphicalSession (observed "1", expected "0")
+this verdict is an inference from the shape of this run's own measured latency; it does not by itself remove the run from the series (see Series admission above).
+
+tail metrics (D-24):
+
+not computed: this manifest predates D-24.
 
 counter deltas per isolated cpu:
 
-| cpu | cal ipis | tlb ipis | context switches | irqs |
-|-----|----------|----------|-------------------|------|
+| cpu | cal ipis | tlb ipis | res ipis | irqs |
+|-----|----------|----------|----------|------|
 | 6 | 2 | 1 | 3 | 12 |
 | 7 | 2 | 1 | 4 | 35 |
 | 8 | 2 | 1 | 5 | 67 |
 | 9 | 2 | 1 | 6 | 37 |
 | 10 | 2 | 1 | 1 | 13 |
 | 11 | 2 | 1 | 5 | 47 |
+
+res ipis are /proc/interrupts RES rescheduling interrupts, the closest per-cpu proxy for scheduling interference available here: /proc/stat's ctxt is machine-wide with no per-cpu breakdown (plan 01-05).
 
 ## Results
 

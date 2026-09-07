@@ -58,8 +58,11 @@ Each run directory carries the raw tool output, a manifest naming the rig, kerne
 tuning state, exact argv, and blake3 digest of every artifact, plus an attempt record written
 before the first instrument starts so that a capture killed midway leaves its evidence behind
 rather than taking it with it. `nrmeasure verify --strict` re-derives the published percentile
-table from the raw histogram instead of trusting the number that was written down. Losing and
-contaminated runs stay in `measurements/` and appear in the index; nothing is quietly retaken.
+table, and every firmware figure, from the raw capture instead of trusting the number that was
+written down. Losing and contaminated runs stay in `measurements/` and appear in the index;
+nothing is quietly retaken. When a rendering itself needs correcting, `nrmeasure verify
+--rewrite-reports` regenerates every `REPORT.md` from its own manifest and raw capture; it never
+touches a manifest or a raw capture.
 
 ## Reference rig
 

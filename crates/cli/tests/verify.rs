@@ -1063,3 +1063,142 @@ fn a_run_with_no_firmware_screen_is_neither_checked_nor_failed() {
         "a cyclictest-only run must be counted in neither firmware bucket: {stdout}"
     );
 }
+
+// ---------------------------------------------------------------------------------
+// --rewrite-reports (01-26 task 3): regenerate a published REPORT.md rendering from its
+// own manifest and raw capture, rather than hand-editing generated evidence.
+// ---------------------------------------------------------------------------------
+
+/// The committed `REPORT.md` this test tampers is itself stale relative to the current
+/// renderer (it predates plan 01-24's Series admission section and this plan's own counter
+/// table rename), so the fix under test cannot be "matches the byte-for-byte original": that
+/// original was never current either. What must hold is that the tampered placeholder is gone,
+/// the fresh rendering uses today's renderer, and a second pass converges to a stable output
+/// rather than merely changing it again.
+#[test]
+fn rewrite_reports_regenerates_a_stale_report() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    let run_id = "2026-09-01-precision3591-calibration-clean";
+    let run_dir = measurements.join(run_id);
+    copy_real_run(run_id, &run_dir);
+
+    let report_path = run_dir.join("REPORT.md");
+    fs::write(
+        &report_path,
+        "this is a stale rendering, not the real one\n",
+    )
+    .expect("tamper REPORT.md");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--rewrite-reports")
+        .output()
+        .expect("run verify --rewrite-reports");
+
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("wrote"), "stdout: {stdout}");
+    assert!(stdout.contains("1 written"), "stdout: {stdout}");
+
+    let rewritten = fs::read_to_string(&report_path).expect("read rewritten REPORT.md");
+    assert!(
+        !rewritten.contains("this is a stale rendering"),
+        "the tampered placeholder must be gone: {rewritten}"
+    );
+    assert!(
+        rewritten.contains("| cpu | cal ipis | tlb ipis | res ipis | irqs |"),
+        "the regenerated report must use the current renderer: {rewritten}"
+    );
+
+    // A second pass over the now-current rendering must be a true no-op: the rewrite
+    // converged to a stable output rather than merely producing a different one.
+    let second = base_cmd(temp.path(), &measurements)
+        .arg("--rewrite-reports")
+        .output()
+        .expect("run verify --rewrite-reports again");
+    assert!(second.status.success());
+    let second_stdout = String::from_utf8_lossy(&second.stdout);
+    assert!(
+        second_stdout.contains("0 written"),
+        "a second pass over the freshly rewritten report must write nothing: {second_stdout}"
+    );
+}
+
+#[test]
+fn rewrite_reports_is_idempotent() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    let run_id = "2026-09-01-precision3591-calibration-clean";
+    copy_real_run(run_id, &measurements.join(run_id));
+
+    let first = base_cmd(temp.path(), &measurements)
+        .arg("--rewrite-reports")
+        .output()
+        .expect("run verify --rewrite-reports");
+    assert!(first.status.success());
+
+    let second = base_cmd(temp.path(), &measurements)
+        .arg("--rewrite-reports")
+        .output()
+        .expect("run verify --rewrite-reports again");
+    assert!(second.status.success());
+    let stdout = String::from_utf8_lossy(&second.stdout);
+    assert!(
+        stdout.contains("0 written"),
+        "a second run over an already-current report must write nothing: {stdout}"
+    );
+}
+
+#[test]
+fn rewrite_reports_refuses_to_combine_with_strict() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .arg("--rewrite-reports")
+        .output()
+        .expect("run verify --strict --rewrite-reports");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("mutually exclusive"),
+        "stderr should name the conflict: {stderr}"
+    );
+}
+
+#[test]
+fn rewrite_reports_skips_a_reconstructed_run() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    let run_id = "2026-08-28-precision3591";
+    copy_real_run(run_id, &measurements.join(run_id));
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--rewrite-reports")
+        .output()
+        .expect("run verify --rewrite-reports");
+
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("skipped: reconstructed run has no generated report"),
+        "stdout: {stdout}"
+    );
+    assert!(stdout.contains("0 written"), "stdout: {stdout}");
+}

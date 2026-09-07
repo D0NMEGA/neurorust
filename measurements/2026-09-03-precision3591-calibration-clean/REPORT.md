@@ -6,7 +6,7 @@ instrument class: headline-series
 provenance tier: harness-generated
 utc start: 2026-09-03T19:46:52.121051298Z
 utc end: 2026-09-03T20:06:52.443260235Z
-manifest blake3: 1a0eb45a3d335643a82bad8a84f167f4b21acf9848366d92e40bf82c93bc1c7d
+manifest blake3: 28b433b85d1fcb561170dcccc486729e0e2cffb3e49ad33d611e9d926cc201d5
 
 ## Rig and tuning
 
@@ -52,10 +52,15 @@ nic_wifi:     wlp0s20f3 driver=iwlwifi
 | no-package-manager-activity | pass | none | no apt, dpkg, unattended-upgrade or snapd process |
 | tracers-quiescent | pass | nop | nop |
 
+## Series admission
+
+not recorded: this manifest predates the admission record (D-28)
+
 ## Contamination verdict
 
 verdict: clean
 reason: contamination verdict Clean was reached against provisional (D-24, not yet calibrated) thresholds; see config/contamination-thresholds.json
+this verdict is an inference from the shape of this run's own measured latency; it does not by itself remove the run from the series (see Series admission above).
 thresholds: provisional (derived from 2 runs, not a calibrated set; see config/contamination-thresholds.json)
 
 tail metrics (D-24):
@@ -68,14 +73,16 @@ tail metrics (D-24):
 
 counter deltas per isolated cpu:
 
-| cpu | cal ipis | tlb ipis | context switches | irqs |
-|-----|----------|----------|-------------------|------|
+| cpu | cal ipis | tlb ipis | res ipis | irqs |
+|-----|----------|----------|----------|------|
 | 6 | 1 | 1 | 2 | 142 |
 | 7 | 1 | 1 | 0 | 27 |
 | 8 | 1 | 1 | 1 | 24 |
 | 9 | 1 | 1 | 1 | 6 |
 | 10 | 1 | 1 | 0 | 29 |
 | 11 | 1 | 1 | 0 | 8 |
+
+res ipis are /proc/interrupts RES rescheduling interrupts, the closest per-cpu proxy for scheduling interference available here: /proc/stat's ctxt is machine-wide with no per-cpu breakdown (plan 01-05).
 
 ## Results
 

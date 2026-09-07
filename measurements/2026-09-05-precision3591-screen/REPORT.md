@@ -6,7 +6,7 @@ instrument class: headline-series
 provenance tier: harness-generated
 utc start: 2026-09-05T04:43:53.803610519Z
 utc end: 2026-09-05T04:59:54.378838579Z
-manifest blake3: b9155785e5f899b8606c600d1710f045bb1625db8aa51078872269b393090e7c
+manifest blake3: 4e484e36ec30eaa5b742d7f568b2cb43939b75a653374069b81c7f408543b330
 
 ## Rig and tuning
 
@@ -52,10 +52,15 @@ nic_wifi:     wlp0s20f3 driver=iwlwifi
 | no-package-manager-activity | pass | none | no apt, dpkg, unattended-upgrade or snapd process |
 | tracers-quiescent | pass | nop | nop |
 
+## Series admission
+
+not recorded: this manifest predates the admission record (D-28)
+
 ## Contamination verdict
 
 verdict: clean
 reason: hwlatdetect exited with code 1
+this verdict is an inference from the shape of this run's own measured latency; it does not by itself remove the run from the series (see Series admission above).
 thresholds: provisional (derived from 2 runs, not a calibrated set; see config/contamination-thresholds.json)
 
 tail metrics (D-24):
@@ -68,14 +73,16 @@ tail metrics (D-24):
 
 counter deltas per isolated cpu:
 
-| cpu | cal ipis | tlb ipis | context switches | irqs |
-|-----|----------|----------|-------------------|------|
+| cpu | cal ipis | tlb ipis | res ipis | irqs |
+|-----|----------|----------|----------|------|
 | 6 | 19 | 1 | 64627 | 57 |
 | 7 | 2 | 1 | 56601 | 28 |
 | 8 | 2 | 1 | 79106 | 15 |
 | 9 | 2 | 1 | 60328 | 28 |
 | 10 | 2 | 1 | 58754 | 19 |
 | 11 | 2 | 1 | 64233 | 4 |
+
+res ipis are /proc/interrupts RES rescheduling interrupts, the closest per-cpu proxy for scheduling interference available here: /proc/stat's ctxt is machine-wide with no per-cpu breakdown (plan 01-05).
 
 ## Results
 

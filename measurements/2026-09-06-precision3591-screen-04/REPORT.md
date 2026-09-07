@@ -6,7 +6,7 @@ instrument class: headline-series
 provenance tier: harness-generated
 utc start: 2026-09-06T23:47:51.238243548Z
 utc end: 2026-09-07T00:03:52.862855597Z
-manifest blake3: 25fe5e53a1f9e443e97bf3f63d9d3f01a59e523968763412b42831742cd3e10a
+manifest blake3: da50cf3b79b6188568b6d3a3e7cab3826e31c33a6e67c228203c55f4fc086189
 
 ## Rig and tuning
 
@@ -52,10 +52,15 @@ nic_wifi:     wlp0s20f3 driver=iwlwifi
 | no-package-manager-activity | pass | none | no apt, dpkg, unattended-upgrade or snapd process |
 | tracers-quiescent | pass | current_tracer=nop events/enable=0 set_event=(empty) tracing_on=0 | current_tracer=nop, events/enable=0, set_event=(empty), tracing_on=0 |
 
+## Series admission
+
+not recorded: this manifest predates the admission record (D-28)
+
 ## Contamination verdict
 
 verdict: clean
 reason: contamination verdict Clean was reached against provisional (D-24, not yet calibrated) thresholds; see config/contamination-thresholds.json
+this verdict is an inference from the shape of this run's own measured latency; it does not by itself remove the run from the series (see Series admission above).
 thresholds: provisional (derived from 2 runs, not a calibrated set; see config/contamination-thresholds.json)
 
 tail metrics (D-24):
@@ -68,14 +73,16 @@ tail metrics (D-24):
 
 counter deltas per isolated cpu:
 
-| cpu | cal ipis | tlb ipis | context switches | irqs |
-|-----|----------|----------|-------------------|------|
+| cpu | cal ipis | tlb ipis | res ipis | irqs |
+|-----|----------|----------|----------|------|
 | 6 | 519 | 1 | 70371 | 253 |
 | 7 | 489 | 1 | 60995 | 212 |
 | 8 | 489 | 1 | 75395 | 13 |
 | 9 | 489 | 1 | 88789 | 3 |
 | 10 | 489 | 1 | 64665 | 23 |
 | 11 | 489 | 1 | 63821 | 12 |
+
+res ipis are /proc/interrupts RES rescheduling interrupts, the closest per-cpu proxy for scheduling interference available here: /proc/stat's ctxt is machine-wide with no per-cpu breakdown (plan 01-05).
 
 ## Firmware screen
 
@@ -89,7 +96,7 @@ maximum: 1 us (the largest Max Single value (one-shot hardware-noise event) acro
 events recorded: 64
 
 - it measures hardware-related noise, the execution gaps left after software noise is accounted for. those are not uniquely identified SMIs either; the exact MSR_SMI_COUNT recorded alongside this screen is the census, and this is not
-- its per-CPU figures come from one osnoise sampling thread per CPU in the -c list, so a CPU absent from the observed list was sampled and reported nothing, rather than never being sampled. that is the specific difference from hwlatdetect on this rig
+- its per-CPU figures come from one osnoise sampling thread per CPU in the -c list. a CPU that was sampled and observed nothing still emits its own row carrying its exposure (cpu 7 in measurements/2026-09-06-precision3591-screen-03/rtla-hwnoise.txt is the committed example: full exposure, zero events, an explicit row). a CPU absent from the observed list therefore produced no row at all, and coverage cannot be confirmed for it; verify --strict reports that as a problem
 - per-CPU exposure above is what the tool reports; when it reports none, the exposure is unstated rather than a wall-clock duration divided by a CPU count
 
 MSR_SMI_COUNT (0x34) over this run: cpu6=0 cpu7=0 cpu8=0 cpu9=0 cpu10=0 cpu11=0

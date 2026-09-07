@@ -71,6 +71,17 @@ pub struct Args {
     /// published surface) must fail the build rather than be silently regenerated.
     #[arg(long)]
     pub check_index: bool,
+
+    /// Regenerate `REPORT.md` for every harness-generated, re-derivable run from its own manifest
+    /// and raw capture, and write the result. Nothing else in the run directory is touched, and
+    /// no manifest is rewritten.
+    ///
+    /// Exists because `REPORT.md` is a derived artifact: a rendering that turns out to be wrong,
+    /// such as the `context switches` column heading corrected in this plan, has to be corrected
+    /// where it was published. Hand-editing eleven generated files is the alternative, and this
+    /// project already refused that precedent once, in plan 01-23.
+    #[arg(long)]
+    pub rewrite_reports: bool,
 }
 
 /// A file anywhere in the tree matching one of these glob-like patterns (a single `*` standing
@@ -97,6 +108,14 @@ const RECON_DIR_PREFIX: &str = "recon-";
 const RECON_PROBE_PREFIX: &str = "probe-";
 
 pub fn run(args: Args) -> anyhow::Result<i32> {
+    if args.strict && args.rewrite_reports {
+        anyhow::bail!(
+            "--strict and --rewrite-reports are mutually exclusive: verifying and rewriting in \
+             the same pass would report problems against files this command is about to \
+             overwrite"
+        );
+    }
+
     let root_abs = args
         .root
         .canonicalize()
@@ -108,9 +127,13 @@ pub fn run(args: Args) -> anyhow::Result<i32> {
         .unwrap_or(&measurements_abs)
         .to_path_buf();
 
-    let mut problems: Vec<String> = Vec::new();
-
     let (run_problems, run_dir_count, loaded) = check_run_directories(&measurements_abs);
+
+    if args.rewrite_reports {
+        return Ok(run_rewrite_reports(&measurements_abs, &loaded));
+    }
+
+    let mut problems: Vec<String> = Vec::new();
     problems.extend(run_problems);
 
     let stray_problems = check_stray_captures(&root_abs, &measurements_rel, &loaded);
@@ -1308,6 +1331,149 @@ fn compare_firmware_report(
     }
 
     problems
+}
+
+// ---------------------------------------------------------------------------------
+// --rewrite-reports: re-publish a corrected REPORT.md rendering.
+// ---------------------------------------------------------------------------------
+
+/// What [`rewrite_reports`] did: every printed line (a skip reason or a written path), and the
+/// three counts [`run_rewrite_reports`] reports in its own final summary line.
+struct RewriteReport {
+    lines: Vec<String>,
+    written: usize,
+    skipped: usize,
+    errors: usize,
+}
+
+/// Regenerates `REPORT.md` for every harness-generated, re-derivable run from its own manifest
+/// and its own raw capture, writing the result only when the rendered bytes differ from what is
+/// committed. Reuses exactly the selection rules [`check_derived_figures`] already applies (skip
+/// a reconstructed run, skip a run with no recorded `--histogram` bound, skip a run with no
+/// `CyclictestHist` artifact), so the two never disagree about which runs are re-derivable.
+///
+/// Never writes a manifest and never touches a raw capture: `REPORT.md` is the only file this
+/// function ever opens for writing. `REPORT.md` is generated, never hand-authored (D-12), so
+/// regenerating it is the honest way to correct a rendering that turns out to be wrong, such as
+/// the `context switches` column heading this plan corrects; hand-editing the eleven already
+/// committed reports would be the exact precedent plan 01-23 refused when it added `nrmeasure
+/// attempt` rather than hand-edit an orphaned `ATTEMPT.json`.
+fn rewrite_reports(
+    measurements_root: &Path,
+    loaded: &HashMap<String, RunDirRecord>,
+) -> RewriteReport {
+    let mut lines = Vec::new();
+    let mut written = 0usize;
+    let mut skipped = 0usize;
+    let mut errors = 0usize;
+
+    let mut names: Vec<&String> = loaded.keys().collect();
+    names.sort();
+
+    for name in names {
+        let RunDirRecord::Manifest(manifest) = &loaded[name] else {
+            // A failed attempt (task 1's AttemptRecord) has no manifest and no generated
+            // report at all; there is nothing here for --rewrite-reports to regenerate.
+            continue;
+        };
+        let run_dir = measurements_root.join(name);
+
+        if matches!(manifest.provenance_tier, ProvenanceTier::Reconstructed) {
+            skipped += 1;
+            lines.push(format!(
+                "{}: skipped: reconstructed run has no generated report",
+                run_dir.display()
+            ));
+            continue;
+        }
+
+        let Some(bound) = recorded_histogram_bound(manifest) else {
+            skipped += 1;
+            lines.push(format!(
+                "{}: skipped: no recorded --histogram bound",
+                run_dir.display()
+            ));
+            continue;
+        };
+
+        let Some(artifact) = manifest
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.kind == ArtifactKind::CyclictestHist)
+        else {
+            skipped += 1;
+            lines.push(format!(
+                "{}: skipped: {NO_HISTOGRAM_ARTIFACT}",
+                run_dir.display()
+            ));
+            continue;
+        };
+
+        let hist_path = run_dir.join(&artifact.path);
+        let run = match nr_histogram::hist::parse_hist_file(&hist_path, Some(bound)) {
+            Ok(run) => run,
+            Err(err) => {
+                errors += 1;
+                lines.push(format!(
+                    "{}: failed to parse {}: {err}",
+                    run_dir.display(),
+                    hist_path.display()
+                ));
+                continue;
+            }
+        };
+
+        let rendered = match nr_metrics::report::render_run_report(manifest, &run) {
+            Ok(rendered) => rendered,
+            Err(err) => {
+                errors += 1;
+                lines.push(format!(
+                    "{}: failed to render REPORT.md: {err}",
+                    run_dir.display()
+                ));
+                continue;
+            }
+        };
+
+        let report_path = run_dir.join("REPORT.md");
+        if std::fs::read_to_string(&report_path).ok().as_deref() == Some(rendered.as_str()) {
+            continue;
+        }
+
+        match std::fs::write(&report_path, &rendered) {
+            Ok(()) => {
+                written += 1;
+                lines.push(format!("wrote {}", report_path.display()));
+            }
+            Err(err) => {
+                errors += 1;
+                lines.push(format!("{}: failed to write: {err}", report_path.display()));
+            }
+        }
+    }
+
+    RewriteReport {
+        lines,
+        written,
+        skipped,
+        errors,
+    }
+}
+
+/// The `--rewrite-reports` entry point: prints [`rewrite_reports`]'s own lines plus a final
+/// summary line, and returns the process exit code (non-zero only on a genuine parse, render or
+/// write error, never on a skip: a reconstructed run or one with no recorded bound is an
+/// expected, unremarkable outcome, not a failure of this command).
+fn run_rewrite_reports(measurements_root: &Path, loaded: &HashMap<String, RunDirRecord>) -> i32 {
+    let report = rewrite_reports(measurements_root, loaded);
+    for line in &report.lines {
+        println!("{line}");
+    }
+    println!(
+        "rewrite-reports: {} written, {} skipped, {} error(s)",
+        report.written, report.skipped, report.errors
+    );
+    if report.errors == 0 { 0 } else { 1 }
 }
 
 #[cfg(test)]

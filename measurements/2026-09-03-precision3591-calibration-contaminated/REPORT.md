@@ -6,7 +6,7 @@ instrument class: headline-series
 provenance tier: harness-generated
 utc start: 2026-09-03T20:53:54.713227883Z
 utc end: 2026-09-03T21:53:54.846537922Z
-manifest blake3: 24de44342ee606d17d1eea6ec3a7a78c9597b5f1228ba7fd01f874db75e4ff45
+manifest blake3: 4dbd8f0d51b304e7fb0b6dc5c6b5fa6b5497e371a087302e3ff9ca5793f68363
 
 ## Rig and tuning
 
@@ -52,10 +52,15 @@ nic_wifi:     wlp0s20f3 driver=iwlwifi
 | no-package-manager-activity | pass | none | no apt, dpkg, unattended-upgrade or snapd process |
 | tracers-quiescent | pass | nop | nop |
 
+## Series admission
+
+not recorded: this manifest predates the admission record (D-28)
+
 ## Contamination verdict
 
 verdict: contaminated
 reason: excluded_from_series forced true: --allow-precondition-violation waived 4 precondition violation(s) for this calibration-contaminated run: NoActiveSshSessions (observed "1", expected "0"); DisplayManagerInactive (observed "gdm.service=active, sddm.service=inactive, lightdm.service=inactive", expected "inactive"); NoGraphicalSession (observed "1", expected "0"); ThermalHeadroomAtStart (observed "71.0 C", expected "package temp <= 70 C")
+this verdict is an inference from the shape of this run's own measured latency; it does not by itself remove the run from the series (see Series admission above).
 thresholds: provisional (derived from 2 runs, not a calibrated set; see config/contamination-thresholds.json)
 
 tail metrics (D-24):
@@ -68,14 +73,16 @@ tail metrics (D-24):
 
 counter deltas per isolated cpu:
 
-| cpu | cal ipis | tlb ipis | context switches | irqs |
-|-----|----------|----------|-------------------|------|
+| cpu | cal ipis | tlb ipis | res ipis | irqs |
+|-----|----------|----------|----------|------|
 | 6 | 2 | 1 | 17 | 677 |
 | 7 | 2 | 1 | 5 | 32 |
 | 8 | 2 | 1 | 7 | 127 |
 | 9 | 2 | 1 | 8 | 22 |
 | 10 | 2 | 1 | 4 | 104 |
 | 11 | 2 | 1 | 0 | 24 |
+
+res ipis are /proc/interrupts RES rescheduling interrupts, the closest per-cpu proxy for scheduling interference available here: /proc/stat's ctxt is machine-wide with no per-cpu breakdown (plan 01-05).
 
 ## Results
 

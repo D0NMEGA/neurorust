@@ -215,6 +215,17 @@ own `--cpus`/`--main-cpus` (see "Reproducing on different hardware" below).
    This must exit 0. `.github/workflows/provenance.yml` runs the identical command on every
    push and pull request and blocks the merge if it does not.
 
+5. If a `REPORT.md` rendering itself turns out to be wrong (a corrected column heading, for
+   example), regenerate every already-committed report from its own manifest and raw capture
+   rather than hand-editing the published file:
+
+   ```
+   nrmeasure verify --rewrite-reports
+   ```
+
+   This only ever writes `REPORT.md`; it never touches a manifest or a raw capture, skips a
+   run it cannot re-derive (naming why), and refuses to run together with `--strict`.
+
 ## What the contamination detector measures
 
 The checklist above (`nrmeasure run`'s 15 preconditions) is asserted before a
