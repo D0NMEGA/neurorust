@@ -3,8 +3,8 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: paused
-stopped_at: "01-23: tasks 1-2 committed (7 commits), task 3 (checkpoint:human-verify) pending operator review"
-last_updated: "2026-09-07T03:06:13.263Z"
+stopped_at: "01-23: tasks 1-2 committed, second-review corrections applied (commit 8442cb2), task 3 (checkpoint:human-verify) re-presented for operator review"
+last_updated: "2026-09-07T05:07:38.000Z"
 last_activity: 2026-09-07
 progress:
   total_phases: 8
@@ -29,8 +29,10 @@ Phase: 01 (trustworthy-measurement) — EXECUTING
 Plan: 18 of 23 done; wave 14 (01-23-PLAN.md, re-taking D-18 on the real rig and correcting
   every published figure that described one CPU as a machine-wide firmware floor) IN
   PROGRESS. Task 1 (three rtla hwnoise arms) and Task 2 (the document corrections) are
-  committed. Task 3 is a checkpoint:human-verify, blocking, awaiting operator review of the
-  corrected firmware record before publication -- not self-approved.
+  committed. A second independent review (01-REVIEW-2026-09-06.md) then found three further
+  overstatements in the corrected record; all three are fixed (commit 8442cb2), one flagged
+  conflict is unresolved (see Blockers/Concerns), and Task 3 is a checkpoint:human-verify,
+  blocking, re-presented for operator review -- not self-approved.
 Status: Paused at 01-23 Task 3 checkpoint (human-verify)
 Last activity: 2026-09-07
 
@@ -151,6 +153,7 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-23: Fixed redact_home_prefix, which silently stopped redacting operator home-directory paths whenever nrmeasure runs as a systemd-run transient unit — scripts/nr-run-measurement launches nrmeasure as a root systemd-run transient unit with no User=/PAMName=, whose minimal environment does not reliably set HOME to the operator's real home directory. That let /home/d0nmega/... reach three real captures' manifest.json/ATTEMPT.json argv fields completely unredacted even though the existing test suite was green throughout (it forces HOME via .env(), never exercising the real gap). Replaced the environment lookup with a structural match against the conventional /home/<user> or /Users/<user> shape in the run directory's own already-known path, with HOME kept as a secondary fallback. Caught and fixed before these captures were committed (T-1-95).
 - [Phase 01]: 01-23: Did not copy the plan's own drafted README correction verbatim; it misattributed the whole-machine hwlatdetect arm's CPU set as {2,4} when the real set is {13,14,15,20,21} — docs/rig/firmware-floor-rt-vs-stock.md and firmware_cpu_coverage.rs's own COMMITTED_CAPTURES (both verified, checked-in ground truth) agree: hwlatdetect-tuned-underload-15m.txt (the whole-machine arm compared against the P-core arm in this paragraph) shows cpus 13,14,15,20,21; 2,4 belongs to the separate, untuned hwlatdetect-stock-15m.txt arm. Wrote the accurate mapping instead of the plan's own action text, which appears to have conflated the two arms.
 - [Phase 01]: 01-23: state add-blocker corrupted a pre-existing, unrelated blocker line, dropping the word inside a backtick pair; hand-corrected — Running node donny-tools.cjs state add-blocker to record the Task 3 checkpoint rewrote the whole Blockers/Concerns section and, in doing so, turned an existing line's backtick mode is none into mode is (empty double backticks), silently deleting none from a factual, technical claim about the hwlat tracer. Caught by re-reading STATE.md's own diff after the tool call rather than trusting it. Hand-corrected back to the original text, matching this file's own established precedent for donny-tools formatting bugs (01-02's roadmap zero-padding no-op, 01-16/01-17/01-18's advance-plan counter). Not fixed at the tool level (out of scope, outside this repository); logged here so the next person running state add-blocker knows to diff the result.
+- [Phase 01]: 01-23: a second independent review (01-REVIEW-2026-09-06.md, findings B1/B2/B3) found three overstatements in the Task 2 write-up itself and all three are now corrected (commit 8442cb2), checked against the raw rtla-hwnoise captures and crates/cli/src/cmd/run.rs rather than against the review's prose alone — the 1us-on-every-CPU claim (CPU 7's idle-arm row is 0, not 1; reworded to a pooled per-arm maximum), the MSR_SMI_COUNT bracket described as the 900s hwnoise window alone in three places (the register is actually read before cyclictest and after hwnoise closes, about 961s per the three manifests' utc_start/utc_end), and the 2026-08-28 README's withdrawn 7us/18x figure still driving a derived claim plus its unqualified kernel-independence assertion (led with the verifiable "at least 12x," marked the carry-over claim untested without touching the sentence itself, since firmware-floor-rt-vs-stock.md quotes it verbatim). Findings B4, B5, C1, C2 logged to deferred-items.md with owners, per the review's own disposition that they are independent of 01-23. One unresolved conflict flagged rather than fixed: the task's own "FIX 3" targets a sentence inside the "What PLAT-03 should report" section, which both this plan's Task 2 action text and this session's task instructions require to stay byte-identical, and which the review itself does not list as a finding; left untouched, confirmed unchanged via git diff, and returned to the human at the Task 3 checkpoint for explicit decision. State add-decision avoided here after the add-blocker corruption above; this line and the Blockers/Concerns update below were hand-edited and diffed before commit.
 
 ### Pending Todos
 
@@ -165,12 +168,13 @@ None yet.
 - Rig boots untuned: every CPU governor reads powersave despite rt-tuning.service reporting active/enabled (power-profiles-daemon wins a boot-time race, see docs/rig/recon-2026-08-31/FINDINGS.md). Any plan that runs the real measurement protocol must fix this or rely on nr-capture's own precondition check; it must not trust rt-tuning.service's ActiveState.
 - The D-18 firmware floor does not exist for the isolated cores. `hwlatdetect` cannot sample more than one CPU on this kernel (tracer `mode` is `none` and `isolcpus=6-11` keeps its thread off 6-11), so all 32 events across three RT arms named CPU 5 and the 2026-08-28 P-core arm's 13 events all named CPU 0. Replacement instrument decided (D-27): `rtla hwnoise -c 6-11 -H 0-5` plus `rdmsr -p <cpu> 0x34`. Plans 01-20 through 01-23 build it and re-take the screens.
 - External-audit findings status (of the original six): 6 CLOSED (01-16, 01-19), 7 CLOSED (01-17), 5 CLOSED (documentation half in 01-11's 137c3c1, exemption-scoping half in 01-18), 8 CLOSED (01-18). Finding 3's reporting half is CLOSED by 01-21 (REPORT.md and render_plat03_verdict now state three per-instrument caveats, asserted to differ between hwlatdetect and rtla-hwnoise, and never claim an exposure a tool did not report); its coverage half stays open until 01-23 takes a real capture naming an isolated core. Findings 9 and 10 remain open, both in unexecuted plans (9 to 01-12, 10 to 01-14).
-- 01-23 Task 3 (checkpoint:human-verify, blocking) is pending: the corrected firmware record (docs/rig/firmware-floor-rt-vs-stock.md, measurements/2026-08-28-precision3591/README.md) awaits operator review before publication. Not self-approved. Resume with a continuation agent once the operator responds.
+- 01-23 Task 3 (checkpoint:human-verify, blocking) is pending: the corrected firmware record (docs/rig/firmware-floor-rt-vs-stock.md, measurements/2026-08-28-precision3591/README.md) awaits operator review before publication. Not self-approved. A second independent review (01-REVIEW-2026-09-06.md) found three further overstatements in that record; all three are now corrected (commit 8442cb2) and the checkpoint is re-presented with the corrected text quoted. One flagged conflict is unresolved: a stale sentence inside "What PLAT-03 should report" (docs/rig/firmware-floor-rt-vs-stock.md, lines 182-183) was left untouched per an explicit do-not-touch instruction, even though it is stale in the same direction as the fixed claims; needs an explicit human decision, not a resume-only response. Resume with a continuation agent once the operator responds.
+- 01-REVIEW-2026-09-06.md also names two items that block Phase 1's overall closure regardless of 01-23's outcome, neither addressed by any executed or in-progress plan: A1, provisional contamination thresholds mark every run excluded_from_series, so plan 01-13's headline capture and 01-14's weekly series cannot proceed as specified until run admission is decided on evidence independent of the measured value itself (a new plan is needed); A2, orphaned rtla osnoise kthreads defeat TracersQuiescent because rtla drives its own tracing instance (extends 01-18 or a new plan; already logged in deferred-items.md under 01-23's "killed rtla" entry).
 
 ## Session Continuity
 
-Last session: 2026-09-07T03:04:01.408Z
-Stopped at: 01-23: tasks 1-2 committed (7 commits), task 3 (checkpoint:human-verify) pending operator review
-Resume file: None
+Last session: 2026-09-07T05:07:38.000Z
+Stopped at: 01-23: tasks 1-2 committed, second-review corrections applied (commit 8442cb2), task 3 (checkpoint:human-verify) re-presented for operator review with one flagged conflict (see Blockers/Concerns)
+Resume file: .planning/phases/01-trustworthy-measurement/01-23-SUMMARY.md
 
-Next: `/donny-execute-phase 1` (wave 14: plan 01-23)
+Next: `/donny-execute-phase 1` (wave 14: plan 01-23, resume at Task 3 with the operator's response)
