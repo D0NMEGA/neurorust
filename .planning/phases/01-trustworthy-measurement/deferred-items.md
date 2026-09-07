@@ -625,3 +625,37 @@ recorded with an owner.
   connected when they are not. And the runbook needs the `ss -K` recovery step, named as the
   response to a dropped connection, because the failure appears at the next capture rather than
   when the link drops and nobody will connect the two events unprompted.
+
+- **The documented way to bring captures back from the rig overwrites committed evidence.**
+  Observed 2026-09-07 executing plan 01-27 task 2 step 5, which specifies
+  `rsync -az precision3591-rig:~/neurorust/measurements/ measurements/`. That pull is
+  unfiltered, so it does not merely add the new run: it replaces every file the dev host holds
+  with the rig's copy of it. Two kinds of damage, both silent:
+
+  Privacy. Committed manifests carry the literal token `[redacted]` where a tool argument or
+  `executed_path` named the operator's home directory. The rig holds the unredacted originals,
+  so the pull wrote `/home/d0nmega` back into eleven committed manifests. The current harness
+  redacts these itself (the capture taken the same day has zero occurrences), so this is the rig
+  holding pre-redaction copies, not a gap in the harness.
+
+  Evidence. `measurements/2026-09-06-precision3591-screen/ATTEMPT.json` had been marked
+  `status: failed` with a `utc_end` and a `preserved` block, the durable attempt record plan
+  01-17 built for exactly this capture, the one osnoise starved. The rig still holds it as
+  `status: in-progress`, so the pull reverted it and dropped the preserved evidence. The strict
+  gate caught that one on the next run (`ATTEMPT.json has status in-progress; a run that never
+  finished must not be committed`), which is the gate working. It did not catch the eleven
+  reverted `REPORT.md` files from plan 01-26 or the re-introduced home paths, because neither
+  makes a manifest disagree with its capture.
+
+  Recovered with `git checkout -- measurements/`, which reverts every tracked file and leaves
+  the new untracked run directory in place. The gate is green again and no pre-existing run
+  differs from its committed state.
+
+  Owner: plan 01-15 (the rig install runbook), and `docs/measurement-protocol.md` alongside it.
+  The pull must be scoped to the run being collected rather than the whole tree. The obvious
+  form is naming the run directory, `rsync -az rig:~/neurorust/measurements/<run-id>/
+  measurements/<run-id>/`, which cannot touch anything else. `--ignore-existing` is a weaker
+  second best: it protects existing files but silently skips a run the dev host has a partial
+  copy of. Worth considering as well: the dev host is the publication side and the rig is not,
+  so the rig's `measurements/` could be treated as write-only from the dev host's point of view,
+  with collection always naming what it collects.
