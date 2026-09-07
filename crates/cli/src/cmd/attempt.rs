@@ -92,7 +92,7 @@ pub fn run(args: Args) -> Result<i32> {
         message: format!(
             "{reason} This ATTEMPT.json was left at status in-progress because the harness's \
              own exit paths (which always rewrite the record as completed or failed) never \
-             ran. `nrmeasure attempt fail` corrected it to failed at {corrected} (RFC 3339), \
+             ran. `nrmeasure attempt` corrected it to failed at {corrected} (RFC 3339), \
              after the fact, rather than a hand edit; utc_end above is {utc_end_source}.",
             reason = args.reason,
             corrected = format_rfc3339(corrected_at),
