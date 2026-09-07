@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "run_id": "2026-09-06-precision3591-screen",
+  "utc_start": "2026-09-06T20:40:01.707524925Z",
+  "utc_end": "2026-09-06T20:51:01.707524925Z",
+  "status": "failed",
+  "harness": {
+    "version": "0.1.0",
+    "git_sha": "unavailable-at-build-time",
+    "git_dirty": false,
+    "git_sha_source": "unavailable",
+    "executable_blake3": "dd0203595d4ed7895e8e44016401b9f3ce1a4c9d55c30a0833b1e5926dc840b9",
+    "executable_bytes": 3559784
+  },
+  "requested": {
+    "run_class": "screen",
+    "instrument_class": "headline-series",
+    "cpus": "6-11",
+    "main_cpus": "0,1",
+    "duration_seconds": 60,
+    "with_hwlatdetect": false
+  },
+  "tools": [],
+  "preserved": [
+    {
+      "path": "cyclictest.hist",
+      "bytes": 1033,
+      "blake3": "7aecf3acc52bec3a8a77a833e745946c592b2f177eb70522d80d351fa48ae766",
+      "kind": "cyclictest-hist",
+      "stored": "in-repo"
+    },
+    {
+      "path": "cyclictest.json",
+      "bytes": 3062,
+      "blake3": "6a21f68890ac0025ada6258283198d012f769ff4bf87692a44f3be4ccf8209bd",
+      "kind": "cyclictest-json",
+      "stored": "in-repo"
+    },
+    {
+      "path": "cyclictest.stderr.txt",
+      "bytes": 61,
+      "blake3": "8b3a6f104bfc5f0d3ebeb25de3dd7005487c3692fe24edd2ad22930be87ee508",
+      "kind": "other",
+      "stored": "in-repo"
+    }
+  ],
+  "failure": {
+    "stage": "orphaned-in-progress",
+    "message": "systemd SIGTERM'd this attempt at the --hwnoise-duration timeout-bound defect (fixed in commit b29e819): the unit's timeout did not sum in the 900s hwnoise capture window, so it terminated the process mid-run rather than after the full attempt completed. Root cause and the resulting osnoise-kthread starvation of the next run's cyclictest are recorded in .planning/phases/01-trustworthy-measurement/deferred-items.md, section 'From 01-23 (a killed rtla leaves osnoise kthreads that D-06 cannot see, 2026-09-06)'. The cyclictest.hist/.json/.stderr.txt files in this directory are real, harness-produced raw output from before the kill; no rtla-hwnoise.txt exists because the firmware-screen phase had not finished writing one when the process died. This ATTEMPT.json was left at status in-progress because the harness's own exit paths (which always rewrite the record as completed or failed) never ran. `nrmeasure attempt` corrected it to failed at 2026-09-07T02:32:27.407871Z (RFC 3339), after the fact, rather than a hand edit; utc_end above is the documented stop time passed to this command, not the correction time."
+  },
+  "usable_for_numerical_analysis": false
+}
