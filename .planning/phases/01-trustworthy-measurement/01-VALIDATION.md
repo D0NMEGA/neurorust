@@ -5,7 +5,7 @@ status: approved
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-08-30
-updated: 2026-09-05
+updated: 2026-09-07
 ---
 
 # Phase 1 - Validation Strategy
@@ -19,10 +19,12 @@ the dev host. The tables below separate automated coverage from rig-only verific
 rather than claiming a unit test covers a physical measurement. The planner must not paper over
 that split.
 
-**Current scope:** 23 plans spanning waves 0 through 18. Plans 01-01 through 01-11 (waves 0
-through 7) have executed. Plans 01-12 through 01-23 (waves 8 through 18) are pending. The phase
-was expanded from 15 plans to 23 on 2026-09-05 after `01-EXTERNAL-AUDIT.md` and the D-18
-instrument failure; plan numbers no longer match wave order, so every table below carries the wave.
+**Current scope:** 27 plans spanning waves 0 through 22. Plans 01-01 through 01-11 (waves 0
+through 7) and 01-16 through 01-23 (waves 8 through 14) have executed. Plans 01-24 through 01-27
+(waves 15 through 18) and 01-12 through 01-15 (waves 19 through 22) are pending. The phase was
+expanded from 15 plans to 23 on 2026-09-05 after `01-EXTERNAL-AUDIT.md` and the D-18 instrument
+failure, and from 23 to 27 on 2026-09-07 after `01-REVIEW-2026-09-06.md`, the second adversarial
+review; plan numbers no longer match wave order, so every table below carries the wave.
 
 ---
 
@@ -34,7 +36,7 @@ instrument failure; plan numbers no longer match wave order, so every table belo
 | **Config file** | `Cargo.toml` at the repo root; five crates (nr-manifest, nr-histogram, nr-capture, nr-metrics, nr-cli). Created by plan 01-01 in wave 0. |
 | **Quick run command** | `cargo test --workspace` |
 | **Full suite command** | `cargo fmt --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace` |
-| **Provenance gate** | `./target/release/nrmeasure verify --strict --check-index`, referred to below as the gate. Built by plan 01-08; 20 of the 36 pending tasks include it in their verify. |
+| **Provenance gate** | `./target/release/nrmeasure verify --strict --check-index`, referred to below as the gate. Built by plan 01-08; 31 of the 46 pending tasks include it in their verify (recounted 2026-09-07, when the phase grew to 27 plans; the previous figure of 20 of 36 was itself an undercount, the real count then was 24). |
 | **Estimated runtime** | ~30 seconds quick, ~90 seconds full on a cold cache |
 
 ---
@@ -82,7 +84,7 @@ now forbids a subtraction. Both are recorded here rather than rewritten, because
 the historical record of what was asked for before execution. `cargo test --workspace` is green as
 of 2026-09-05.*
 
-### Pending plans (01-12 through 01-23, waves 8 through 18)
+### Pending plans (01-12 through 01-27, waves 8 through 22)
 
 One row per task, in wave order, recording what actually verifies each task. `gate` is
 `./target/release/nrmeasure verify --strict --check-index`. Commands are abbreviated to the
@@ -114,18 +116,28 @@ selectors that matter; the plan's `<verify>` block is authoritative.
 | 01-23-T1 | 01-23 | 14 | PLAT-03 | T-1-91 | Three rtla hwnoise screens on CPUs 6-11 (idle, loaded, housekeeping), each with a per-CPU SMI delta | **rig-only**, post-hoc assertion | gate + a `python3` assertion that three committed manifests carry `instrument: rtla-hwnoise` and name which of CPUs 6-11 reported nothing | rig | pending |
 | 01-23-T2 | 01-23 | 14 | BENCH-06 | T-1-90 | The one-CPU figure is corrected where it was published, not superseded by a newer document beside it | integration + static | `cargo test -p nr-capture --test firmware_cpu_coverage && grep -q 'rtla hwnoise' docs/rig/firmware-floor-rt-vs-stock.md` + gate | task | pending |
 | 01-23-T3 | 01-23 | 14 | PLAT-03 | T-1-94 | A human reads the corrected firmware record before it is published | **manual review**, static re-check | the 01-23-T2 greps re-run + gate | task | pending |
-| 01-12-T1 | 01-12 | 15 | PLAT-01 | T-1-97 | The tracer is armed with a declared event set, the buffer is proven to hold it, and both thresholds are calibrated before the first cycle | **rig-only**, post-hoc assertion | gate + a `python3` assertion that the investigation manifest records the event set, the buffer, the traced maximum, breaktrace and CPUs 6-11, and that `tracers-quiescent` is `not-applicable` | rig | pending |
-| 01-12-T2 | 01-12 | 15 | PLAT-01 | T-1-98 | Two further capture-and-analyse cycles, inside the D-20 budget of three, each leaving a note | **rig-only**, post-hoc assertion | gate + a `python3` assertion that two or three investigation manifests exist and each carries a non-empty note | rig | pending |
-| 01-12-T3 | 01-12 | 15 | PLAT-01 | T-1-34 | The outcome is published as `named`, `not-reproduced` or `open-question`, and the attribution the captures cannot support is withdrawn | static | `grep -qE '^Outcome: (named\|not-reproduced\|open-question)$' docs/rig/plat01-stall-investigation.md` + gate | task | pending |
-| 01-13-T1 | 01-13 | 16 | PLAT-03 | T-1-101 | The four hour headline capture runs with all fifteen preconditions passing, cyclictest alone, and no firmware screen mixed in | **rig-only**, post-hoc assertion | gate + a `python3` assertion on `run_class`, `instrument_class`, `provenance_tier`, fifteen passing preconditions and an empty `firmware_screens` | rig | pending |
-| 01-13-T2 | 01-13 | 16 | PLAT-03, BENCH-05 | T-1-38 | The verdict reports the residual as unattributed and contains no subtraction and no kernel-contribution line | static | `grep -qE '^Verdict: ' && ! grep -qi 'kernel contribution\\|worst-case bound' docs/rig/plat03-scheduling-latency-verdict.md` + gate | task | pending |
-| 01-13-T3 | 01-13 | 16 | PLAT-03 | T-1-18 | A human reads the headline figure before it is published | **manual review**, static re-check | the 01-13-T2 greps re-run + gate | task | pending |
-| 01-14-T1 | 01-14 | 17 | BENCH-08 | T-1-103 | `nrmeasure series` carries p50, p95 and p99 per stage with nullable statistics, so an uncomputed figure is absent rather than zero | unit + integration | `cargo test -p nr-metrics && cargo test -p nr-cli --test series && cargo test --workspace` | task | pending |
-| 01-14-T2 | 01-14 | 17 | BENCH-08 | T-1-40 | The oneshot is bounded by `TimeoutStartSec`, the timer does not backfill a missed week, and the wrapper takes the hwnoise screen | static | `sh -n deploy/systemd/neurorust-weekly-run.sh && grep -q 'Persistent=false' deploy/systemd/neurorust-measure.timer` | task | pending |
-| 01-14-T3 | 01-14 | 17 | BENCH-08 | T-1-04 | The regression gate resolves an event-specific base revision, never a merge base, and refuses a baseline change authored by the rig identity | integration | a `python3` assertion over `.github/workflows/regression.yml` and the seeded baseline, then `nrmeasure series --compare` | task | pending |
-| 01-15-T1 | 01-15 | 18 | BENCH-08 | T-1-01 | A push credential scoped to this repository exists on the rig, and the unattended checkout is deployed | **rig-only** | `MISSING` - verified by 01-15-T2 | rig | pending |
-| 01-15-T2 | 01-15 | 18 | BENCH-08 | T-1-105 | One full weekly loop driven by hand reaches the repository: fifteen preconditions, cyclictest and rtla, the run present in the series | **rig-only**, post-hoc assertion | `git pull --ff-only && cargo build -p nr-cli --release` + gate + a `python3` assertion on the weekly manifest and the series | rig | pending |
-| 01-15-T3 | 01-15 | 18 | BENCH-08, PLAT-02 | T-1-44 | The first scheduled fire is observed with nobody watching, and the week is recorded as a run or as an explicit gap | **rig-only**, post-hoc assertion | `git pull --ff-only` + gate + a `python3` assertion that the most recent coverage week is a run or a gap | rig | pending |
+| 01-24-T1 | 01-24 | 15 | BENCH-04 | T-1-110 | The manifest carries an admission record whose summary fields cannot disagree with it, and every committed manifest still validates without one | unit + integration | `cargo test -p nr-manifest && cargo test --workspace` + gate | yes | pending |
+| 01-24-T2 | 01-24 | 15 | BENCH-06, BENCH-08 | T-1-107 | A run is excluded only by evidence of a cause; the gate is never handed the verdict or the tail metrics, and a bad-looking shape alone is admitted | unit + integration | `cargo test -p nr-cli && cargo test -p nr-capture && cargo clippy --workspace --all-targets -- -D warnings` | yes | pending |
+| 01-24-T3 | 01-24 | 15 | BENCH-04 | T-1-111 | Every published description of the removed behaviour is corrected, and a grep proves none survives outside `.planning/phases/` | unit + snapshot + static | `cargo test --workspace && ! grep -rq 'determine_exclusion' crates docs config README.md` + gate | task | pending |
+| 01-25-T1 | 01-25 | 16 | PLAT-02 | T-1-113 | `TracersQuiescent` fails a headline run when an osnoise or timerlat kthread is on a target CPU, or any tracing instance is live, and still returns exactly fifteen results | unit | `cargo test -p nr-capture && cargo test --workspace` | yes | pending |
+| 01-25-T2 | 01-25 | 16 | PLAT-02 | T-1-116 | The protocol document and the rig's own mode script describe and enforce all six tracing signals, and every published statement of the precondition count is still true | static + unit | `bash -n scripts/nr-measure-mode && cargo test -p nr-capture --test protocol_doc` | task | pending |
+| 01-26-T1 | 01-26 | 17 | BENCH-05, PLAT-03 | T-1-118 | A hand-edited firmware maximum in `REPORT.md` or `manifest.json` fails `verify --strict` and the failure names the field; a requested CPU with no row fails the coverage claim | integration | `cargo test -p nr-cli --test verify` + gate | yes | pending |
+| 01-26-T2 | 01-26 | 17 | BENCH-04 | T-1-120 | The published column and the manifest field name RES rescheduling IPIs, and every manifest committed under the old key still validates | unit + snapshot | `cargo test --workspace && cargo test -p nr-manifest schema_up_to_date` + gate | yes | pending |
+| 01-26-T3 | 01-26 | 17 | BENCH-04 | T-1-122 | A corrected rendering is re-published by a command, idempotently, touching no manifest and no raw capture | integration + static | `./target/release/nrmeasure verify --rewrite-reports && git diff --exit-code measurements/` + gate | task | pending |
+| 01-27-T1 | 01-27 | 18 | BENCH-04 | T-1-123 | A build with no git checkout records the pushed revision under its own provenance value, and a malformed stamp yields `unavailable` rather than a confident sha | unit + static | `cargo test -p nr-manifest && cargo test -p nr-cli && sh -n scripts/nr-push-to-rig.sh` + gate | task | pending |
+| 01-27-T2 | 01-27 | 18 | BENCH-04, PLAT-02 | T-1-128 | One short capture on the real rig records `pushed-stamp`, is admitted to the series, names both new tracer signals, and re-derives its firmware figures | **rig-only**, post-hoc assertion | gate + a `python3` assertion on `harness.git_sha_source`, `series_admission.admitted`, the fifteen precondition results and `firmware_screens[0]` | rig | pending |
+| 01-12-T1 | 01-12 | 19 | PLAT-01 | T-1-97 | The tracer is armed with a declared event set, the buffer is proven to hold it, and both thresholds are calibrated before the first cycle | **rig-only**, post-hoc assertion | gate + a `python3` assertion that the investigation manifest records the event set, the buffer, the traced maximum, breaktrace and CPUs 6-11, and that `tracers-quiescent` is `not-applicable` | rig | pending |
+| 01-12-T2 | 01-12 | 19 | PLAT-01 | T-1-98 | Two further capture-and-analyse cycles, inside the D-20 budget of three, each leaving a note | **rig-only**, post-hoc assertion | gate + a `python3` assertion that two or three investigation manifests exist and each carries a non-empty note | rig | pending |
+| 01-12-T3 | 01-12 | 19 | PLAT-01 | T-1-34 | The outcome is published as `named`, `not-reproduced` or `open-question`, and the attribution the captures cannot support is withdrawn | static | `grep -qE '^Outcome: (named\|not-reproduced\|open-question)$' docs/rig/plat01-stall-investigation.md` + gate | task | pending |
+| 01-13-T1 | 01-13 | 20 | PLAT-03 | T-1-101 | The four hour headline capture runs with all fifteen preconditions passing, cyclictest alone, and no firmware screen mixed in | **rig-only**, post-hoc assertion | gate + a `python3` assertion on `run_class`, `instrument_class`, `provenance_tier`, fifteen passing preconditions and an empty `firmware_screens` | rig | pending |
+| 01-13-T2 | 01-13 | 20 | PLAT-03, BENCH-05 | T-1-38 | The verdict reports the residual as unattributed and contains no subtraction and no kernel-contribution line | static | `grep -qE '^Verdict: ' && ! grep -qi 'kernel contribution\\|worst-case bound' docs/rig/plat03-scheduling-latency-verdict.md` + gate | task | pending |
+| 01-13-T3 | 01-13 | 20 | PLAT-03 | T-1-18 | A human reads the headline figure before it is published | **manual review**, static re-check | the 01-13-T2 greps re-run + gate | task | pending |
+| 01-14-T1 | 01-14 | 21 | BENCH-08 | T-1-103 | `nrmeasure series` carries p50, p95 and p99 per stage with nullable statistics, so an uncomputed figure is absent rather than zero | unit + integration | `cargo test -p nr-metrics && cargo test -p nr-cli --test series && cargo test --workspace` | task | pending |
+| 01-14-T2 | 01-14 | 21 | BENCH-08 | T-1-40 | The oneshot is bounded by `TimeoutStartSec`, the timer does not backfill a missed week, and the wrapper takes the hwnoise screen | static | `sh -n deploy/systemd/neurorust-weekly-run.sh && grep -q 'Persistent=false' deploy/systemd/neurorust-measure.timer` | task | pending |
+| 01-14-T3 | 01-14 | 21 | BENCH-08 | T-1-04 | The regression gate resolves an event-specific base revision, never a merge base, and refuses a baseline change authored by the rig identity | integration | a `python3` assertion over `.github/workflows/regression.yml` and the seeded baseline, then `nrmeasure series --compare` | task | pending |
+| 01-15-T1 | 01-15 | 22 | BENCH-08 | T-1-01 | A push credential scoped to this repository exists on the rig, and the unattended checkout is deployed | **rig-only** | `MISSING` - verified by 01-15-T2 | rig | pending |
+| 01-15-T2 | 01-15 | 22 | BENCH-08 | T-1-105 | One full weekly loop driven by hand reaches the repository: fifteen preconditions, cyclictest and rtla, the run present in the series | **rig-only**, post-hoc assertion | `git pull --ff-only && cargo build -p nr-cli --release` + gate + a `python3` assertion on the weekly manifest and the series | rig | pending |
+| 01-15-T3 | 01-15 | 22 | BENCH-08, PLAT-02 | T-1-44 | The first scheduled fire is observed with nobody watching, and the week is recorded as a run or as an explicit gap | **rig-only**, post-hoc assertion | `git pull --ff-only` + gate + a `python3` assertion that the most recent coverage week is a run or a gap | rig | pending |
 
 *Status: pending / green / red / flaky*
 
@@ -165,6 +177,7 @@ Complete. Plan 01-01 executed in wave 0 and `cargo test --workspace` is green as
 | The firmware floor across the isolated cores | PLAT-03, BENCH-06 | Three 900 second screens on the rig under idle, loaded and housekeeping load | 01-23 task 1: run the three arms under the harness. A CPU absent from `rtla hwnoise` output was sampled and reported nothing, which is the distinction the eight committed `hwlatdetect` captures could not make. |
 | The corrected firmware record reads as a correction | PLAT-03 | Human judgement about whether a withdrawn claim is visibly withdrawn | 01-23 task 3: read `docs/rig/firmware-floor-rt-vs-stock.md` and the 2026-08-28 README end to end before pushing |
 | The headline verdict is fairly worded | PLAT-03 | Human judgement about the wording of a published figure | 01-13 task 3: read `docs/rig/plat03-scheduling-latency-verdict.md` and confirm the residual is called unattributed |
+| The rig runs this repository's current source, and the corrected harness works on it | BENCH-04, PLAT-02 | Pushing source, rebuilding, reinstalling root scripts and taking a capture all happen on the Dell Precision 3591 | 01-27 task 2: run `scripts/nr-push-to-rig.sh` from the dev host, rebuild and reinstall on the rig, take one two-minute `recon`-class capture with a sixty second `rtla hwnoise` screen, and confirm five things before leaving: `series_admission.admitted` is true, `git_sha_source` is `pushed-stamp`, `TracersQuiescent` names both new signals, the firmware screen observed CPUs 6 to 11, and `nr-measure-mode status` reports no sampler kthreads |
 | The weekly job is deployed on the rig | BENCH-08 | Creating a scoped credential and a checkout on the machine | 01-15 task 1: create the push credential scoped to this repository, deploy the unattended checkout, and confirm it and the operator's checkout run the same harness build or record the difference |
 | One full weekly loop closes by hand | BENCH-08 | The systemd units have to actually run on the rig | 01-15 task 2: install and enable the units, drive one run end to end, and confirm it reaches the repository and the series. Seed the weekly baseline in a separate commit authored by a human, because the regression gate refuses a baseline authored by the rig identity. |
 | The first scheduled fire happens unattended | BENCH-08, PLAT-02 | Requires waiting a week for the timer with nobody watching | 01-15 task 3: confirm the coverage record carries the week as a run or as an explicit gap (D-08), and that the journal carries no `RuntimeMaxSec= has no effect` line |
@@ -181,7 +194,7 @@ forms. Neither form is permission to skip verification.
 **Post-hoc artifact assertion.** The command runs on the dev host after the operator has committed
 what the rig produced, and asserts against that artifact: the gate, plus a `python3` block that
 opens the committed `manifest.json` and fails on the specific fields the task was supposed to
-establish. Used by 01-12 tasks 1 and 2, 01-13 task 1, 01-15 tasks 2 and 3, and 01-23 task 1. The
+establish. Used by 01-12 tasks 1 and 2, 01-13 task 1, 01-15 tasks 2 and 3, 01-23 task 1 and 01-27 task 2. The
 rig work is not watched while it happens; it is verified by the evidence it is required to leave
 behind, which is the standard every published figure in this phase is already held to.
 
@@ -215,4 +228,5 @@ automated verify.
 - [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** approved 2026-08-30, plans 01-01 through 01-15; re-approved 2026-09-05 for the
-expanded phase, plans 01-01 through 01-23, waves 0 through 18.
+expanded phase, plans 01-01 through 01-23, waves 0 through 18; re-approved 2026-09-07 for plans
+01-01 through 01-27, waves 0 through 22, after `01-REVIEW-2026-09-06.md`.

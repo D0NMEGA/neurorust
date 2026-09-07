@@ -68,7 +68,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Worst-case scheduling latency on isolated cores is under 30 us on a clean run; or, failing that, the residual is either attributed to a named platform cause, or published as an explicitly unattributed limitation with the run, its raw capture, and the reason attribution failed committed alongside. An unattributed residual does not become attributed by being described.
   4. Every published figure is stamped by the capture harness with rig, kernel, BIOS revision, and tuning state, ships as a histogram with its raw capture alongside, and losing configurations appear rather than being omitted
   5. A CI job commits a weekly metrics JSON carrying p50, p95, and p99 for every stage instrumented so far
-**Plans**: 23 plans in 18 waves (single operator; waves express dependency, not parallel staffing). Expanded from 15 on 2026-09-05: an external adversarial audit (`01-EXTERNAL-AUDIT.md`) found ten methodology and implementation defects, and executing D-18 showed that `hwlatdetect` cannot sample the isolated cores at all on this kernel. Plans 01-16 through 01-23 close those gaps and build the replacement instrument; plans 01-12 through 01-15 were rewritten in place and now run last. Plan numbers no longer match wave order, so each unexecuted plan below carries its wave.
+**Plans**: 27 plans in 22 waves (single operator; waves express dependency, not parallel staffing). Expanded from 15 on 2026-09-05: an external adversarial audit (`01-EXTERNAL-AUDIT.md`) found ten methodology and implementation defects, and executing D-18 showed that `hwlatdetect` cannot sample the isolated cores at all on this kernel. Plans 01-16 through 01-23 close those gaps and build the replacement instrument; plans 01-12 through 01-15 were rewritten in place and now run last. Expanded again from 23 on 2026-09-07: a second adversarial review (`01-REVIEW-2026-09-06.md`), taken after the D-18 re-take captures landed, found that run admission excluded every clean run from the series while the contamination thresholds stayed provisional, that `TracersQuiescent` could not see `rtla`'s own tracing instance, that strict verification never re-derived a firmware figure, and that the rig could not record which committed revision its binary was built from. Plans 01-24 through 01-27 close those and run before the four rig plans; plans 01-12 and 01-14 were edited in place for two defects the same review found in their unexecuted text. Plan numbers no longer match wave order, so each unexecuted plan below carries its wave.
 
 Plans:
 - [x] 01-01-PLAN.md - Cargo workspace, dual licence, CI skeleton, histogram fixture
@@ -82,10 +82,10 @@ Plans:
 - [x] 01-09-PLAN.md - The measurement protocol and the publication layout documents
 - [x] 01-10-PLAN.md - Reconstructed manifests and the 2026-08-28 README correction
 - [x] 01-11-PLAN.md - Calibration pair and the RT firmware floor re-run (rig runbook)
-- [ ] 01-12-PLAN.md - PLAT-01 investigation: armed tracing, threshold calibration, three cycles (rig runbook) [wave 15]
-- [ ] 01-13-PLAN.md - PLAT-03 headline capture and the verdict, with no subtraction (rig runbook) [wave 16]
-- [ ] 01-14-PLAN.md - Weekly job: nrmeasure series with nullable statistics, systemd units, regression gate [wave 17]
-- [ ] 01-15-PLAN.md - Rig install runbook: enable the weekly timer and observe the first fire [wave 18]
+- [ ] 01-12-PLAN.md - PLAT-01 investigation: armed tracing, threshold calibration, three cycles (rig runbook) [wave 19]
+- [ ] 01-13-PLAN.md - PLAT-03 headline capture and the verdict, with no subtraction (rig runbook) [wave 20]
+- [ ] 01-14-PLAN.md - Weekly job: nrmeasure series with nullable statistics, systemd units, regression gate [wave 21]
+- [ ] 01-15-PLAN.md - Rig install runbook: enable the weekly timer and observe the first fire [wave 22]
 - [x] 01-16-PLAN.md - Harness identity, argv provenance, and the re-derivation guard [wave 8]
 - [x] 01-17-PLAN.md - The durable attempt record and per-instrument interference windows [wave 9]
 - [x] 01-18-PLAN.md - Gate audit: every precondition establishes what its name claims [wave 10]
@@ -94,6 +94,20 @@ Plans:
 - [x] 01-21-PLAN.md - Wire hwnoise and MSR_SMI_COUNT into nrmeasure run [wave 13]
 - [x] 01-22-PLAN.md - Rig entry point: sudoers rule, root scripts, msr-tools, format probes [wave 11]
 - [x] 01-23-PLAN.md - Re-take D-18 on the isolated cores and correct the published firmware record [wave 14]
+- [ ] 01-24-PLAN.md - Run admission decided from evidence upstream of the measured latency (D-28) [wave 15]
+- [ ] 01-25-PLAN.md - TracersQuiescent sees rtla's own instance and its sampling threads [wave 16]
+- [ ] 01-26-PLAN.md - Strict verification re-derives firmware figures; the published labels become true [wave 17]
+- [ ] 01-27-PLAN.md - Rig source identity (D-29) and one harness check on the real machine (rig runbook) [wave 18]
+
+**Review note (2026-09-07)**: `01-REVIEW-2026-09-06.md` is the second adversarial review of this
+phase, and every finding in it was verified against the tree before being written down. Its two
+blocking findings (A1, run admission; A2, tracer quiescence) are closed by plans 01-24 and 01-25,
+its two harness gaps (C1, firmware re-derivation; C2, harness identity on the rig) by plans 01-26
+and 01-27, and its two published-claim findings (B4, the `context switches` label; B5, the hwnoise
+coverage caveat) by plan 01-26. Its findings B1, B2 and B3 were closed during plan 01-23. Its two
+findings against unexecuted plan text (D1, a credential helper that leaked its token to `ps`; D2,
+a non-reproduction branch that drew conclusions non-observation does not support) were fixed in
+place inside plans 01-14 and 01-12 on 2026-09-07.
 
 **Criteria note (2026-09-07)**: criteria 1 and 3 were rewritten. Both previously mandated a
 positive finding (a named kernel path, a named platform cause), which no amount of disciplined

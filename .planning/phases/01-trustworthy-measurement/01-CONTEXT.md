@@ -177,6 +177,47 @@ consume. The operator settled three questions before replanning.
   `render_plat03_verdict` (commit ece44b0) reports the two figures side by side, attributed to
   their source runs and conditions, and states that they are not combined. Keep it that way.
 
+### Run admission and rig identity, after the second review (added 2026-09-07)
+
+A second adversarial review (`01-REVIEW-2026-09-06.md`, taken after the D-18 re-take captures
+landed) found that the four remaining plans could not satisfy the phase's success criteria, and
+that one defect made plan 01-13 impossible to complete as specified. Every finding was verified
+against the tree before it was written down. Two of them need a decision recorded rather than an
+implementation choice.
+
+- **D-28:** Run admission is decided only from evidence causally upstream of the latency number,
+  and never from the shape of the latency itself. `nrmeasure run` consults the precondition
+  results, tool exit codes, fixture use, the `--allow-precondition-violation` waiver, the
+  `/proc/interrupts` counter deltas against calibrated thresholds when calibrated thresholds
+  exist, the exact `MSR_SMI_COUNT` delta and the recorded thermal maximum, and records each with
+  what it observed and what it made of it. The D-24 tail verdict is still computed, still recorded
+  on the manifest and still rendered in `REPORT.md`, and it never admits or excludes a run by
+  itself.
+  Rationale: `determine_exclusion` previously returned `excluded_from_series = true`
+  unconditionally while the thresholds were provisional, which excluded all three clean D-18
+  re-take arms and made plan 01-13's headline capture and plan 01-14's weekly series impossible.
+  Flipping the file to `calibrated` was the obvious fix and is wrong: D-24 classifies from
+  `max / p99` and the per-thread maximum spread, both computed from the run's own histogram, and a
+  genuine platform regression produces the same signature as contamination, so the series would
+  silently drop exactly the results it exists to catch. There is also a bootstrap problem, checked
+  against the code: calibrating any threshold set needs a body of clean runs, and a body of clean
+  runs needs runs to be admitted, so admission cannot depend on calibrated thresholds without a
+  circular dependency. The invariant is enforced by the gate's own type signature, which is never
+  handed the verdict or the tail metrics, rather than by a comment asking future edits to behave.
+- **D-29:** The reference rig records its source revision from a stamp written into the rsync
+  payload at push time, under its own provenance value `pushed-stamp`, rather than by installing
+  `git` on the rig or by recording the dev-host revision as though it had been read at build time.
+  Rationale: all three D-18 re-take manifests recorded `git_sha: "unavailable-at-build-time"`,
+  because the rig has no `git` and `~/neurorust` there is an rsync mirror with no `.git`.
+  Installing `git` fixes nothing on its own, since the mirror still has no repository to read.
+  Recording the dev-host revision as `build-time` would assert a provenance nobody observed where
+  the build happened, which is the shape of the defect audit finding 6 already cost this project
+  once. A separate `pushed-stamp` value keeps `build-time` meaning what it has always meant and
+  tells a reader of a published manifest which of the two they are looking at. The push is a
+  committed script with an explicit include list, so `measurements/` on the rig can never be
+  touched by it, and the rig's environment does not change, so the D-14 snapshot the committed
+  measurements sit under does not drift.
+
 ### Claude's Discretion
 
 The publication surface and run matrix were reviewed and left to Claude:
