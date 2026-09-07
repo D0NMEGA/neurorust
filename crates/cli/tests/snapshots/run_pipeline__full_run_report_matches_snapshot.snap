@@ -54,7 +54,7 @@ nic_wifi:     absent driver=absent
 | on-ac-power | pass | AC=1 | AC=1 |
 | thermal-headroom-at-start | pass | 40.0 C | package temp <= 70 C |
 | no-package-manager-activity | pass | none | no apt, dpkg, unattended-upgrade or snapd process |
-| tracers-quiescent | pass | current_tracer=nop events/enable=unavailable set_event=unavailable tracing_on=unavailable | current_tracer=nop, events/enable=0, set_event=(empty), tracing_on=0 |
+| tracers-quiescent | pass | current_tracer=nop events/enable=unavailable set_event=unavailable tracing_on=unavailable instances=unavailable samplers=none | current_tracer=nop, events/enable=0, set_event=(empty), tracing_on=0, no live tracing instance, no osnoise/timerlat kthread on the target cpus |
 
 ## Series admission
 
