@@ -902,33 +902,40 @@ mod tests {
         assert_eq!(restored_unavailable, unavailable);
     }
 
-    /// All eight committed manifests still deserialise with `firmware_screens` and
-    /// `smi_counts` absent from the JSON on disk: every manifest committed before this plan
-    /// predates both fields, and this is precisely the case `#[serde(default)]` exists to
-    /// keep validating. Counted independently on 2026-09-05 (see this plan's own
-    /// `<interfaces>` block); a future plan adding a ninth run directory should update the
-    /// count here deliberately.
+    /// The eight manifests committed before plan 01-20 added `firmware_screens` and
+    /// `smi_counts` to the schema, named explicitly rather than discovered by globbing
+    /// `measurements/`: plan 01-23 committed the first manifests that legitimately DO carry
+    /// both fields (real `rtla hwnoise` captures), so a live directory scan would now sweep
+    /// those up too and fail on them for doing exactly what they are supposed to do. Pinning
+    /// the list keeps this test meaningful forever, not just until the next real capture
+    /// lands: it proves `#[serde(default)]` still parses these eight specific, historical,
+    /// pre-fields manifests, which is the only thing this test ever claimed to check.
+    /// Counted independently on 2026-09-05 (see plan 01-20's own `<interfaces>` block); a
+    /// future plan must not add a ninth name here, since every manifest committed after
+    /// plan 01-20 is expected to carry these fields.
+    const MANIFESTS_PREDATING_FIRMWARE_FIELDS: &[&str] = &[
+        "2026-08-28-precision3591",
+        "2026-09-01-precision3591-calibration-clean",
+        "2026-09-02-precision3591-calibration-contaminated",
+        "2026-09-03-precision3591-calibration-clean",
+        "2026-09-03-precision3591-calibration-contaminated",
+        "2026-09-05-precision3591-screen",
+        "2026-09-05-precision3591-screen-02",
+        "2026-09-05-precision3591-screen-03",
+    ];
+
     #[test]
     fn committed_manifests_parse_without_firmware_fields() {
         let measurements_dir =
             std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../measurements"));
-        let mut checked = 0;
-        for entry in std::fs::read_dir(measurements_dir)
-            .expect("measurements/ must exist for this test to mean anything")
-        {
-            let entry = entry.expect("readable directory entry");
-            let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
-            let manifest_path = path.join("manifest.json");
-            let Ok(text) = std::fs::read_to_string(&manifest_path) else {
-                continue; // a failed-attempt directory has no manifest.json at all
-            };
+        for run_id in MANIFESTS_PREDATING_FIRMWARE_FIELDS {
+            let manifest_path = measurements_dir.join(run_id).join("manifest.json");
+            let text = std::fs::read_to_string(&manifest_path)
+                .unwrap_or_else(|err| panic!("failed to read {}: {err}", manifest_path.display()));
             assert!(
                 !text.contains("firmware_screens") && !text.contains("smi_counts"),
                 "{}: expected to predate the firmware fields this test is about; if it now \
-                 carries them, this test no longer exercises the absent-field default",
+                 carries them, remove it from MANIFESTS_PREDATING_FIRMWARE_FIELDS instead",
                 manifest_path.display()
             );
             let manifest: RunManifest = serde_json::from_str(&text).unwrap_or_else(|err| {
@@ -944,11 +951,51 @@ mod tests {
                 "{} predates smi_counts and must default to absent",
                 manifest_path.display()
             );
+        }
+    }
+
+    /// The mirror image of [`committed_manifests_parse_without_firmware_fields`], added by
+    /// plan 01-23: every manifest committed after plan 01-20 (the D-18 re-take arms) DOES
+    /// carry both fields, on disk, not defaulted. A manifest satisfying neither list would
+    /// be a real gap in this pair's coverage; `firmware_cpu_coverage.rs`'s
+    /// `hwnoise_captures_cover_the_isolated_cores` separately checks what those fields say,
+    /// not merely that they are present.
+    #[test]
+    fn newer_manifests_carry_firmware_fields_on_disk() {
+        let measurements_dir =
+            std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../measurements"));
+        let predates: std::collections::HashSet<&str> = MANIFESTS_PREDATING_FIRMWARE_FIELDS
+            .iter()
+            .copied()
+            .collect();
+        let mut checked = 0;
+        for entry in std::fs::read_dir(measurements_dir)
+            .expect("measurements/ must exist for this test to mean anything")
+        {
+            let entry = entry.expect("readable directory entry");
+            let path = entry.path();
+            let Some(run_id) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if predates.contains(run_id) {
+                continue;
+            }
+            let manifest_path = path.join("manifest.json");
+            let Ok(text) = std::fs::read_to_string(&manifest_path) else {
+                continue; // a failed-attempt directory has no manifest.json at all
+            };
+            assert!(
+                text.contains("firmware_screens") || text.contains("smi_counts"),
+                "{}: not in MANIFESTS_PREDATING_FIRMWARE_FIELDS but also carries neither \
+                 field on disk; add it to that list if it genuinely predates plan 01-20, or \
+                 investigate why a post-01-20 run has neither",
+                manifest_path.display()
+            );
             checked += 1;
         }
-        assert_eq!(
-            checked, 8,
-            "expected exactly the 8 committed run manifests as of plan 01-20"
+        assert!(
+            checked >= 4,
+            "expected at least the four post-01-20 manifests plan 01-23 committed; found {checked}"
         );
     }
 }

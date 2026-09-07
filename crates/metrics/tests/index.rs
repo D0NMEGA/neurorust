@@ -1,6 +1,7 @@
 //! Proves that making `RunSummary::p99_us`/`max_us` `Option<u64>` did not change a single byte
-//! of the committed `measurements/INDEX.md`: this crate's own `render_index`, driven from the
-//! eight real committed manifests, must reproduce the file exactly.
+//! of the committed `measurements/INDEX.md`: this crate's own `render_index`, driven from
+//! every real committed run directory (manifest-bearing or, since plan 01-23, a failed
+//! attempt with no manifest at all), must reproduce the file exactly.
 //!
 //! `nrmeasure verify --write-index` against the real tree (`crates/cli/src/cmd/verify.rs`) is
 //! the second, independent proof named in this plan; this one runs at the nr-metrics level with
@@ -10,7 +11,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use nr_manifest::{ArtifactKind, RunManifest};
+use nr_manifest::{ArtifactKind, AttemptRecord, AttemptStatus, ProvenanceTier, RunManifest};
 use nr_metrics::index::{RunOutcome, RunSummary, render_index};
 use time::macros::format_description;
 
@@ -33,6 +34,50 @@ fn compute_percentiles(run_dir: &Path, manifest: &RunManifest) -> Option<(u64, u
     Some((p99_us, percentiles.max_us))
 }
 
+/// Builds the `RunSummary` for a directory holding only an `ATTEMPT.json` (`status:
+/// failed`, no `manifest.json`): plan 01-23 committed the first real run this crate has ever
+/// had to index that way (`measurements/2026-09-06-precision3591-screen`, orphaned by a
+/// killed `rtla`, closed out with `nrmeasure attempt`). Mirrors `crates/cli/src/cmd/
+/// verify.rs`'s own `build_summaries` match arm for `RunDirRecord::FailedAttempt` exactly,
+/// since this test's whole point is an independent re-derivation of the same index.
+fn failed_attempt_summary(run_dir: &Path) -> RunSummary {
+    let attempt: AttemptRecord = serde_json::from_str(
+        &fs::read_to_string(run_dir.join("ATTEMPT.json")).expect("read ATTEMPT.json"),
+    )
+    .expect("ATTEMPT.json parses");
+    assert_eq!(
+        attempt.status,
+        AttemptStatus::Failed,
+        "{}: a manifest-less directory must hold a failed attempt, not an in-progress one",
+        run_dir.display()
+    );
+
+    let date_format = format_description!("[year]-[month]-[day]");
+    let date = attempt
+        .utc_start
+        .date()
+        .format(&date_format)
+        .expect("utc_start formats");
+    let reason = attempt
+        .failure
+        .as_ref()
+        .map(|failure| format!("attempt failed at {}: {}", failure.stage, failure.message));
+
+    RunSummary {
+        date,
+        run_id: attempt.run_id.clone(),
+        run_class: attempt.requested.run_class.clone(),
+        instrument_class: attempt.requested.instrument_class.clone(),
+        provenance_tier: ProvenanceTier::HarnessGenerated,
+        verdict: None,
+        p99_us: None,
+        max_us: None,
+        in_series: false,
+        reason,
+        outcome: RunOutcome::FailedAttempt,
+    }
+}
+
 fn load_summaries(measurements_root: &Path) -> Vec<RunSummary> {
     let mut names: Vec<String> = fs::read_dir(measurements_root)
         .expect("measurements/ exists")
@@ -50,6 +95,9 @@ fn load_summaries(measurements_root: &Path) -> Vec<RunSummary> {
         .into_iter()
         .map(|name| {
             let run_dir = measurements_root.join(&name);
+            if !run_dir.join("manifest.json").is_file() {
+                return failed_attempt_summary(&run_dir);
+            }
             let manifest: RunManifest = serde_json::from_str(
                 &fs::read_to_string(run_dir.join("manifest.json")).expect("read manifest.json"),
             )
