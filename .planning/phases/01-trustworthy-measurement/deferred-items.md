@@ -532,3 +532,34 @@ recorded with an owner.
   a sampled CPU always emits its own row, citing cpu 7's committed row in
   `2026-09-06-precision3591-screen-03` as the proof, so a missing CPU produced no row at all
   (task 2).
+
+- **The published `manifest blake3:` line is not the blake3 of `manifest.json`, and it changed
+  on eleven reports without any evidence changing.** Found 2026-09-07 while independently
+  re-checking plan 01-26's report rewrite. `render_header`
+  (`crates/metrics/src/report.rs:193`) prints `manifest_blake3(manifest)`, which is
+  `blake3(serde_json::to_vec(manifest))`: a hash over the manifest re-serialised by the
+  running build, not over the committed file. So for
+  `2026-09-06-precision3591-screen-03` the report states
+  `98aaa38b...` while `b3sum manifest.json` gives `3d02815a...`, and the pre-rewrite report
+  stated `0bd5cc00...` against the same unchanged file. The field has never equalled the
+  file digest; this is not a regression from 01-26.
+
+  Two things are wrong with it. The label reads as "the blake3 of the manifest" and is not,
+  which is the same defect shape as finding B4 that plan 01-26 just fixed: the code is
+  honest (the `manifest_blake3` doc comment says "computed by the renderer itself rather than
+  read from a field") and the published label is not. A reader who checks the stated digest
+  against the file gets a mismatch and would reasonably read it as tampering, in a repository
+  whose entire claim is that published evidence can be checked.
+
+  And the guarantee its own doc comment asserts is weaker than stated. It says "the header
+  line changes whenever the manifest's content changes, so the two cannot silently drift
+  apart." Plan 01-26 demonstrated the converse: renaming the `context_switches` field to
+  `rescheduling_ipis` behind a serde alias changed the rendered digest on eleven reports while
+  no manifest content changed at all. The fingerprint tracks serialisation shape, not content,
+  so it cannot detect drift between a report and the manifest file beside it.
+
+  Owner: whichever plan next touches `render_header`. The likely fix is to publish
+  `blake3_file(manifest.json)` (`crates/manifest/src/checksum.rs:31`), which is the quantity
+  the label already promises and the one a reader can reproduce, and to correct the
+  `manifest_blake3` doc comment. Note this makes the eleven reports change again, so it
+  belongs with a rewrite pass rather than on its own.
