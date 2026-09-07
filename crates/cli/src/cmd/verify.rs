@@ -25,7 +25,12 @@
 //!      `## Results` figures are re-derived from the run's own raw capture and compared
 //!      (T-1-53). A run with no recorded `--histogram` bound, or a reconstructed run with no
 //!      generated report, is recorded as not re-derivable rather than guessed at (T-1-54,
-//!      T-1-55).
+//!      T-1-55). The same applies to every firmware screen: `manifest.json`'s
+//!      `firmware_screens` and `REPORT.md`'s `## Firmware screen` block are re-derived from the
+//!      run's own `rtla-hwnoise.txt` with the existing `nr_capture::hwnoise` parser (T-1-118), a
+//!      requested CPU that produced no row fails as a coverage problem rather than being
+//!      explained away (T-1-119), and a screen from an instrument this project has no parser
+//!      for yet is recorded not re-derivable by name rather than silently skipped.
 //!
 //! Exit code 0 on success, 1 on any check failure.
 
@@ -34,8 +39,11 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
+use nr_capture::hwnoise;
 use nr_histogram::hist::CyclictestRun;
-use nr_manifest::{ArtifactKind, AttemptRecord, AttemptStatus, ProvenanceTier, RunManifest};
+use nr_manifest::{
+    ArtifactKind, AttemptRecord, AttemptStatus, FirmwareScreen, ProvenanceTier, RunManifest,
+};
 use nr_metrics::index::{RunOutcome, RunSummary, render_index};
 use time::macros::format_description;
 
@@ -145,11 +153,18 @@ pub fn run(args: Args) -> anyhow::Result<i32> {
 
     let mut derived_summary: Option<(usize, usize)> = None;
     let mut derived_notes: Vec<String> = Vec::new();
+    let mut firmware_summary: Option<(usize, usize)> = None;
+    let mut firmware_notes: Vec<String> = Vec::new();
     if args.strict {
         let derived = check_derived_figures(&measurements_abs, &loaded);
         problems.extend(derived.problems);
         derived_notes = derived.notes;
         derived_summary = Some((derived.rederived, derived.not_rederivable));
+
+        let firmware = check_firmware_figures(&measurements_abs, &loaded);
+        problems.extend(firmware.problems);
+        firmware_notes = firmware.notes;
+        firmware_summary = Some((firmware.rederived, firmware.not_rederivable));
     }
 
     let strict_note = if args.strict { " (strict)" } else { "" };
@@ -158,14 +173,24 @@ pub fn run(args: Args) -> anyhow::Result<i32> {
             format!("{rederived} re-derived, {not_rederivable} not re-derivable, ")
         })
         .unwrap_or_default();
+    let firmware_note = firmware_summary
+        .map(|(rederived, not_rederivable)| {
+            format!(
+                "{rederived} firmware re-derived, {not_rederivable} firmware not re-derivable, "
+            )
+        })
+        .unwrap_or_default();
     println!(
-        "verify: {run_dir_count} run directories, {derived_note}{} problems{strict_note}",
+        "verify: {run_dir_count} run directories, {derived_note}{firmware_note}{} problems{strict_note}",
         problems.len()
     );
     for problem in &problems {
         println!("{problem}");
     }
     for note in &derived_notes {
+        println!("{note}");
+    }
+    for note in &firmware_notes {
         println!("{note}");
     }
 
@@ -925,6 +950,360 @@ fn compare_derived_results(
             report_path.display(),
             published.maximum_us,
             percentiles.max_us
+        ));
+    }
+
+    problems
+}
+
+// ---------------------------------------------------------------------------------
+// Check 4 (--strict only), continued: re-derive every published firmware figure.
+// ---------------------------------------------------------------------------------
+
+/// Re-derives every harness-generated run's published firmware-screen figures, both
+/// `manifest.json`'s `firmware_screens` and `REPORT.md`'s `## Firmware screen` block, from the
+/// run's own raw capture, using the existing `nr_capture::hwnoise` parser (plan 01-20's, not a
+/// second one). Before this, `verify.rs` knew `rtla-hwnoise*.txt` only as a filename to
+/// checksum; a firmware maximum edited by hand into either published surface passed the gate.
+/// Closes C1 of `01-REVIEW-2026-09-06.md` (T-1-118).
+///
+/// A screen whose instrument is not `rtla-hwnoise` is recorded not re-derivable rather than
+/// checked or failed: this project has exactly one firmware parser, and the note (not a
+/// problem) names the instrument so a future second one stays visible instead of silently
+/// unchecked.
+///
+/// B5 (T-1-119): a CPU in `requested_cpus` that produced no row at all in the raw capture is a
+/// problem, worded as a coverage failure and never as a claim about whether the CPU was
+/// sampled. The raw capture cannot tell the two apart; cpu 7's final row in
+/// `measurements/2026-09-06-precision3591-screen-03/rtla-hwnoise.txt` (full exposure, zero
+/// events, a genuine row) is the committed proof that a truly-sampled idle CPU still emits one,
+/// so a CPU's absence from the output is never evidence that it was sampled.
+fn check_firmware_figures(
+    measurements_root: &Path,
+    loaded: &HashMap<String, RunDirRecord>,
+) -> DerivedFiguresReport {
+    let mut problems = Vec::new();
+    let mut notes = Vec::new();
+    let mut rederived = 0usize;
+    let mut not_rederivable = 0usize;
+
+    let mut names: Vec<&String> = loaded.keys().collect();
+    names.sort();
+
+    for name in names {
+        let RunDirRecord::Manifest(manifest) = &loaded[name] else {
+            continue;
+        };
+        if !matches!(manifest.provenance_tier, ProvenanceTier::HarnessGenerated)
+            || manifest.firmware_screens.is_empty()
+        {
+            continue;
+        }
+        let run_dir = measurements_root.join(name);
+
+        let report_path = run_dir.join("REPORT.md");
+        let report_blocks = std::fs::read_to_string(&report_path)
+            .map(|text| parse_report_firmware(&text))
+            .unwrap_or_default();
+
+        for (index, screen) in manifest.firmware_screens.iter().enumerate() {
+            if screen.instrument != "rtla-hwnoise" {
+                not_rederivable += 1;
+                notes.push(format!(
+                    "{}: not re-derivable: firmware screen instrument {:?} has no parser yet \
+                     (only rtla-hwnoise does)",
+                    run_dir.display(),
+                    screen.instrument
+                ));
+                continue;
+            }
+
+            let Some(artifact) = manifest
+                .artifacts
+                .iter()
+                .find(|artifact| artifact.kind == ArtifactKind::RtlaHwnoise)
+            else {
+                problems.push(format!(
+                    "{}: manifest carries a firmware screen but no rtla-hwnoise artifact",
+                    run_dir.display()
+                ));
+                continue;
+            };
+
+            let capture_path = run_dir.join(&artifact.path);
+            let parsed = match hwnoise::parse_hwnoise_file(&capture_path, &screen.requested_cpus) {
+                Ok(parsed) => parsed,
+                Err(err) => {
+                    problems.push(format!(
+                        "{}: failed to re-derive firmware figures from {}: {err}",
+                        run_dir.display(),
+                        artifact.path
+                    ));
+                    continue;
+                }
+            };
+            rederived += 1;
+
+            for &cpu in &parsed.missing_cpus {
+                problems.push(format!(
+                    "{}: cpu {cpu} was requested but produced no row in {}; \
+                     coverage cannot be confirmed for it",
+                    run_dir.display(),
+                    artifact.path
+                ));
+            }
+
+            let observed_rows: Vec<_> = parsed
+                .rows
+                .iter()
+                .filter(|row| parsed.observed_cpus.contains(&row.cpu))
+                .collect();
+            let derived_max_us = observed_rows.iter().map(|row| row.max_single_us).max();
+            let derived_events_recorded: u64 = observed_rows.iter().map(|row| row.hw_count).sum();
+            let derived_exposure: Vec<(u32, f64)> = observed_rows
+                .iter()
+                .map(|row| (row.cpu, row.runtime_us as f64 / 1_000_000.0))
+                .collect();
+
+            problems.extend(compare_firmware_manifest(
+                &run_dir,
+                screen,
+                &parsed.observed_cpus,
+                derived_max_us,
+                derived_events_recorded,
+                &derived_exposure,
+            ));
+
+            match report_blocks.get(index) {
+                Some(block) => problems.extend(compare_firmware_report(
+                    &report_path,
+                    block,
+                    &parsed.observed_cpus,
+                    derived_max_us,
+                    derived_events_recorded,
+                )),
+                None => problems.push(format!(
+                    "{}: manifest carries a firmware screen but REPORT.md has no matching \
+                     ## Firmware screen block",
+                    report_path.display()
+                )),
+            }
+        }
+    }
+
+    DerivedFiguresReport {
+        problems,
+        notes,
+        rederived,
+        not_rederivable,
+    }
+}
+
+/// `Some(us)` renders as `"{us} us"`; `None` renders as the literal words
+/// `render_firmware_screens` (`nr_metrics::report`) emits for "nothing observed above
+/// threshold", so a disagreement message reads the same words a reader sees in `REPORT.md`.
+fn format_firmware_max(max_us: Option<u64>) -> String {
+    match max_us {
+        Some(us) => format!("{us} us"),
+        None => "none observed above threshold".to_string(),
+    }
+}
+
+/// Compares one firmware screen's re-derived figures against what `manifest.json` publishes for
+/// it, returning one problem per disagreement (never stopping at the first), matching
+/// `compare_derived_results`'s own rule.
+fn compare_firmware_manifest(
+    run_dir: &Path,
+    screen: &FirmwareScreen,
+    derived_observed_cpus: &[u32],
+    derived_max_us: Option<u64>,
+    derived_events_recorded: u64,
+    derived_exposure: &[(u32, f64)],
+) -> Vec<String> {
+    let mut problems = Vec::new();
+
+    if screen.observed_cpus.as_slice() != derived_observed_cpus {
+        problems.push(format!(
+            "{}: manifest firmware observed cpus disagrees: published {:?}, re-derived {:?}",
+            run_dir.display(),
+            screen.observed_cpus,
+            derived_observed_cpus
+        ));
+    }
+    if screen.max_us != derived_max_us {
+        problems.push(format!(
+            "{}: manifest firmware maximum disagrees: published {}, re-derived {}",
+            run_dir.display(),
+            format_firmware_max(screen.max_us),
+            format_firmware_max(derived_max_us)
+        ));
+    }
+    if screen.events_recorded != derived_events_recorded {
+        problems.push(format!(
+            "{}: manifest firmware events recorded disagrees: published {}, re-derived {}",
+            run_dir.display(),
+            screen.events_recorded,
+            derived_events_recorded
+        ));
+    }
+
+    // 1e-6 second tolerance: per_cpu_exposure_seconds is an f64 written and re-read through
+    // JSON, and an exact-equality test on that would fail for a reason unrelated to whether the
+    // figure is wrong.
+    const EXPOSURE_TOLERANCE_SECONDS: f64 = 1e-6;
+    for &(cpu, seconds) in derived_exposure {
+        let published = screen
+            .per_cpu_exposure_seconds
+            .iter()
+            .find(|exposure| exposure.cpu == cpu)
+            .map(|exposure| exposure.seconds);
+        match published {
+            Some(value) if (value - seconds).abs() <= EXPOSURE_TOLERANCE_SECONDS => {}
+            Some(value) => problems.push(format!(
+                "{}: manifest per-cpu exposure for cpu {cpu} disagrees: published {value}s, \
+                 re-derived {seconds}s",
+                run_dir.display()
+            )),
+            None => problems.push(format!(
+                "{}: manifest has no per-cpu exposure recorded for cpu {cpu}, re-derived \
+                 {seconds}s",
+                run_dir.display()
+            )),
+        }
+    }
+
+    problems
+}
+
+/// One `## Firmware screen` block's published figures, parsed out of a generated `REPORT.md`.
+/// One entry per `FirmwareScreen` the run took, in file order, matching the order
+/// `manifest.firmware_screens` lists them: `render_firmware_screens` writes one block per screen
+/// in that same order.
+struct FirmwareReportBlock {
+    observed_cpus: Vec<u32>,
+    /// `None` for the literal `maximum: none observed above threshold` line.
+    maximum_us: Option<u64>,
+    events_recorded: u64,
+}
+
+/// The `## Firmware screen` section of a generated `REPORT.md`, bounded by the next `## `
+/// heading (always `## Results`; see `render_run_report`'s fixed section order). `None` when
+/// the report has no such heading at all.
+fn firmware_screen_section(report_text: &str) -> Option<&str> {
+    let heading = "## Firmware screen\n";
+    let start = report_text.find(heading)? + heading.len();
+    let body = &report_text[start..];
+    let end = body.find("\n## ").unwrap_or(body.len());
+    Some(&body[..end])
+}
+
+/// Takes a complete pending block out of the three accumulators, leaving them `None` either
+/// way: a block missing any of the three fields (malformed input) is dropped rather than
+/// published as a partial re-derivation target, which surfaces as one fewer parsed block than
+/// the manifest expects, the caller's own problem to report.
+fn take_firmware_block(
+    observed_cpus: &mut Option<Vec<u32>>,
+    maximum_us: &mut Option<Option<u64>>,
+    events_recorded: &mut Option<u64>,
+) -> Option<FirmwareReportBlock> {
+    let cpus = observed_cpus.take()?;
+    let max = maximum_us.take()?;
+    let events = events_recorded.take()?;
+    Some(FirmwareReportBlock {
+        observed_cpus: cpus,
+        maximum_us: max,
+        events_recorded: events,
+    })
+}
+
+/// Parses every `## Firmware screen` block out of a generated `REPORT.md`, matching the exact
+/// line prefixes `render_firmware_screens` (`nr_metrics::report`) emits. Empty when the report
+/// has no such section; the caller treats a manifest that expected one as its own problem.
+fn parse_report_firmware(report_text: &str) -> Vec<FirmwareReportBlock> {
+    let Some(section) = firmware_screen_section(report_text) else {
+        return Vec::new();
+    };
+
+    let mut blocks = Vec::new();
+    let mut observed_cpus: Option<Vec<u32>> = None;
+    let mut maximum_us: Option<Option<u64>> = None;
+    let mut events_recorded: Option<u64> = None;
+
+    for line in section.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("instrument:") {
+            if let Some(block) =
+                take_firmware_block(&mut observed_cpus, &mut maximum_us, &mut events_recorded)
+            {
+                blocks.push(block);
+            }
+        } else if let Some(rest) = trimmed.strip_prefix("observed cpus:") {
+            observed_cpus = Some(parse_cpu_list(rest.trim()));
+        } else if let Some(rest) = trimmed.strip_prefix("maximum:") {
+            let rest = rest.trim();
+            maximum_us = Some(if rest == "none observed above threshold" {
+                None
+            } else {
+                rest.split_whitespace()
+                    .next()
+                    .and_then(|value| value.parse::<u64>().ok())
+            });
+        } else if let Some(rest) = trimmed.strip_prefix("events recorded:") {
+            events_recorded = rest.trim().parse::<u64>().ok();
+        }
+    }
+    if let Some(block) =
+        take_firmware_block(&mut observed_cpus, &mut maximum_us, &mut events_recorded)
+    {
+        blocks.push(block);
+    }
+
+    blocks
+}
+
+/// Parses a comma-joined CPU list, `format_cpu_list`'s own inverse (`nr_metrics::report`), e.g.
+/// `"6,7,8,9,10,11"`. An empty string yields an empty list.
+fn parse_cpu_list(s: &str) -> Vec<u32> {
+    if s.is_empty() {
+        return Vec::new();
+    }
+    s.split(',')
+        .filter_map(|token| token.trim().parse().ok())
+        .collect()
+}
+
+/// Compares one firmware screen's re-derived figures against what `REPORT.md` publishes for it.
+fn compare_firmware_report(
+    report_path: &Path,
+    block: &FirmwareReportBlock,
+    derived_observed_cpus: &[u32],
+    derived_max_us: Option<u64>,
+    derived_events_recorded: u64,
+) -> Vec<String> {
+    let mut problems = Vec::new();
+
+    if block.observed_cpus.as_slice() != derived_observed_cpus {
+        problems.push(format!(
+            "{}: published firmware observed cpus disagrees: published {:?}, re-derived {:?}",
+            report_path.display(),
+            block.observed_cpus,
+            derived_observed_cpus
+        ));
+    }
+    if block.maximum_us != derived_max_us {
+        problems.push(format!(
+            "{}: published firmware maximum disagrees: published {}, re-derived {}",
+            report_path.display(),
+            format_firmware_max(block.maximum_us),
+            format_firmware_max(derived_max_us)
+        ));
+    }
+    if block.events_recorded != derived_events_recorded {
+        problems.push(format!(
+            "{}: published firmware events recorded disagrees: published {}, re-derived {}",
+            report_path.display(),
+            block.events_recorded,
+            derived_events_recorded
         ));
     }
 

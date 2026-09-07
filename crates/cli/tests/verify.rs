@@ -830,3 +830,236 @@ fn verify_rejects_an_in_progress_attempt() {
         "stdout should describe the run as unfinished: {stdout}"
     );
 }
+
+// ---------------------------------------------------------------------------------
+// C1 / B5 (01-26): strict verification re-derives every published firmware figure from
+// the run's own `rtla-hwnoise.txt`, using the existing `nr_capture::hwnoise` parser, and
+// a requested CPU with no row fails the coverage claim instead of being explained away.
+// ---------------------------------------------------------------------------------
+
+#[test]
+fn firmware_figures_rederive_from_the_committed_captures() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    for run_id in [
+        "2026-09-06-precision3591-screen-02",
+        "2026-09-06-precision3591-screen-03",
+        "2026-09-06-precision3591-screen-04",
+        "2026-09-07-precision3591-screen",
+    ] {
+        copy_real_run(run_id, &measurements.join(run_id));
+    }
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("4 firmware re-derived"),
+        "stdout should count all four committed firmware screens re-derived: {stdout}"
+    );
+}
+
+#[test]
+fn a_hand_edited_report_maximum_fails_strict() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    let run_id = "2026-09-06-precision3591-screen-03";
+    let run_dir = measurements.join(run_id);
+    copy_real_run(run_id, &run_dir);
+
+    let report_path = run_dir.join("REPORT.md");
+    let original = fs::read_to_string(&report_path).expect("read REPORT.md");
+    let real_line = "maximum: 1 us (the largest Max Single value (one-shot hardware-noise \
+                      event) across the observed CPUs' final rtla hwnoise rows)";
+    let tampered = original.replace(real_line, "maximum: 999 us (tampered)");
+    assert_ne!(
+        original, tampered,
+        "the fixture must actually carry the firmware maximum line this test edits"
+    );
+    fs::write(&report_path, tampered).expect("write tampered REPORT.md");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(run_id),
+        "stdout should name the run directory: {stdout}"
+    );
+    assert!(stdout.contains("maximum"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("999 us"),
+        "stdout should name the published value: {stdout}"
+    );
+    assert!(
+        stdout.contains("re-derived 1 us"),
+        "stdout should name the re-derived value: {stdout}"
+    );
+}
+
+#[test]
+fn a_hand_edited_manifest_maximum_fails_strict() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    let run_id = "2026-09-06-precision3591-screen-03";
+    let run_dir = measurements.join(run_id);
+    copy_real_run(run_id, &run_dir);
+
+    let manifest_path = run_dir.join("manifest.json");
+    let mut manifest: Value =
+        serde_json::from_str(&fs::read_to_string(&manifest_path).expect("read manifest"))
+            .expect("parse manifest");
+    assert_eq!(
+        manifest["firmware_screens"][0]["max_us"],
+        Value::from(1),
+        "the fixture must actually carry the real published max_us this test edits"
+    );
+    manifest["firmware_screens"][0]["max_us"] = Value::from(999);
+    fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).expect("serialise manifest"),
+    )
+    .expect("write manifest.json");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(run_id),
+        "stdout should name the run directory: {stdout}"
+    );
+    assert!(stdout.contains("maximum"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("999 us"),
+        "stdout should name the published value: {stdout}"
+    );
+    assert!(
+        stdout.contains("re-derived 1 us"),
+        "stdout should name the re-derived value: {stdout}"
+    );
+}
+
+#[test]
+fn a_requested_cpu_with_no_row_fails_coverage() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    let run_id = "2026-09-06-precision3591-screen-03";
+    let run_dir = measurements.join(run_id);
+    copy_real_run(run_id, &run_dir);
+
+    let capture_path = run_dir.join("rtla-hwnoise.txt");
+    let original = fs::read_to_string(&capture_path).expect("read rtla-hwnoise.txt");
+    // Every header, duration and redraw-marker line starts with a token other than the
+    // literal "11", so filtering on the row's own first token removes exactly cpu 11's rows
+    // (every redraw block's) and nothing else, leaving cpus 6-10 fully intact.
+    let stripped: String = original
+        .lines()
+        .filter(|line| line.split_whitespace().next() != Some("11"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    assert_ne!(
+        original, stripped,
+        "the fixture must actually carry cpu 11 rows to strip"
+    );
+    fs::write(&capture_path, stripped).expect("write stripped capture");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(run_id),
+        "stdout should name the run directory: {stdout}"
+    );
+    assert!(
+        stdout.contains("cpu 11"),
+        "stdout should name cpu 11: {stdout}"
+    );
+    assert!(
+        stdout.contains("coverage cannot be confirmed"),
+        "stdout: {stdout}"
+    );
+}
+
+#[test]
+fn an_unparsable_firmware_capture_is_a_problem_not_a_skip() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    let run_id = "2026-09-06-precision3591-screen-03";
+    let run_dir = measurements.join(run_id);
+    copy_real_run(run_id, &run_dir);
+
+    let capture_path = run_dir.join("rtla-hwnoise.txt");
+    fs::write(&capture_path, b"this is not rtla hwnoise output\n").expect("truncate capture");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(run_id),
+        "stdout should name the run directory: {stdout}"
+    );
+    assert!(
+        stdout.contains("rtla-hwnoise.txt"),
+        "stdout should name the file: {stdout}"
+    );
+    assert!(
+        stdout.contains("no 'rtla hwnoise' column header found"),
+        "stdout should name the parser error, never a silent pass: {stdout}"
+    );
+}
+
+#[test]
+fn a_run_with_no_firmware_screen_is_neither_checked_nor_failed() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    let run_id = "2026-09-01-precision3591-calibration-clean";
+    copy_real_run(run_id, &measurements.join(run_id));
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("0 firmware re-derived, 0 firmware not re-derivable"),
+        "a cyclictest-only run must be counted in neither firmware bucket: {stdout}"
+    );
+}
