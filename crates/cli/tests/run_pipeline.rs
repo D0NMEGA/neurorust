@@ -1071,6 +1071,92 @@ fn argv_redacts_a_home_directory_prefix() {
     assert!(!mapping.executed_path.contains(&fake_home_str));
 }
 
+/// Plan 01-23, T-1-95: `scripts/nr-run-measurement` launches this binary as a root
+/// `systemd-run` transient unit with no `User=`/`PAMName=`, whose environment does not
+/// reliably set `HOME` to the operator's real home directory. Three committed manifests
+/// leaked `/home/<user>/...` unredacted this way before it was caught, even though
+/// `argv_redacts_a_home_directory_prefix` above was green throughout: that test forces
+/// `HOME` via `.env(...)`, so it never exercised the real gap. Here `HOME` is set to a
+/// directory unrelated to where the run directory actually lives (standing in for "unset
+/// or wrong"), so only the measurements-root-derived prefix can save the redaction.
+#[test]
+fn argv_redacts_the_conventional_home_shape_even_when_home_does_not_match_it() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let facts_path = write_fixture(temp.path(), "facts.txt", &tuned_facts_text());
+    let interrupts_path = write_fixture(temp.path(), "interrupts.txt", INTERRUPTS);
+
+    // Mirrors the real rig's own layout (`/home/d0nmega/neurorust/measurements`): a user
+    // directory literally named `home`, not the fake_home style of
+    // `argv_redacts_a_home_directory_prefix` above, which sits under a bare tempdir name
+    // that just happens to be pointed to by `$HOME`. Here `$HOME` points somewhere
+    // unrelated, standing in for the real production gap (unset or wrong under a
+    // `systemd-run` transient unit), so only the structural `/home/<user>` match can save
+    // the redaction.
+    let home_like = temp.path().join("home").join("d0nmega-fake");
+    let real_root = home_like.join("neurorust");
+    let measurements_root = real_root.join("measurements");
+    std::fs::create_dir_all(&measurements_root).expect("mkdir measurements root");
+    let wrong_home = temp.path().join("root");
+
+    let output = base_run_command(&measurements_root)
+        .env("NRMEASURE_FACTS_FIXTURE", &facts_path)
+        .env("NRMEASURE_INTERRUPTS_FIXTURE", &interrupts_path)
+        .env("HOME", &wrong_home)
+        .args(["--class", "recon"])
+        .output()
+        .expect("nrmeasure runs");
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let entries: Vec<_> = std::fs::read_dir(&measurements_root)
+        .expect("read_dir")
+        .filter_map(|entry| entry.ok())
+        .collect();
+    let manifest: RunManifest = serde_json::from_str(
+        &std::fs::read_to_string(entries[0].path().join("manifest.json"))
+            .expect("read manifest.json"),
+    )
+    .expect("manifest.json parses");
+    let cyclictest = manifest
+        .tools
+        .iter()
+        .find(|t| t.name == "cyclictest")
+        .expect("cyclictest ran");
+
+    let home_like_str = home_like.display().to_string();
+    let histfile_arg = cyclictest
+        .argv
+        .iter()
+        .find(|a| a.starts_with("--histfile="))
+        .expect("--histfile is always passed");
+    assert!(
+        histfile_arg.starts_with("--histfile=[redacted]"),
+        "expected redaction even though HOME does not match the real home-shaped path: \
+         {histfile_arg:?}"
+    );
+    assert!(
+        !histfile_arg.contains(&home_like_str),
+        "the identity-bearing home-shaped path must not survive when HOME is wrong: \
+         {histfile_arg:?}"
+    );
+    assert!(
+        histfile_arg.contains("neurorust"),
+        "only the home-shaped prefix is redacted, not the whole path: {histfile_arg:?}"
+    );
+
+    let mapping = cyclictest
+        .artifact_paths
+        .iter()
+        .find(|m| m.artifact_path == "cyclictest.hist")
+        .expect("cyclictest.hist mapping present");
+    assert!(mapping.executed_path.starts_with("[redacted]"));
+    assert!(!mapping.executed_path.contains(&home_like_str));
+}
+
 // ---------------------------------------------------------------------------------
 // The durable attempt record (finding 7 of 01-EXTERNAL-AUDIT.md, first half): the
 // run directory and ATTEMPT.json exist before the first instrument starts, and no

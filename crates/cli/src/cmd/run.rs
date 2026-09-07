@@ -543,6 +543,14 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
     )
     .context("failed to create the run directory")?;
 
+    // Computed once and reused everywhere an argv token or executed_path is redacted
+    // below. Deliberately not just `$HOME`: `scripts/nr-run-measurement` launches this
+    // binary as a root `systemd-run` transient unit with no `User=`/`PAMName=`, which
+    // does not reliably set `HOME` to the operator's real home directory, so relying on
+    // it alone let `/home/<user>/...` leak into three committed manifests before this
+    // was caught (plan 01-23, T-1-95). See `redaction_prefixes`.
+    let redact_prefixes = redaction_prefixes(&run_dir.path);
+
     // Computed once and reused for every ATTEMPT.json write and the eventual
     // manifest: neither changes mid-run, and recomputing harness_info() again
     // later would re-hash the executable for no reason.
@@ -823,7 +831,7 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
                 tool_version: version,
                 argv: rtla_full_argv
                     .iter()
-                    .map(|arg| redact_home_prefix(arg))
+                    .map(|arg| redact_home_prefix(arg, &redact_prefixes))
                     .collect(),
                 requested_cpus: hwnoise_cpus,
                 observed_cpus: parsed.observed_cpus,
@@ -960,14 +968,14 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
                             .any(|arg| arg.contains(executed_path.as_str()))
                     })
                     .map(|(executed_path, artifact_name)| ArtifactPathMapping {
-                        executed_path: redact_home_prefix(executed_path),
+                        executed_path: redact_home_prefix(executed_path, &redact_prefixes),
                         artifact_path: artifact_name.to_string(),
                     })
                     .collect();
                 let argv = invocation
                     .argv
                     .iter()
-                    .map(|arg| redact_home_prefix(arg))
+                    .map(|arg| redact_home_prefix(arg, &redact_prefixes))
                     .collect();
                 ToolInvocation {
                     argv,
@@ -1580,42 +1588,98 @@ fn git_output(args: &[&str]) -> Option<String> {
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-/// Replaces a leading match of `std::env::home_dir()` in `value` with the literal
-/// token `[redacted]`, following the same visible-redaction convention as
-/// `KernelInfo::redact_cmdline` and T-1-06's hostname redaction. An executed argv
-/// can carry a home directory (`--measurements-root /home/<user>/neurorust/
-/// measurements` is passed on every rig invocation by `scripts/nr-run-measurement`,
-/// and the scratch directory the tools write into would carry the same exposure if
-/// `$TMPDIR` or an equivalent ever pointed under home); a published manifest must
-/// never carry it verbatim. Handles both a bare path (e.g. `executed_path`, or a
-/// standalone argv token) and a `--flag=/abs/path` token, splitting on the first
-/// `=` the same way `KernelInfo::redact_cmdline` does: a naive whole-string match
-/// would never fire for a `--histfile=...` token, since the string starts with
-/// `--histfile=`, not with the path. A value with no home-directory prefix, for
-/// example the scratch `/tmp/.tmpXXXXXX` paths the tools actually write into
-/// today, passes through unchanged: those are process-lifetime temporary names
-/// and identify nobody.
-fn redact_home_prefix(value: &str) -> String {
-    if let Some((flag, rest)) = value.split_once('=') {
-        if flag.starts_with('-') {
-            return format!("{flag}={}", redact_home_prefix_in_path(rest));
+/// The absolute prefixes considered identity-bearing for [`redact_home_prefix`], longest
+/// first so the most specific one wins.
+///
+/// Not derived from `$HOME` alone. `scripts/nr-run-measurement` launches this binary as a
+/// root `systemd-run` transient unit with no `User=`/`PAMName=`, and a system-scope unit's
+/// environment is not a login shell's: `HOME` is not reliably the operator's real home
+/// directory there, or may be unset entirely. Trusting it exclusively let
+/// `/home/<user>/...` reach three committed manifests unredacted before this was caught
+/// (plan 01-23, T-1-95) despite `argv_redacts_a_home_directory_prefix` passing throughout,
+/// because that test forces `HOME` via `.env(...)` and so never exercised the real gap.
+///
+/// The reliable signal instead: a structural match against the conventional Unix
+/// home-directory shape, `/home/<user>` or (dev-host-only) `/Users/<user>`, found by
+/// walking `run_directory`'s own ancestors (see [`conventional_home_prefix`]) for a
+/// component whose immediate parent is literally named `home` or `Users`. This needs no
+/// environment variable at all: it is a pure string match against the same path the
+/// harness already computed (`measurements_root.join(run_id)`, `rundir.rs::create`), so it
+/// works whether or not the process's environment carries a correct `HOME`. It also does
+/// not fire on an ordinary scratch directory such as a test's own `tempfile::tempdir()`
+/// (`/tmp/.tmpXXXXXX`, or macOS's `/var/folders/.../T/.tmpXXXXXX`), which is exactly the
+/// case `argv_is_recorded_as_executed` requires stay byte-for-byte unredacted: an earlier
+/// version of this function instead redacted `run_directory`'s ancestor two levels up
+/// unconditionally, which happened to be that test's own tempdir root and broke its
+/// fidelity assertion for a directory that identifies nobody. `$HOME` is tried second, as
+/// a fallback, for a real deployment that does not happen to sit under `home`/`Users` but
+/// whose environment is reliable anyway.
+fn redaction_prefixes(run_directory: &Path) -> Vec<String> {
+    let mut prefixes = Vec::new();
+    if let Some(conventional) = conventional_home_prefix(run_directory) {
+        prefixes.push(conventional);
+    }
+    if let Some(home) = std::env::home_dir() {
+        if !home.as_os_str().is_empty() {
+            let home = home.to_string_lossy().into_owned();
+            if !prefixes.contains(&home) {
+                prefixes.push(home);
+            }
         }
     }
-    redact_home_prefix_in_path(value)
+    prefixes.sort_by_key(|prefix| std::cmp::Reverse(prefix.len()));
+    prefixes
 }
 
-fn redact_home_prefix_in_path(value: &str) -> String {
-    let Some(home) = std::env::home_dir() else {
-        return value.to_string();
-    };
-    if home.as_os_str().is_empty() {
-        return value.to_string();
+/// Walks `path` and its ancestors looking for one whose own immediate parent is named
+/// `home` or `Users`, i.e. a path shaped like `/home/<user>` or `/Users/<user>`. Returns
+/// the first (deepest, but there is realistically only ever one) such ancestor found,
+/// stringified exactly as it appears in `path` -- no canonicalization, so it matches
+/// whatever relative form or symlink component the caller's own path already has.
+fn conventional_home_prefix(path: &Path) -> Option<String> {
+    path.ancestors()
+        .find(|ancestor| {
+            matches!(
+                ancestor
+                    .parent()
+                    .and_then(Path::file_name)
+                    .and_then(|name| name.to_str()),
+                Some("home") | Some("Users")
+            )
+        })
+        .map(|ancestor| ancestor.to_string_lossy().into_owned())
+}
+
+/// Replaces a leading match of any entry in `prefixes` (see [`redaction_prefixes`]) in
+/// `value` with the literal token `[redacted]`, following the same visible-redaction
+/// convention as `KernelInfo::redact_cmdline` and T-1-06's hostname redaction. An executed
+/// argv can carry a home directory (`--measurements-root /home/<user>/neurorust/
+/// measurements` is passed on every rig invocation by `scripts/nr-run-measurement`, and the
+/// scratch directory the tools write into would carry the same exposure if `$TMPDIR` or an
+/// equivalent ever pointed under home); a published manifest must never carry it verbatim.
+/// Handles both a bare path (e.g. `executed_path`, or a standalone argv token) and a
+/// `--flag=/abs/path` token, splitting on the first `=` the same way `KernelInfo::
+/// redact_cmdline` does: a naive whole-string match would never fire for a `--histfile=...`
+/// token, since the string starts with `--histfile=`, not with the path. A value matching
+/// no prefix, for example the scratch `/tmp/.tmpXXXXXX` paths the tools actually write into
+/// today, passes through unchanged: those are process-lifetime temporary names and identify
+/// nobody.
+fn redact_home_prefix(value: &str, prefixes: &[String]) -> String {
+    if let Some((flag, rest)) = value.split_once('=') {
+        if flag.starts_with('-') {
+            return format!("{flag}={}", redact_home_prefix_in_path(rest, prefixes));
+        }
     }
-    let home = home.to_string_lossy();
-    match value.strip_prefix(home.as_ref()) {
-        Some(rest) => format!("[redacted]{rest}"),
-        None => value.to_string(),
+    redact_home_prefix_in_path(value, prefixes)
+}
+
+fn redact_home_prefix_in_path(value: &str, prefixes: &[String]) -> String {
+    for prefix in prefixes {
+        if let Some(rest) = value.strip_prefix(prefix.as_str()) {
+            return format!("[redacted]{rest}");
+        }
     }
+    value.to_string()
 }
 
 /// Checksums `src` and records whether it stayed in-repo or exceeded the size
