@@ -66,7 +66,7 @@ whether it passes or fails (D-06); the run refuses if any of them fails, or, for
 | `OnAcPower` | `AC=1` | Connect AC power. A charging or discharging battery is a documented source of firmware interrupts (`measurements/2026-08-28-precision3591/README.md`'s caveats). | Reads the first populated `online` file among `/sys/class/power_supply/{AC,AC0,ADP0,ADP1}/online`. |
 | `ThermalHeadroomAtStart` | `package temp <= 70 C` for the `normal` thermal profile (the default); not applicable when the run declares `--thermal-profile hot-screen` | Let the machine idle until every thermal zone cools to 70 C or below before starting the run. Declaring `--thermal-profile hot-screen` (accepted only for `--class screen`) exempts the run instead: a firmware screen saturates the machine on purpose, so the check is recorded as not applicable, carrying its real observed temperature whether that observation is hot or cool, rather than comparing it to the ceiling at all. The exemption follows this declaration, made before the run starts, never the observed temperature or the run class alone. The 70 C ceiling is an admission threshold for the normal profile, not a measured SMI-onset boundary. | Reads every `/sys/class/thermal/thermal_zone{N}/temp` and takes the maximum across zones, which is not necessarily the package sensor. |
 | `NoPackageManagerActivity` | `no apt, dpkg, unattended-upgrade or snapd process` | `sudo systemctl stop unattended-upgrades.service`, and let any `apt`/`dpkg`/`snapd` operation already in progress finish. | Scans `/proc/*/comm` for exactly these four process names. |
-| `TracersQuiescent` | `current_tracer=nop`, `events/enable=0`, `set_event=` (empty) and `tracing_on=0`, all four, for a `headline-series` run; not applicable for an `investigation` run | `echo nop \| sudo tee /sys/kernel/tracing/current_tracer`<br>`echo 0   \| sudo tee /sys/kernel/tracing/events/enable`<br>`echo     \| sudo tee /sys/kernel/tracing/set_event`<br>`echo 0   \| sudo tee /sys/kernel/tracing/tracing_on` | Reads all four of `/sys/kernel/tracing/{current_tracer,events/enable,set_event,tracing_on}`. `current_tracer` is only one of several independent controls that can arm tracing; `events/enable`, `set_event` and `tracing_on` can each arm it without ever changing `current_tracer`, so `current_tracer == nop` alone is not sufficient. A control absent on a given kernel is not a violation, but the result still names which of the four were readable. |
+| `TracersQuiescent` | `current_tracer=nop`, `events/enable=0`, `set_event=` (empty) and `tracing_on=0`, all four; no live tracing instance under `/sys/kernel/tracing/instances/`; and no `osnoise/<cpu>` or `timerlat/<cpu>` kthread on any target CPU. All six, for a `headline-series` run; not applicable for an `investigation` run | `echo nop \| sudo tee /sys/kernel/tracing/current_tracer`<br>`echo 0   \| sudo tee /sys/kernel/tracing/events/enable`<br>`echo     \| sudo tee /sys/kernel/tracing/set_event`<br>`echo 0   \| sudo tee /sys/kernel/tracing/tracing_on`<br>`for i in /sys/kernel/tracing/instances/*/; do echo nop \| sudo tee "$i/current_tracer"; done`<br>`pgrep -a 'osnoise\|timerlat'` (must print nothing) | Reads all four of `/sys/kernel/tracing/{current_tracer,events/enable,set_event,tracing_on}`. `current_tracer` is only one of several independent controls that can arm tracing; `events/enable`, `set_event` and `tracing_on` can each arm it without ever changing `current_tracer`, so `current_tracer == nop` alone is not sufficient. Also lists `/sys/kernel/tracing/instances/` and checks the same four controls inside every instance found, because `rtla` drives `osnoise`/`timerlat` through its own instance and the top-level controls read quiescent while it runs, and scans `/proc/*/comm` for an `osnoise/<cpu>` or `timerlat/<cpu>` kthread on each target CPU, since an orphaned sampler takes `runtime_us` of every `period_us` from anything sharing its CPU at the same priority. A control, instance listing or kthread scan that cannot be read is not a violation, but the result still names which of the six signals were actually readable. |
 
 ## The governor operating point
 
@@ -372,6 +372,26 @@ instrument, if any, also ran: an exact per-cpu census of system management inter
 no sampling and no threshold, and a register it could not read is a stated reason rather
 than a substituted zero. See `docs/rig/firmware-floor-rt-vs-stock.md` for the evidence
 behind this split.
+
+### Orphaned sampling threads
+
+`rtla` drives `osnoise` and `timerlat` through its own tracing instance under
+`/sys/kernel/tracing/instances/`, never through the four controls the `TracersQuiescent`
+row above checks. A `rtla` process killed before it tears its instance down (for example, a
+runtime bound expiring mid-session) leaves that instance, and the per-CPU sampling threads
+it started, running. The four top-level controls read quiescent regardless: `current_tracer`
+never leaves `nop` at the top level, because the tracer is armed one instance down.
+
+This happened on 2026-09-06. A killed `rtla` left an osnoise instance running with
+`runtime_us=750000` and `period_us=1000000` on cpus 6-11. The next capture,
+`measurements/2026-09-06-precision3591-screen-02`, lost 75 percent of its cyclictest cycles
+on every isolated thread (75055 of an expected 300000 cycles on cpu 6) with every thread's
+maximum stalled at roughly 750000 us, the exact value of `runtime_us`. All fifteen
+preconditions passed on that run, because none of them could see the orphaned instance.
+`TracersQuiescent` now also reads `/sys/kernel/tracing/instances/` and scans for an
+`osnoise/<cpu>` or `timerlat/<cpu>` kthread on any target CPU, so this configuration fails
+the check instead of passing it. This is a losing configuration, published rather than
+omitted (BENCH-06): the run stays under `measurements/`.
 
 ## Reproducing on different hardware
 

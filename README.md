@@ -49,9 +49,10 @@ nrmeasure attempt      Mark an orphaned in-progress attempt failed, with a state
 ```
 
 Before a run starts, fifteen preconditions are asserted against the live machine: governor,
-turbo, deep C-states on every target CPU, isolation, tracing quiescence across all four control
-files, absence of SSH and graphical sessions, thermal headroom against a declared profile, and
-more. A run that violates one is refused rather than recorded with a footnote.
+turbo, deep C-states on every target CPU, isolation, tracing quiescence across the four control
+files, every tracing instance, and the osnoise and timerlat sampling threads on the target CPUs,
+absence of SSH and graphical sessions, thermal headroom against a declared profile, and more. A
+run that violates one is refused rather than recorded with a footnote.
 
 Each run directory carries the raw tool output, a manifest naming the rig, kernel, BIOS revision,
 tuning state, exact argv, and blake3 digest of every artifact, plus an attempt record written

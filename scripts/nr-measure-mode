@@ -60,6 +60,21 @@ on)
     echo 0 > /sys/kernel/tracing/events/enable 2>/dev/null
     echo   > /sys/kernel/tracing/set_event     2>/dev/null
     echo 0 > /sys/kernel/tracing/tracing_on    2>/dev/null
+    # rtla drives osnoise through its OWN instance, so the four writes above leave it running.
+    # A SIGTERMed rtla leaves the instance and its kthreads behind; on 2026-09-06 that starved
+    # the next capture (measurements/2026-09-06-precision3591-screen-02, 75055 of 300000 cycles
+    # on cpu 6). Quiesce every instance, then check the threads are actually gone.
+    for i in /sys/kernel/tracing/instances/*/; do
+        [ -d "$i" ] || continue
+        echo nop > "$i/current_tracer" 2>/dev/null
+        echo 0   > "$i/tracing_on"     2>/dev/null
+        rmdir "$i" 2>/dev/null
+    done
+    if pgrep -a 'osnoise|timerlat' >/dev/null 2>&1; then
+        echo "nr-measure-mode: WARNING, sampler kthreads still present after quiescing:" >&2
+        pgrep -a 'osnoise|timerlat' >&2
+        echo "nr-measure-mode: do not start a headline run; nrmeasure will refuse it" >&2
+    fi
     # Make hwlatdetect able to sample the isolated cores at all.
     #
     # hwlat_detector/mode defaults to `none`, in which the tracer never migrates its
@@ -133,6 +148,19 @@ status)
     printf 'events/enable   : %s\n' "$(cat /sys/kernel/tracing/events/enable 2>/dev/null || echo 'unreadable (needs root)')"
     printf 'set_event       : %s\n' "$(cat /sys/kernel/tracing/set_event 2>/dev/null || echo 'unreadable (needs root)')"
     printf 'tracing_on      : %s\n' "$(cat /sys/kernel/tracing/tracing_on 2>/dev/null || echo 'unreadable (needs root)')"
+    # rtla's own instance hides osnoise/timerlat from every line above (see the `on`
+    # arm's comment). ls/pgrep exit nonzero on nothing-found as well as on
+    # unreadable, and that exit status is lost once piped into tr/sed, so the
+    # listing is captured first and the empty case is handled with a plain
+    # parameter default rather than a `|| echo` after the pipe.
+    if inst="$(ls -1 /sys/kernel/tracing/instances 2>/dev/null)"; then
+        inst="$(printf '%s' "$inst" | tr '\n' ' ' | sed 's/ $//')"
+        printf 'tracing instances: %s\n' "${inst:-none}"
+    else
+        printf 'tracing instances: %s\n' "unreadable (needs root)"
+    fi
+    samplers="$(pgrep -a 'osnoise|timerlat' 2>/dev/null | tr '\n' ';')"
+    printf 'sampler kthreads : %s\n' "${samplers:-none}"
     printf 'hwlat mode      : %s\n' "$(sed -n 's/.*\[\([a-z-]*\)\].*/\1/p' /sys/kernel/tracing/hwlat_detector/mode 2>/dev/null || echo 'unreadable (needs root)')"
     printf 'tracing_cpumask : %s\n' "$(cat /sys/kernel/tracing/tracing_cpumask 2>/dev/null || echo 'unreadable (needs root)')"
     masked=0
