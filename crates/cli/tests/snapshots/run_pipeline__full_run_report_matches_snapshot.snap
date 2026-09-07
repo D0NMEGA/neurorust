@@ -91,14 +91,16 @@ tail metrics (D-24):
 
 counter deltas per isolated cpu:
 
-| cpu | cal ipis | tlb ipis | context switches | irqs |
-|-----|----------|----------|-------------------|------|
+| cpu | cal ipis | tlb ipis | res ipis | irqs |
+|-----|----------|----------|----------|------|
 | 6 | 0 | 0 | 0 | 0 |
 | 7 | 0 | 0 | 0 | 0 |
 | 8 | 0 | 0 | 0 | 0 |
 | 9 | 0 | 0 | 0 | 0 |
 | 10 | 0 | 0 | 0 | 0 |
 | 11 | 0 | 0 | 0 | 0 |
+
+res ipis are /proc/interrupts RES rescheduling interrupts, the closest per-cpu proxy for scheduling interference available here: /proc/stat's ctxt is machine-wide with no per-cpu breakdown (plan 01-05).
 
 ## Results
 

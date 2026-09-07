@@ -1550,7 +1550,7 @@ fn window_delta(
     nr_manifest::InterferenceDelta {
         cal_ipis: diff(&before.cal_ipis, &after.cal_ipis),
         tlb_ipis: diff(&before.tlb_ipis, &after.tlb_ipis),
-        context_switches: diff(&before.context_switches, &after.context_switches),
+        rescheduling_ipis: diff(&before.rescheduling_ipis, &after.rescheduling_ipis),
         irqs: diff(&before.irqs, &after.irqs),
     }
 }
@@ -1817,7 +1817,7 @@ fn format_counter_deltas(delta: &nr_manifest::InterferenceDelta, run_duration: D
     }
     let (cal_max, cal_cpu) = max_of(&delta.cal_ipis);
     let (tlb_max, tlb_cpu) = max_of(&delta.tlb_ipis);
-    let (res_max, res_cpu) = max_of(&delta.context_switches);
+    let (res_max, res_cpu) = max_of(&delta.rescheduling_ipis);
     let (irq_max, irq_cpu) = max_of(&delta.irqs);
     format!(
         "cal max {cal_max} on cpu{cal_cpu}, tlb max {tlb_max} on cpu{tlb_cpu}, res max {res_max} \
@@ -2383,7 +2383,7 @@ VERSION=\"26.04.1 LTS\"
         nr_manifest::InterferenceDelta {
             cal_ipis: vec![],
             tlb_ipis: vec![],
-            context_switches: vec![],
+            rescheduling_ipis: vec![],
             irqs: vec![],
         }
     }
@@ -2509,7 +2509,7 @@ VERSION=\"26.04.1 LTS\"
             isolated_cpus: vec![6, 7, 8, 9, 10, 11],
             cal_ipis: vec![],
             tlb_ipis: vec![],
-            context_switches: vec![],
+            rescheduling_ipis: vec![],
             irqs: vec![],
         };
         let outcome = interference::verdict(
@@ -2694,7 +2694,7 @@ VERSION=\"26.04.1 LTS\"
         let delta = nr_manifest::InterferenceDelta {
             cal_ipis: vec![nr_manifest::CpuCounter { cpu: 9, count: 100 }],
             tlb_ipis: vec![],
-            context_switches: vec![],
+            rescheduling_ipis: vec![],
             irqs: vec![],
         };
 
@@ -2733,7 +2733,7 @@ VERSION=\"26.04.1 LTS\"
                 count: 1_000_000,
             }],
             tlb_ipis: vec![],
-            context_switches: vec![],
+            rescheduling_ipis: vec![],
             irqs: vec![],
         };
 

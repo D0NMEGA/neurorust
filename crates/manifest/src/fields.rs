@@ -451,7 +451,7 @@ pub struct CpuCounter {
 
 /// D-15's interference signal at one point in time (before or after a run), scoped to
 /// the isolated CPUs rather than machine-wide. Tracks exactly the counters D-15 and the
-/// 2026-08-28 post-mortem name as diagnostic: CAL and TLB IPIs, context switches, and
+/// 2026-08-28 post-mortem name as diagnostic: CAL and TLB IPIs, RES rescheduling IPIs, and
 /// total IRQs per isolated CPU.
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -461,7 +461,20 @@ pub struct InterferenceSnapshot {
     pub cal_ipis: Vec<CpuCounter>,
     /// TLB shootdowns, per isolated CPU.
     pub tlb_ipis: Vec<CpuCounter>,
-    pub context_switches: Vec<CpuCounter>,
+    /// Per-CPU `/proc/interrupts` RES rescheduling IPIs.
+    ///
+    /// Named for what it holds. It was called `context_switches` until 2026-09-07, because plan
+    /// 01-05 chose RES as the closest available per-CPU proxy for scheduling interference:
+    /// `/proc/stat`'s `ctxt` is a single machine-wide counter with no per-CPU breakdown and
+    /// cannot fill a `Vec<CpuCounter>` at all. The code has documented that substitution since it
+    /// was made; the published `REPORT.md` column heading said `context switches` anyway
+    /// (`01-REVIEW-2026-09-06.md` finding B4).
+    ///
+    /// The `alias` keeps every manifest committed before this rename deserialising unchanged.
+    /// This is not a schema-version bump: `validate` pins `schema_version == 1` and bumping it
+    /// would fail all twelve committed manifests under the blocking D-13 gate.
+    #[serde(rename = "rescheduling_ipis", alias = "context_switches")]
+    pub rescheduling_ipis: Vec<CpuCounter>,
     pub irqs: Vec<CpuCounter>,
 }
 
@@ -471,7 +484,20 @@ pub struct InterferenceSnapshot {
 pub struct InterferenceDelta {
     pub cal_ipis: Vec<CpuCounter>,
     pub tlb_ipis: Vec<CpuCounter>,
-    pub context_switches: Vec<CpuCounter>,
+    /// Per-CPU `/proc/interrupts` RES rescheduling IPIs.
+    ///
+    /// Named for what it holds. It was called `context_switches` until 2026-09-07, because plan
+    /// 01-05 chose RES as the closest available per-CPU proxy for scheduling interference:
+    /// `/proc/stat`'s `ctxt` is a single machine-wide counter with no per-CPU breakdown and
+    /// cannot fill a `Vec<CpuCounter>` at all. The code has documented that substitution since it
+    /// was made; the published `REPORT.md` column heading said `context switches` anyway
+    /// (`01-REVIEW-2026-09-06.md` finding B4).
+    ///
+    /// The `alias` keeps every manifest committed before this rename deserialising unchanged.
+    /// This is not a schema-version bump: `validate` pins `schema_version == 1` and bumping it
+    /// would fail all twelve committed manifests under the blocking D-13 gate.
+    #[serde(rename = "rescheduling_ipis", alias = "context_switches")]
+    pub rescheduling_ipis: Vec<CpuCounter>,
     pub irqs: Vec<CpuCounter>,
 }
 

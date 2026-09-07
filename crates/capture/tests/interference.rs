@@ -102,6 +102,45 @@ fn delta_is_per_isolated_cpu() {
     }
 }
 
+/// The 2026-09-07 rescheduling-IPI rename (`01-REVIEW-2026-09-06.md` finding B4) carries a
+/// `#[serde(alias = "context_switches")]`, not a schema-version bump, specifically so every
+/// manifest committed under the old key keeps deserialising. This constructs the shape by hand
+/// rather than loading a committed manifest file: the point is the field's own serde contract,
+/// independent of whichever real manifests happen to predate or postdate the rename.
+#[test]
+fn a_committed_manifest_with_the_old_key_still_deserialises() {
+    let json = r#"{
+        "isolated_cpus": [6, 7],
+        "cal_ipis": [{ "cpu": 6, "count": 1 }, { "cpu": 7, "count": 2 }],
+        "tlb_ipis": [{ "cpu": 6, "count": 3 }, { "cpu": 7, "count": 4 }],
+        "context_switches": [{ "cpu": 6, "count": 5 }, { "cpu": 7, "count": 6 }],
+        "irqs": [{ "cpu": 6, "count": 7 }, { "cpu": 7, "count": 8 }]
+    }"#;
+    let snapshot: InterferenceSnapshot =
+        serde_json::from_str(json).expect("a manifest using the old key still deserialises");
+    assert_eq!(find(&snapshot.rescheduling_ipis, 6), 5);
+    assert_eq!(find(&snapshot.rescheduling_ipis, 7), 6);
+}
+
+/// The other half of the same contract: a value built and serialised today emits the new key
+/// and never the old one, so a fresh manifest is unambiguous about what the field holds.
+#[test]
+fn a_new_manifest_serialises_the_new_key() {
+    let snapshot = InterferenceSnapshot {
+        isolated_cpus: vec![6],
+        cal_ipis: vec![],
+        tlb_ipis: vec![],
+        rescheduling_ipis: vec![CpuCounter { cpu: 6, count: 9 }],
+        irqs: vec![],
+    };
+    let json = serde_json::to_string(&snapshot).expect("a snapshot always serialises");
+    assert!(json.contains("\"rescheduling_ipis\""), "got: {json}");
+    assert!(
+        !json.contains("context_switches"),
+        "a freshly serialised snapshot must never emit the retired key: {json}"
+    );
+}
+
 #[test]
 fn verdict_clean() {
     let before = interference::snapshot_from_text(BEFORE, &ISOLATED_CPUS).expect("parses");

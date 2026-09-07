@@ -87,13 +87,13 @@ fn quoted_per_run_hour_counters_match_the_committed_manifests() {
 
     let clean_cal = sum_over_isolated_cpus(&clean.interference.delta.cal_ipis);
     let clean_tlb = sum_over_isolated_cpus(&clean.interference.delta.tlb_ipis);
-    let clean_res = sum_over_isolated_cpus(&clean.interference.delta.context_switches);
+    let clean_res = sum_over_isolated_cpus(&clean.interference.delta.rescheduling_ipis);
     let clean_irq = sum_over_isolated_cpus(&clean.interference.delta.irqs);
 
     let contaminated_cal = sum_over_isolated_cpus(&contaminated.interference.delta.cal_ipis);
     let contaminated_tlb = sum_over_isolated_cpus(&contaminated.interference.delta.tlb_ipis);
     let contaminated_res =
-        sum_over_isolated_cpus(&contaminated.interference.delta.context_switches);
+        sum_over_isolated_cpus(&contaminated.interference.delta.rescheduling_ipis);
     let contaminated_irq = sum_over_isolated_cpus(&contaminated.interference.delta.irqs);
 
     // Exact equality on the raw summed deltas.

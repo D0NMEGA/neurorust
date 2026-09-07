@@ -16,7 +16,7 @@
 //! creation broadcast TLB shootdown IPIs to the isolated cores, and CAL counts on
 //! CPUs 6-11 reached roughly 137k). RES (rescheduling interrupts) is the closest true
 //! per-CPU proxy for scheduling interference; it fills
-//! [`nr_manifest::InterferenceSnapshot::context_switches`], since `/proc/stat`'s
+//! [`nr_manifest::InterferenceSnapshot::rescheduling_ipis`], since `/proc/stat`'s
 //! `ctxt` counter is a single machine-wide total with no per-CPU breakdown, and that
 //! field's type (`Vec<CpuCounter>`, one entry per isolated CPU) requires one. Device
 //! IRQ totals (every numbered IRQ row, summed per CPU) fill `irqs`.
@@ -249,7 +249,7 @@ fn build_snapshot(
 
     let mut cal_ipis = Vec::with_capacity(isolated_cpus.len());
     let mut tlb_ipis = Vec::with_capacity(isolated_cpus.len());
-    let mut context_switches = Vec::with_capacity(isolated_cpus.len());
+    let mut rescheduling_ipis = Vec::with_capacity(isolated_cpus.len());
     let mut irqs = Vec::with_capacity(isolated_cpus.len());
 
     for &cpu in isolated_cpus {
@@ -262,7 +262,7 @@ fn build_snapshot(
             cpu,
             count: tlb[idx],
         });
-        context_switches.push(CpuCounter {
+        rescheduling_ipis.push(CpuCounter {
             cpu,
             count: res[idx],
         });
@@ -276,7 +276,7 @@ fn build_snapshot(
         isolated_cpus: isolated_cpus.to_vec(),
         cal_ipis,
         tlb_ipis,
-        context_switches,
+        rescheduling_ipis,
         irqs,
     })
 }
@@ -393,9 +393,13 @@ pub struct CalibratedThresholds {
     pub device_irq_delta_max: f64,
     /// Loaded and required (a `calibrated` file must set every `per_run_hour`
     /// value), but not yet compared against in [`verdict`]: this crate's
-    /// `context_switches` counter is populated from the RES row (see the module
-    /// documentation), which `res_delta_max` already thresholds. Reserved for a
-    /// future, independent per-CPU context-switch source.
+    /// `rescheduling_ipis` counter (named `rescheduling_ipis` until 2026-09-07) is populated
+    /// from the RES row (see the module documentation), which `res_delta_max` already
+    /// thresholds. Reserved for a future, independent per-CPU context-switch source.
+    ///
+    /// This field's own name is deliberately unchanged by the 2026-09-07 rescheduling-IPI
+    /// rename: it names a genuinely different, still-unimplemented quantity, and renaming it
+    /// to match would erase that distinction rather than preserve it.
     pub context_switch_delta_max: f64,
     pub derived_from: Vec<String>,
 }
@@ -497,7 +501,7 @@ fn compute_delta(before: &InterferenceSnapshot, after: &InterferenceSnapshot) ->
     InterferenceDelta {
         cal_ipis: diff_counters(&before.cal_ipis, &after.cal_ipis),
         tlb_ipis: diff_counters(&before.tlb_ipis, &after.tlb_ipis),
-        context_switches: diff_counters(&before.context_switches, &after.context_switches),
+        rescheduling_ipis: diff_counters(&before.rescheduling_ipis, &after.rescheduling_ipis),
         irqs: diff_counters(&before.irqs, &after.irqs),
     }
 }
@@ -558,7 +562,7 @@ pub fn counter_breach(
     let checks: [(&str, &[CpuCounter], f64); 4] = [
         ("CAL", &delta.cal_ipis, limits.cal_delta_max),
         ("TLB", &delta.tlb_ipis, limits.tlb_delta_max),
-        ("RES", &delta.context_switches, limits.res_delta_max),
+        ("RES", &delta.rescheduling_ipis, limits.res_delta_max),
         ("device IRQ", &delta.irqs, limits.device_irq_delta_max),
     ];
 
@@ -785,7 +789,7 @@ mod tests {
             isolated_cpus: vec![6],
             cal_ipis: vec![CpuCounter { cpu: 6, count: 0 }],
             tlb_ipis: vec![CpuCounter { cpu: 6, count: 0 }],
-            context_switches: vec![CpuCounter { cpu: 6, count: 0 }],
+            rescheduling_ipis: vec![CpuCounter { cpu: 6, count: 0 }],
             irqs: vec![CpuCounter { cpu: 6, count: 0 }],
         };
         let outcome = verdict(

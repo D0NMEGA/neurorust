@@ -687,13 +687,14 @@
             "$ref": "#/$defs/CpuCounter"
           }
         },
-        "context_switches": {
+        "irqs": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/CpuCounter"
           }
         },
-        "irqs": {
+        "rescheduling_ipis": {
+          "description": "Per-CPU `/proc/interrupts` RES rescheduling IPIs.\n\nNamed for what it holds. It was called `context_switches` until 2026-09-07, because plan\n01-05 chose RES as the closest available per-CPU proxy for scheduling interference:\n`/proc/stat`'s `ctxt` is a single machine-wide counter with no per-CPU breakdown and\ncannot fill a `Vec<CpuCounter>` at all. The code has documented that substitution since it\nwas made; the published `REPORT.md` column heading said `context switches` anyway\n(`01-REVIEW-2026-09-06.md` finding B4).\n\nThe `alias` keeps every manifest committed before this rename deserialising unchanged.\nThis is not a schema-version bump: `validate` pins `schema_version == 1` and bumping it\nwould fail all twelve committed manifests under the blocking D-13 gate.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/CpuCounter"
@@ -710,22 +711,16 @@
       "required": [
         "cal_ipis",
         "tlb_ipis",
-        "context_switches",
+        "rescheduling_ipis",
         "irqs"
       ]
     },
     "InterferenceSnapshot": {
-      "description": "D-15's interference signal at one point in time (before or after a run), scoped to\nthe isolated CPUs rather than machine-wide. Tracks exactly the counters D-15 and the\n2026-08-28 post-mortem name as diagnostic: CAL and TLB IPIs, context switches, and\ntotal IRQs per isolated CPU.",
+      "description": "D-15's interference signal at one point in time (before or after a run), scoped to\nthe isolated CPUs rather than machine-wide. Tracks exactly the counters D-15 and the\n2026-08-28 post-mortem name as diagnostic: CAL and TLB IPIs, RES rescheduling IPIs, and\ntotal IRQs per isolated CPU.",
       "type": "object",
       "properties": {
         "cal_ipis": {
           "description": "Function-call IPIs, per isolated CPU.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/CpuCounter"
-          }
-        },
-        "context_switches": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/CpuCounter"
@@ -745,6 +740,13 @@
             "minimum": 0
           }
         },
+        "rescheduling_ipis": {
+          "description": "Per-CPU `/proc/interrupts` RES rescheduling IPIs.\n\nNamed for what it holds. It was called `context_switches` until 2026-09-07, because plan\n01-05 chose RES as the closest available per-CPU proxy for scheduling interference:\n`/proc/stat`'s `ctxt` is a single machine-wide counter with no per-CPU breakdown and\ncannot fill a `Vec<CpuCounter>` at all. The code has documented that substitution since it\nwas made; the published `REPORT.md` column heading said `context switches` anyway\n(`01-REVIEW-2026-09-06.md` finding B4).\n\nThe `alias` keeps every manifest committed before this rename deserialising unchanged.\nThis is not a schema-version bump: `validate` pins `schema_version == 1` and bumping it\nwould fail all twelve committed manifests under the blocking D-13 gate.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CpuCounter"
+          }
+        },
         "tlb_ipis": {
           "description": "TLB shootdowns, per isolated CPU.",
           "type": "array",
@@ -758,7 +760,7 @@
         "isolated_cpus",
         "cal_ipis",
         "tlb_ipis",
-        "context_switches",
+        "rescheduling_ipis",
         "irqs"
       ]
     },

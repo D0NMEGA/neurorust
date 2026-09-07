@@ -215,7 +215,7 @@ pub fn run(args: Args) -> anyhow::Result<i32> {
         isolated_cpus: Vec::new(),
         cal_ipis: Vec::new(),
         tlb_ipis: Vec::new(),
-        context_switches: Vec::new(),
+        rescheduling_ipis: Vec::new(),
         irqs: Vec::new(),
     };
     let interference = InterferenceSnapshotPair {
@@ -224,7 +224,7 @@ pub fn run(args: Args) -> anyhow::Result<i32> {
         delta: InterferenceDelta {
             cal_ipis: Vec::new(),
             tlb_ipis: Vec::new(),
-            context_switches: Vec::new(),
+            rescheduling_ipis: Vec::new(),
             irqs: Vec::new(),
         },
         tail_metrics: None,

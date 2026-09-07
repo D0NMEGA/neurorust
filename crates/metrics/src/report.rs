@@ -434,17 +434,22 @@ fn render_contamination(manifest: &RunManifest) -> String {
     }
 
     out.push_str("\ncounter deltas per isolated cpu:\n\n");
-    out.push_str("| cpu | cal ipis | tlb ipis | context switches | irqs |\n");
-    out.push_str("|-----|----------|----------|-------------------|------|\n");
+    out.push_str("| cpu | cal ipis | tlb ipis | res ipis | irqs |\n");
+    out.push_str("|-----|----------|----------|----------|------|\n");
     for &cpu in &pair.before.isolated_cpus {
         out.push_str(&format!(
             "| {cpu} | {} | {} | {} | {} |\n",
             counter_for(&pair.delta.cal_ipis, cpu),
             counter_for(&pair.delta.tlb_ipis, cpu),
-            counter_for(&pair.delta.context_switches, cpu),
+            counter_for(&pair.delta.rescheduling_ipis, cpu),
             counter_for(&pair.delta.irqs, cpu)
         ));
     }
+    out.push_str(
+        "\nres ipis are /proc/interrupts RES rescheduling interrupts, the closest per-cpu proxy \
+         for scheduling interference available here: /proc/stat's ctxt is machine-wide with no \
+         per-cpu breakdown (plan 01-05).\n",
+    );
     out.push('\n');
     out
 }
@@ -470,10 +475,12 @@ fn firmware_caveats(instrument: &str) -> [&'static str; 3] {
             "it measures hardware-related noise, the execution gaps left after software noise \
              is accounted for. those are not uniquely identified SMIs either; the exact \
              MSR_SMI_COUNT recorded alongside this screen is the census, and this is not",
-            "its per-CPU figures come from one osnoise sampling thread per CPU in the -c list, \
-             so a CPU absent from the observed list was sampled and reported nothing, rather \
-             than never being sampled. that is the specific difference from hwlatdetect on \
-             this rig",
+            "its per-CPU figures come from one osnoise sampling thread per CPU in the -c list. \
+             a CPU that was sampled and observed nothing still emits its own row carrying its \
+             exposure (cpu 7 in measurements/2026-09-06-precision3591-screen-03/rtla-hwnoise.txt \
+             is the committed example: full exposure, zero events, an explicit row). a CPU \
+             absent from the observed list therefore produced no row at all, and coverage \
+             cannot be confirmed for it; verify --strict reports that as a problem",
             "per-CPU exposure above is what the tool reports; when it reports none, the \
              exposure is unstated rather than a wall-clock duration divided by a CPU count",
         ],

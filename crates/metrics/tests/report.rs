@@ -113,20 +113,20 @@ const SAMPLE_MANIFEST_JSON: &str = r##"{
       "isolated_cpus": [6, 7, 8, 9, 10, 11],
       "cal_ipis": [{ "cpu": 6, "count": 0 }],
       "tlb_ipis": [{ "cpu": 6, "count": 0 }],
-      "context_switches": [{ "cpu": 6, "count": 100 }],
+      "rescheduling_ipis": [{ "cpu": 6, "count": 100 }],
       "irqs": [{ "cpu": 6, "count": 5 }]
     },
     "after": {
       "isolated_cpus": [6, 7, 8, 9, 10, 11],
       "cal_ipis": [{ "cpu": 6, "count": 0 }],
       "tlb_ipis": [{ "cpu": 6, "count": 0 }],
-      "context_switches": [{ "cpu": 6, "count": 102 }],
+      "rescheduling_ipis": [{ "cpu": 6, "count": 102 }],
       "irqs": [{ "cpu": 6, "count": 5 }]
     },
     "delta": {
       "cal_ipis": [{ "cpu": 6, "count": 0 }],
       "tlb_ipis": [{ "cpu": 6, "count": 0 }],
-      "context_switches": [{ "cpu": 6, "count": 2 }],
+      "rescheduling_ipis": [{ "cpu": 6, "count": 2 }],
       "irqs": [{ "cpu": 6, "count": 0 }]
     },
     "tail_metrics": {
@@ -646,6 +646,51 @@ fn firmware_section_names_observed_cpus() {
     assert!(
         report.contains("warning: requested but not observed: 12"),
         "expected a warning naming the uncovered cpu 12: {report}"
+    );
+}
+
+/// B4 (`01-REVIEW-2026-09-06.md`): the published counter table names what the field actually
+/// holds. The header used to read `context switches`, but `/proc/stat`'s `ctxt` is a single
+/// machine-wide counter with no per-CPU breakdown and never filled this column; RES
+/// rescheduling interrupts (plan 01-05's chosen per-CPU proxy) always have.
+#[test]
+fn the_report_names_res_not_context_switches() {
+    let report = render_run_report(&sample_manifest(), &sample_run()).expect("renders");
+    assert!(
+        report.contains("| cpu | cal ipis | tlb ipis | res ipis | irqs |"),
+        "got:\n{report}"
+    );
+    assert!(
+        !report.contains("context switches"),
+        "the retired label must not appear anywhere in a rendered report: {report}"
+    );
+}
+
+/// B5 (`01-REVIEW-2026-09-06.md`): the coverage caveat must not assert that a CPU absent from
+/// the observed list was sampled. The raw capture cannot establish that; it can only establish
+/// that a sampled CPU emits a row, which is what the caveat states instead.
+#[test]
+fn the_coverage_caveat_does_not_claim_sampling() {
+    let manifest = manifest_with_firmware_screen(hwnoise_screen(
+        vec![6, 7, 8, 9, 10, 11],
+        vec![6, 7, 8, 9, 10, 11],
+    ));
+    let report = render_run_report(&manifest, &sample_run()).expect("renders");
+    let hwnoise_caveats = extract_caveats(&report);
+
+    assert!(
+        !hwnoise_caveats
+            .iter()
+            .any(|line| line.contains("sampled and reported nothing")),
+        "the retired sampling claim must be gone: {hwnoise_caveats:?}"
+    );
+    assert!(
+        hwnoise_caveats
+            .iter()
+            .any(|line| line.contains("produced no row")
+                && line.contains("coverage cannot be confirmed")),
+        "the caveat must state that a missing cpu produced no row and that coverage cannot be \
+         confirmed for it: {hwnoise_caveats:?}"
     );
 }
 

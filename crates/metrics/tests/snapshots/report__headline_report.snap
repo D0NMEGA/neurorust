@@ -10,7 +10,7 @@ instrument class: headline-series
 provenance tier: harness-generated
 utc start: 2026-08-31T06:00:00Z
 utc end: 2026-08-31T06:10:00Z
-manifest blake3: 5a1a4680affdaa5404abcf1ab7395c06e3dd78fef92c07e4811ea9edfd4ff2da
+manifest blake3: 01b46acee3c9477bad60b130e4fef246a0f88743b2b771f37b7ca45d158fff13
 
 ## Rig and tuning
 
@@ -74,14 +74,16 @@ tail metrics (D-24):
 
 counter deltas per isolated cpu:
 
-| cpu | cal ipis | tlb ipis | context switches | irqs |
-|-----|----------|----------|-------------------|------|
+| cpu | cal ipis | tlb ipis | res ipis | irqs |
+|-----|----------|----------|----------|------|
 | 6 | 0 | 0 | 2 | 0 |
 | 7 | 0 | 0 | 0 | 0 |
 | 8 | 0 | 0 | 0 | 0 |
 | 9 | 0 | 0 | 0 | 0 |
 | 10 | 0 | 0 | 0 | 0 |
 | 11 | 0 | 0 | 0 | 0 |
+
+res ipis are /proc/interrupts RES rescheduling interrupts, the closest per-cpu proxy for scheduling interference available here: /proc/stat's ctxt is machine-wide with no per-cpu breakdown (plan 01-05).
 
 ## Results
 

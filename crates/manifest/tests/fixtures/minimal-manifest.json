@@ -100,20 +100,20 @@
       "isolated_cpus": [6, 7, 8, 9, 10, 11],
       "cal_ipis": [{ "cpu": 6, "count": 0 }],
       "tlb_ipis": [{ "cpu": 6, "count": 0 }],
-      "context_switches": [{ "cpu": 6, "count": 100 }],
+      "rescheduling_ipis": [{ "cpu": 6, "count": 100 }],
       "irqs": [{ "cpu": 6, "count": 5 }]
     },
     "after": {
       "isolated_cpus": [6, 7, 8, 9, 10, 11],
       "cal_ipis": [{ "cpu": 6, "count": 0 }],
       "tlb_ipis": [{ "cpu": 6, "count": 0 }],
-      "context_switches": [{ "cpu": 6, "count": 102 }],
+      "rescheduling_ipis": [{ "cpu": 6, "count": 102 }],
       "irqs": [{ "cpu": 6, "count": 5 }]
     },
     "delta": {
       "cal_ipis": [{ "cpu": 6, "count": 0 }],
       "tlb_ipis": [{ "cpu": 6, "count": 0 }],
-      "context_switches": [{ "cpu": 6, "count": 2 }],
+      "rescheduling_ipis": [{ "cpu": 6, "count": 2 }],
       "irqs": [{ "cpu": 6, "count": 0 }]
     },
     "verdict": "clean"
