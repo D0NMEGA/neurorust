@@ -32,6 +32,13 @@ pub enum ValidationError {
     #[error("excluded_from_series is true but exclusion_reason is missing or empty")]
     MissingExclusionReason,
     #[error(
+        "series_admission.admitted is {admitted} but excluded_from_series is {excluded}: a \
+         manifest may not summarise its own admission record incorrectly"
+    )]
+    AdmissionDisagreesWithExclusion { admitted: bool, excluded: bool },
+    #[error("series_admission.admitted is true but exclusions is non-empty: {0:?}")]
+    AdmittedRunCarriesExclusions(Vec<String>),
+    #[error(
         "reconstructed manifest has empty preconditions but does not record it as an absent field"
     )]
     ReconstructedWithoutAbsentFields,
@@ -83,6 +90,22 @@ pub fn validate(run_dir: &Path, manifest: &RunManifest) -> Result<(), Vec<Valida
             .is_some_and(|reason| !reason.trim().is_empty());
         if !reason_present {
             errors.push(ValidationError::MissingExclusionReason);
+        }
+    }
+
+    // Runs only when `series_admission` is `Some`, so every manifest committed before D-28
+    // (all twelve under `measurements/` today) is unaffected.
+    if let Some(admission) = &manifest.series_admission {
+        if admission.admitted == manifest.excluded_from_series {
+            errors.push(ValidationError::AdmissionDisagreesWithExclusion {
+                admitted: admission.admitted,
+                excluded: manifest.excluded_from_series,
+            });
+        }
+        if admission.admitted && !admission.exclusions.is_empty() {
+            errors.push(ValidationError::AdmittedRunCarriesExclusions(
+                admission.exclusions.clone(),
+            ));
         }
     }
 

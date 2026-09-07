@@ -65,11 +65,22 @@ pub struct RunManifest {
     /// harness-generated run with nothing missing.
     pub absent_fields: Vec<AbsentField>,
     /// BENCH-06: a contaminated or otherwise non-headline run is still published, but
-    /// excluded from the regression series. See `exclusion_reason`.
+    /// excluded from the regression series. Means "not admitted to the headline
+    /// regression series", never "this result looks bad": a run can be excluded while
+    /// `interference.verdict` is `Clean`, and admitted while it is `Contaminated` (D-28).
+    /// Derived from `series_admission` when present: `!series_admission.admitted`.
     pub excluded_from_series: bool,
     /// Required to be `Some` and non-empty when `excluded_from_series` is true; see
-    /// `ValidationError::MissingExclusionReason`.
+    /// `ValidationError::MissingExclusionReason`. Derived from `series_admission` when
+    /// present: `series_admission.exclusions` joined with `"; "`.
     pub exclusion_reason: Option<String>,
+    /// The two-part admission record (D-28). Absent on manifests written before this field
+    /// existed. When present, `excluded_from_series` is exactly `!series_admission.admitted`
+    /// and `exclusion_reason` is exactly `series_admission.exclusions` joined with `"; "`;
+    /// `validate` refuses a manifest where they disagree, so the summary fields and the record
+    /// they summarise can never drift apart.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub series_admission: Option<SeriesAdmission>,
     /// Test-only fixture seams active for this run, by environment variable name.
     /// Empty for a real measurement.
     ///
@@ -709,6 +720,77 @@ pub struct SmiCounts {
     pub unavailable_reason: Option<String>,
 }
 
+/// Why this run is, or is not, admitted to the headline regression series.
+///
+/// Decided **only** from evidence causally upstream of the latency number this run measured:
+/// the precondition results, tool exit codes, fixture use, the precondition waiver, the
+/// `/proc/interrupts` counter deltas against calibrated thresholds when calibrated thresholds
+/// exist, the exact `MSR_SMI_COUNT` delta, and the recorded thermal maximum.
+///
+/// It is deliberately NOT decided from `InterferenceSnapshotPair::verdict` or from
+/// `TailMetrics`. Those are an inference from the effect: `tail_excursion_ratio` is
+/// `max / p99` and `thread_max_spread` is the relative spread of the per-thread maxima, both
+/// computed from this run's own histogram. A genuine platform regression produces the same
+/// signature as contamination, so admitting on that signal would silently drop the exact
+/// results the regression series exists to catch. See `01-REVIEW-2026-09-06.md` finding A1 and
+/// decision D-28.
+///
+/// The D-24 shape verdict is still computed, still recorded in
+/// [`RunManifest::interference`], and still rendered in `REPORT.md`. It annotates; it does not
+/// admit or exclude.
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct SeriesAdmission {
+    /// True when no upstream evidence source excluded this run.
+    pub admitted: bool,
+    /// One entry per upstream evidence source that excluded this run, each naming the evidence
+    /// and its observed value. Empty if and only if `admitted` is true.
+    pub exclusions: Vec<String>,
+    /// Every upstream evidence source the gate consulted, with what it observed and what it
+    /// made of it, whether or not it excluded. A source that could not be evaluated says so
+    /// rather than being omitted, for the same reason a precondition that could not be read is
+    /// recorded `unavailable` rather than dropped (D-06).
+    pub evidence: Vec<AdmissionEvidence>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct AdmissionEvidence {
+    pub source: AdmissionEvidenceSource,
+    /// What the gate actually read, as text a human can check against the rest of the manifest,
+    /// e.g. `15 pass, 0 fail, 0 unavailable` or `cal max 6, tlb max 6, res max 55, irq max 1127
+    /// over 3600s`.
+    pub observed: String,
+    pub disposition: AdmissionDisposition,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AdmissionEvidenceSource {
+    Preconditions,
+    ToolExitCodes,
+    FixtureUse,
+    PreconditionWaiver,
+    InterferenceCounters,
+    SmiDelta,
+    ThermalMaximum,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AdmissionDisposition {
+    /// Consulted, and nothing in it excludes the run.
+    Clean,
+    /// This source excluded the run. Its text also appears in `SeriesAdmission::exclusions`.
+    Excluding,
+    /// Could not be evaluated at all.
+    Unavailable,
+    /// Recorded, but no calibrated threshold exists to judge it against, so it cannot exclude.
+    /// This is the honest state of the interference counters, the SMI delta and the thermal
+    /// maximum today; see `config/contamination-thresholds.json`.
+    NotThresholded,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -996,6 +1078,78 @@ mod tests {
         assert!(
             checked >= 4,
             "expected at least the four post-01-20 manifests plan 01-23 committed; found {checked}"
+        );
+    }
+
+    /// A manifest carrying a `SeriesAdmission` with two evidence entries serialises and
+    /// deserialises unchanged (D-28).
+    #[test]
+    fn series_admission_roundtrips() {
+        let admission = SeriesAdmission {
+            admitted: false,
+            exclusions: vec![
+                "preconditions: 1 fail (governor-is-performance-on-all-cpus)".to_string(),
+            ],
+            evidence: vec![
+                AdmissionEvidence {
+                    source: AdmissionEvidenceSource::Preconditions,
+                    observed: "14 pass, 1 fail, 0 not-applicable, 0 unavailable".to_string(),
+                    disposition: AdmissionDisposition::Excluding,
+                },
+                AdmissionEvidence {
+                    source: AdmissionEvidenceSource::InterferenceCounters,
+                    observed: "cal max 6 on cpu9, tlb max 6 on cpu6, res max 55 on cpu7, irq max \
+                               1127 on cpu6, over 3600s"
+                        .to_string(),
+                    disposition: AdmissionDisposition::NotThresholded,
+                },
+            ],
+        };
+
+        let json = serde_json::to_string(&admission).expect("SeriesAdmission must serialize");
+        let restored: SeriesAdmission =
+            serde_json::from_str(&json).expect("SeriesAdmission must deserialize");
+        assert_eq!(restored, admission);
+    }
+
+    /// Every manifest under `measurements/` predates `series_admission` (plan 01-24 is the
+    /// first plan to write the field) and must keep deserialising with it absent. Walks the
+    /// directory rather than a hardcoded list, so a manifest committed later is covered without
+    /// editing this test: unlike `firmware_screens`/`smi_counts`, no manifest can carry
+    /// `series_admission` before this plan's own harness change ships, so there is no "predates"
+    /// split to maintain.
+    #[test]
+    fn committed_manifests_parse_without_series_admission() {
+        let measurements_dir =
+            std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../measurements"));
+        let mut checked = 0;
+        for entry in std::fs::read_dir(measurements_dir)
+            .expect("measurements/ must exist for this test to mean anything")
+        {
+            let entry = entry.expect("readable directory entry");
+            let manifest_path = entry.path().join("manifest.json");
+            let Ok(text) = std::fs::read_to_string(&manifest_path) else {
+                continue; // a failed-attempt directory has no manifest.json at all
+            };
+            assert!(
+                !text.contains("series_admission"),
+                "{}: expected to predate series_admission; if it now carries the field, this \
+                 test's premise (nothing committed yet carries it) no longer holds",
+                manifest_path.display()
+            );
+            let manifest: RunManifest = serde_json::from_str(&text).unwrap_or_else(|err| {
+                panic!("{} failed to deserialize: {err}", manifest_path.display())
+            });
+            assert!(
+                manifest.series_admission.is_none(),
+                "{} predates series_admission and must default to absent",
+                manifest_path.display()
+            );
+            checked += 1;
+        }
+        assert!(
+            checked >= 12,
+            "expected at least the twelve manifests committed before plan 01-24; found {checked}"
         );
     }
 }

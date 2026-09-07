@@ -18,11 +18,11 @@
       }
     },
     "excluded_from_series": {
-      "description": "BENCH-06: a contaminated or otherwise non-headline run is still published, but\nexcluded from the regression series. See `exclusion_reason`.",
+      "description": "BENCH-06: a contaminated or otherwise non-headline run is still published, but\nexcluded from the regression series. Means \"not admitted to the headline\nregression series\", never \"this result looks bad\": a run can be excluded while\n`interference.verdict` is `Clean`, and admitted while it is `Contaminated` (D-28).\nDerived from `series_admission` when present: `!series_admission.admitted`.",
       "type": "boolean"
     },
     "exclusion_reason": {
-      "description": "Required to be `Some` and non-empty when `excluded_from_series` is true; see\n`ValidationError::MissingExclusionReason`.",
+      "description": "Required to be `Some` and non-empty when `excluded_from_series` is true; see\n`ValidationError::MissingExclusionReason`. Derived from `series_admission` when\npresent: `series_admission.exclusions` joined with `\"; \"`.",
       "type": [
         "string",
         "null"
@@ -96,6 +96,17 @@
       "type": "integer",
       "format": "uint32",
       "minimum": 0
+    },
+    "series_admission": {
+      "description": "The two-part admission record (D-28). Absent on manifests written before this field\nexisted. When present, `excluded_from_series` is exactly `!series_admission.admitted`\nand `exclusion_reason` is exactly `series_admission.exclusions` joined with `\"; \"`;\n`validate` refuses a manifest where they disagree, so the summary fields and the record\nthey summarise can never drift apart.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SeriesAdmission"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "smi_counts": {
       "description": "Per-CPU SMI counts bracketing the whole run. Absent on manifests written before this\nfield existed and on machines where the register could not be read.",
@@ -176,6 +187,63 @@
       "required": [
         "field_path",
         "reason"
+      ]
+    },
+    "AdmissionDisposition": {
+      "oneOf": [
+        {
+          "description": "Consulted, and nothing in it excludes the run.",
+          "type": "string",
+          "const": "clean"
+        },
+        {
+          "description": "This source excluded the run. Its text also appears in `SeriesAdmission::exclusions`.",
+          "type": "string",
+          "const": "excluding"
+        },
+        {
+          "description": "Could not be evaluated at all.",
+          "type": "string",
+          "const": "unavailable"
+        },
+        {
+          "description": "Recorded, but no calibrated threshold exists to judge it against, so it cannot exclude.\nThis is the honest state of the interference counters, the SMI delta and the thermal\nmaximum today; see `config/contamination-thresholds.json`.",
+          "type": "string",
+          "const": "not-thresholded"
+        }
+      ]
+    },
+    "AdmissionEvidence": {
+      "type": "object",
+      "properties": {
+        "disposition": {
+          "$ref": "#/$defs/AdmissionDisposition"
+        },
+        "observed": {
+          "description": "What the gate actually read, as text a human can check against the rest of the manifest,\ne.g. `15 pass, 0 fail, 0 unavailable` or `cal max 6, tlb max 6, res max 55, irq max 1127\nover 3600s`.",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/AdmissionEvidenceSource"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "observed",
+        "disposition"
+      ]
+    },
+    "AdmissionEvidenceSource": {
+      "type": "string",
+      "enum": [
+        "preconditions",
+        "tool-exit-codes",
+        "fixture-use",
+        "precondition-waiver",
+        "interference-counters",
+        "smi-delta",
+        "thermal-maximum"
       ]
     },
     "ArtifactKind": {
@@ -1010,6 +1078,36 @@
         "headline",
         "weekly",
         "soak"
+      ]
+    },
+    "SeriesAdmission": {
+      "description": "Why this run is, or is not, admitted to the headline regression series.\n\nDecided **only** from evidence causally upstream of the latency number this run measured:\nthe precondition results, tool exit codes, fixture use, the precondition waiver, the\n`/proc/interrupts` counter deltas against calibrated thresholds when calibrated thresholds\nexist, the exact `MSR_SMI_COUNT` delta, and the recorded thermal maximum.\n\nIt is deliberately NOT decided from `InterferenceSnapshotPair::verdict` or from\n`TailMetrics`. Those are an inference from the effect: `tail_excursion_ratio` is\n`max / p99` and `thread_max_spread` is the relative spread of the per-thread maxima, both\ncomputed from this run's own histogram. A genuine platform regression produces the same\nsignature as contamination, so admitting on that signal would silently drop the exact\nresults the regression series exists to catch. See `01-REVIEW-2026-09-06.md` finding A1 and\ndecision D-28.\n\nThe D-24 shape verdict is still computed, still recorded in\n[`RunManifest::interference`], and still rendered in `REPORT.md`. It annotates; it does not\nadmit or exclude.",
+      "type": "object",
+      "properties": {
+        "admitted": {
+          "description": "True when no upstream evidence source excluded this run.",
+          "type": "boolean"
+        },
+        "evidence": {
+          "description": "Every upstream evidence source the gate consulted, with what it observed and what it\nmade of it, whether or not it excluded. A source that could not be evaluated says so\nrather than being omitted, for the same reason a precondition that could not be read is\nrecorded `unavailable` rather than dropped (D-06).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AdmissionEvidence"
+          }
+        },
+        "exclusions": {
+          "description": "One entry per upstream evidence source that excluded this run, each naming the evidence\nand its observed value. Empty if and only if `admitted` is true.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "admitted",
+        "exclusions",
+        "evidence"
       ]
     },
     "ServiceState": {

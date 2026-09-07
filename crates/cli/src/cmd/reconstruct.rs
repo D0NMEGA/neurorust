@@ -295,6 +295,10 @@ pub fn run(args: Args) -> anyhow::Result<i32> {
         // reconstructed run records none rather than inferring one.
         firmware_screens: Vec::new(),
         smi_counts: None,
+        // A reconstructed run never went through the live admission gate (D-28); there is no
+        // evidence trail to recover, only the excluded_from_series/exclusion_reason pair the
+        // operator already supplied above.
+        series_admission: None,
         absent_fields: absent,
         excluded_from_series,
         exclusion_reason,

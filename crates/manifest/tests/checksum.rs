@@ -3,7 +3,10 @@
 use std::path::PathBuf;
 
 use nr_manifest::checksum::{blake3_file, verify_artifact};
-use nr_manifest::fields::{ArtifactKind, ArtifactRecord, RunManifest, StorageLocation};
+use nr_manifest::fields::{
+    AdmissionDisposition, AdmissionEvidence, AdmissionEvidenceSource, ArtifactKind, ArtifactRecord,
+    RunManifest, SeriesAdmission, StorageLocation,
+};
 use nr_manifest::validate::{ValidationError, validate};
 
 const FIXTURE_JSON: &str = include_str!("fixtures/minimal-manifest.json");
@@ -112,5 +115,87 @@ fn exclusion_reason_required() {
             .iter()
             .any(|e| matches!(e, ValidationError::MissingExclusionReason)),
         "expected MissingExclusionReason among: {errors:?}"
+    );
+}
+
+fn clean_admission() -> SeriesAdmission {
+    SeriesAdmission {
+        admitted: true,
+        exclusions: vec![],
+        evidence: vec![AdmissionEvidence {
+            source: AdmissionEvidenceSource::Preconditions,
+            observed: "14 pass, 0 fail, 0 not-applicable, 0 unavailable".to_string(),
+            disposition: AdmissionDisposition::Clean,
+        }],
+    }
+}
+
+/// D-28: a manifest whose `series_admission.admitted` disagrees with `excluded_from_series`
+/// fails validation, in both directions.
+#[test]
+fn validate_rejects_admission_disagreeing_with_exclusion() {
+    let mut manifest = fixture_manifest();
+    manifest.excluded_from_series = false;
+    manifest.exclusion_reason = None;
+    manifest.series_admission = Some(SeriesAdmission {
+        admitted: true,
+        ..clean_admission()
+    });
+    // excluded_from_series (false) already agrees with admitted (true); force disagreement.
+    manifest.series_admission.as_mut().unwrap().admitted = false;
+
+    let result = validate(&histogram_fixtures_dir(), &manifest);
+    let errors = result.expect_err("admitted=false with excluded_from_series=false must fail");
+    assert!(
+        errors.iter().any(|e| matches!(
+            e,
+            ValidationError::AdmissionDisagreesWithExclusion {
+                admitted: false,
+                excluded: false
+            }
+        )),
+        "expected AdmissionDisagreesWithExclusion among: {errors:?}"
+    );
+
+    // The mirror case: admitted=true with excluded_from_series=true.
+    let mut manifest = fixture_manifest();
+    manifest.excluded_from_series = true;
+    manifest.exclusion_reason = Some("some reason".to_string());
+    manifest.series_admission = Some(clean_admission());
+
+    let result = validate(&histogram_fixtures_dir(), &manifest);
+    let errors = result.expect_err("admitted=true with excluded_from_series=true must fail");
+    assert!(
+        errors.iter().any(|e| matches!(
+            e,
+            ValidationError::AdmissionDisagreesWithExclusion {
+                admitted: true,
+                excluded: true
+            }
+        )),
+        "expected AdmissionDisagreesWithExclusion among: {errors:?}"
+    );
+}
+
+/// D-28: an admitted run may not carry exclusions; `admitted` and a non-empty `exclusions`
+/// list are mutually exclusive by construction, not merely by convention.
+#[test]
+fn validate_rejects_admitted_run_carrying_exclusions() {
+    let mut manifest = fixture_manifest();
+    manifest.excluded_from_series = false;
+    manifest.exclusion_reason = None;
+    manifest.series_admission = Some(SeriesAdmission {
+        admitted: true,
+        exclusions: vec!["fixture use: NRMEASURE_FACTS_FIXTURE".to_string()],
+        ..clean_admission()
+    });
+
+    let result = validate(&histogram_fixtures_dir(), &manifest);
+    let errors = result.expect_err("admitted=true with non-empty exclusions must fail");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::AdmittedRunCarriesExclusions(_))),
+        "expected AdmittedRunCarriesExclusions among: {errors:?}"
     );
 }

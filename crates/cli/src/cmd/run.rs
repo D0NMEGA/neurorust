@@ -1032,6 +1032,10 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
             artifacts,
             firmware_screens,
             smi_counts: Some(smi_counts),
+            // The D-28 admission gate (determine_admission) is wired below in the same
+            // plan's task 2; None is a compile-time placeholder for the struct change task 1
+            // makes here and does not ship.
+            series_admission: None,
             absent_fields: env_snapshot.absent_fields,
             excluded_from_series,
             exclusion_reason,
