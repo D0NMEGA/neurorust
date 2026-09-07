@@ -29,10 +29,11 @@ use nr_capture::{environment, hwnoise, interference, preconditions, smi};
 use nr_histogram::hist::{CyclictestRun, parse_hist_file};
 use nr_histogram::json::{parse_json_file, reconcile};
 use nr_manifest::{
-    ArtifactKind, ArtifactPathMapping, ArtifactRecord, AttemptFailure, AttemptRecord,
-    AttemptStatus, ContaminationVerdict, GitShaSource, HarnessInfo, InstrumentClass,
-    PreconditionResult, PreconditionStatus, ProvenanceTier, RequestedRun, RunClass, RunManifest,
-    StorageLocation, ThermalProfile, ToolInvocation,
+    AdmissionDisposition, AdmissionEvidence, AdmissionEvidenceSource, ArtifactKind,
+    ArtifactPathMapping, ArtifactRecord, AttemptFailure, AttemptRecord, AttemptStatus,
+    GitShaSource, HarnessInfo, InstrumentClass, PreconditionResult, PreconditionStatus,
+    ProvenanceTier, RequestedRun, RunClass, RunManifest, SeriesAdmission, StorageLocation,
+    ThermalProfile, ToolInvocation,
 };
 use nr_metrics::report::render_run_report;
 use time::OffsetDateTime;
@@ -985,25 +986,42 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
             })
             .collect();
 
-        // D-17: a run taken with --allow-precondition-violation is always excluded
-        // from the series, unconditionally overriding whatever determine_exclusion
-        // would otherwise compute from tool exit codes or the contamination
-        // verdict. This is not a default the operator can turn off. A fixture-driven
-        // run (finding 8 of 01-EXTERNAL-AUDIT.md) is forced the same way, in this
-        // same decision, rather than as a second, separate forcing site: no fixture
-        // can ever reach the series regardless of what its fabricated deltas say.
-        let (excluded_from_series, exclusion_reason) = if args.allow_precondition_violation {
-            (true, Some(precondition_waiver_reason(&results)))
-        } else if !fixtures_used.is_empty() {
-            (true, outcome.reason.clone())
-        } else {
-            determine_exclusion(
-                &tool_invocations,
-                &outcome.pair.verdict,
-                outcome.reason.as_deref(),
-                outcome.pair.thresholds_provisional.unwrap_or(false),
-            )
+        // D-28: run admission is decided only from evidence causally upstream of the
+        // measured latency, never from its shape (01-REVIEW-2026-09-06.md finding A1).
+        // --allow-precondition-violation (D-17) and fixture use (finding 8 of
+        // 01-EXTERNAL-AUDIT.md) are two of the seven evidence sources
+        // determine_admission consults, not two separate forcing branches; see its own
+        // doc comment for the full list and their fixed order.
+        let precondition_waiver_text = args
+            .allow_precondition_violation
+            .then(|| precondition_waiver_reason(&results));
+        let counter_thresholds = match &thresholds {
+            interference::Thresholds::Calibrated(limits) => Some(limits),
+            // Calibrating a threshold set needs a body of admitted runs, and a body of
+            // admitted runs needs runs to be admitted, so admission cannot depend on a
+            // calibrated threshold set without a circular dependency (D-28). Neither an
+            // uncalibrated file nor a pair derived from exactly two runs is a
+            // calibrated ceiling; both are a deliberate None here, not an unhandled
+            // case.
+            interference::Thresholds::Uncalibrated | interference::Thresholds::Provisional(_) => {
+                None
+            }
         };
+        let admission = determine_admission(&AdmissionInputs {
+            preconditions: &results,
+            instrument_class: &instrument_class,
+            tools: &tool_invocations,
+            fixtures_used: &fixtures_used,
+            precondition_waiver: precondition_waiver_text.as_deref(),
+            interference_delta: &outcome.pair.delta,
+            counter_thresholds,
+            run_duration: Duration::from_secs_f64(cyclictest_elapsed_seconds),
+            smi: &smi_counts,
+            package_temp_c_max: env_snapshot.power.package_temp_c_max,
+        });
+        let excluded_from_series = !admission.admitted;
+        let exclusion_reason =
+            (!admission.exclusions.is_empty()).then(|| admission.exclusions.join("; "));
 
         // Step 10: assemble, validate and write manifest.json (written last).
         rundir::refuse_if_manifest_exists(&run_dir.path)
@@ -1032,10 +1050,7 @@ fn execute(args: Args, overrides: &Overrides) -> Result<i32> {
             artifacts,
             firmware_screens,
             smi_counts: Some(smi_counts),
-            // The D-28 admission gate (determine_admission) is wired below in the same
-            // plan's task 2; None is a compile-time placeholder for the struct change task 1
-            // makes here and does not ship.
-            series_admission: None,
+            series_admission: Some(admission),
             absent_fields: env_snapshot.absent_fields,
             excluded_from_series,
             exclusion_reason,
@@ -1769,55 +1784,250 @@ fn write_hist_tsv(run_dir: &Path, run: &CyclictestRun) -> Result<()> {
         .context("failed to write hist.tsv")
 }
 
-/// BENCH-06: a tool failure, a non-clean contamination verdict, or a verdict reached
-/// against provisional (not yet calibrated) thresholds does not drop the run. It is
-/// retained and published, only marked excluded from the regression series with a
-/// reason. `Uncalibrated` and a provisional `Clean`/`Contaminated` (D-24; see
-/// `crates/capture/src/interference.rs`'s `Thresholds::Provisional`) are both treated
-/// the same way here: a run whose contamination status cannot be judged, or can only
-/// be judged against a threshold set derived from two runs, is not a defensible
-/// headline figure either, matching this project's rig-discipline stance that an
-/// unknown, or an unproven, is never silently treated as clean.
-fn determine_exclusion(
-    tool_invocations: &[ToolInvocation],
-    verdict: &ContaminationVerdict,
-    verdict_reason: Option<&str>,
-    thresholds_provisional: bool,
-) -> (bool, Option<String>) {
-    if let Some(failed) = tool_invocations.iter().find(|tool| is_tool_failure(tool)) {
-        return (
-            true,
-            Some(format!(
+/// Everything the admission gate is allowed to see. The absence of `ContaminationVerdict`,
+/// `TailMetrics` and `InterferenceSnapshotPair` from this struct is the mechanism, not an
+/// oversight: the gate cannot exclude a run for the shape of its own latency because it is never
+/// handed the shape. Adding either to this struct is the change a reviewer should refuse.
+struct AdmissionInputs<'a> {
+    preconditions: &'a [PreconditionResult],
+    instrument_class: &'a InstrumentClass,
+    tools: &'a [ToolInvocation],
+    fixtures_used: &'a [String],
+    /// `Some(reason)` when `--allow-precondition-violation` was given.
+    precondition_waiver: Option<&'a str>,
+    interference_delta: &'a nr_manifest::InterferenceDelta,
+    /// `Some` only when `config/contamination-thresholds.json` is `calibrated`. `None` under the
+    /// shipped provisional file, in which case the counters are recorded and not thresholded.
+    counter_thresholds: Option<&'a interference::CalibratedThresholds>,
+    run_duration: Duration,
+    smi: &'a nr_manifest::SmiCounts,
+    package_temp_c_max: Option<f32>,
+}
+
+/// The observed text for `AdmissionEvidenceSource::InterferenceCounters`: the maximum per-CPU
+/// delta of each of the four D-15 counters, and the run duration in whole seconds. Recorded
+/// whether or not a calibrated threshold exists to judge it against.
+fn format_counter_deltas(delta: &nr_manifest::InterferenceDelta, run_duration: Duration) -> String {
+    fn max_of(counters: &[nr_manifest::CpuCounter]) -> (u64, u32) {
+        counters
+            .iter()
+            .max_by_key(|counter| counter.count)
+            .map(|counter| (counter.count, counter.cpu))
+            .unwrap_or((0, 0))
+    }
+    let (cal_max, cal_cpu) = max_of(&delta.cal_ipis);
+    let (tlb_max, tlb_cpu) = max_of(&delta.tlb_ipis);
+    let (res_max, res_cpu) = max_of(&delta.context_switches);
+    let (irq_max, irq_cpu) = max_of(&delta.irqs);
+    format!(
+        "cal max {cal_max} on cpu{cal_cpu}, tlb max {tlb_max} on cpu{tlb_cpu}, res max {res_max} \
+         on cpu{res_cpu}, irq max {irq_max} on cpu{irq_cpu}, over {}s",
+        run_duration.as_secs()
+    )
+}
+
+/// D-28: decides admission to the headline regression series from upstream evidence only.
+fn determine_admission(inputs: &AdmissionInputs<'_>) -> SeriesAdmission {
+    let mut evidence = Vec::with_capacity(7);
+    let mut exclusions = Vec::new();
+
+    // 1. PreconditionWaiver. D-17 makes this unconditional and it stays unconditional: a
+    // waived calibration-contaminated run is always excluded, whatever every other source
+    // below finds.
+    match inputs.precondition_waiver {
+        Some(reason) => {
+            evidence.push(AdmissionEvidence {
+                source: AdmissionEvidenceSource::PreconditionWaiver,
+                observed: reason.to_string(),
+                disposition: AdmissionDisposition::Excluding,
+            });
+            exclusions.push(reason.to_string());
+        }
+        None => evidence.push(AdmissionEvidence {
+            source: AdmissionEvidenceSource::PreconditionWaiver,
+            observed: "not given".to_string(),
+            disposition: AdmissionDisposition::Clean,
+        }),
+    }
+
+    // 2. FixtureUse. No fixture can ever reach the series regardless of what its
+    // fabricated deltas say (finding 8 of 01-EXTERNAL-AUDIT.md).
+    if inputs.fixtures_used.is_empty() {
+        evidence.push(AdmissionEvidence {
+            source: AdmissionEvidenceSource::FixtureUse,
+            observed: "none".to_string(),
+            disposition: AdmissionDisposition::Clean,
+        });
+    } else {
+        let reason = fixture_usage_reason(inputs.fixtures_used);
+        evidence.push(AdmissionEvidence {
+            source: AdmissionEvidenceSource::FixtureUse,
+            observed: reason.clone(),
+            disposition: AdmissionDisposition::Excluding,
+        });
+        exclusions.push(reason);
+    }
+
+    // 3. ToolExitCodes. Reuses is_tool_failure unchanged: hwlatdetect exit 1 stays a
+    // finding, not a failure.
+    let observed_tools = inputs
+        .tools
+        .iter()
+        .map(|tool| format!("{}={}", tool.name, tool.exit_code))
+        .collect::<Vec<_>>()
+        .join(" ");
+    match inputs.tools.iter().find(|tool| is_tool_failure(tool)) {
+        Some(failed) => {
+            evidence.push(AdmissionEvidence {
+                source: AdmissionEvidenceSource::ToolExitCodes,
+                observed: observed_tools,
+                disposition: AdmissionDisposition::Excluding,
+            });
+            exclusions.push(format!(
                 "{} exited with code {}",
                 failed.name, failed.exit_code
-            )),
-        );
+            ));
+        }
+        None => evidence.push(AdmissionEvidence {
+            source: AdmissionEvidenceSource::ToolExitCodes,
+            observed: observed_tools,
+            disposition: AdmissionDisposition::Clean,
+        }),
     }
 
-    if thresholds_provisional {
-        return (
-            true,
-            Some(format!(
-                "contamination verdict {verdict:?} was reached against provisional (D-24, not \
-                 yet calibrated) thresholds; see config/contamination-thresholds.json"
-            )),
-        );
+    // 4. Preconditions. Mirrors preconditions::refuse_on_violation exactly: any Fail, or
+    // any Unavailable on a HeadlineSeries run. Recorded even though a real run normally
+    // never reaches this gate with a violation (refuse_on_violation already refused it
+    // before touching anything), because a waived run must show what was waived.
+    let pass = inputs
+        .preconditions
+        .iter()
+        .filter(|result| result.status == PreconditionStatus::Pass)
+        .count();
+    let fail = inputs
+        .preconditions
+        .iter()
+        .filter(|result| result.status == PreconditionStatus::Fail)
+        .count();
+    let not_applicable = inputs
+        .preconditions
+        .iter()
+        .filter(|result| result.status == PreconditionStatus::NotApplicable)
+        .count();
+    let unavailable = inputs
+        .preconditions
+        .iter()
+        .filter(|result| result.status == PreconditionStatus::Unavailable)
+        .count();
+    let offending: Vec<&PreconditionResult> = inputs
+        .preconditions
+        .iter()
+        .filter(|result| {
+            result.status == PreconditionStatus::Fail
+                || (result.status == PreconditionStatus::Unavailable
+                    && *inputs.instrument_class == InstrumentClass::HeadlineSeries)
+        })
+        .collect();
+    evidence.push(AdmissionEvidence {
+        source: AdmissionEvidenceSource::Preconditions,
+        observed: format!(
+            "{pass} pass, {fail} fail, {not_applicable} not-applicable, {unavailable} unavailable"
+        ),
+        disposition: if offending.is_empty() {
+            AdmissionDisposition::Clean
+        } else {
+            AdmissionDisposition::Excluding
+        },
+    });
+    if !offending.is_empty() {
+        exclusions.push(format!(
+            "preconditions: {} check(s) failed or unavailable: {}",
+            offending.len(),
+            offending
+                .iter()
+                .map(|result| format!(
+                    "{:?} (observed {:?}, expected {:?})",
+                    result.check, result.observed, result.expected
+                ))
+                .collect::<Vec<_>>()
+                .join("; ")
+        ));
     }
 
-    match verdict {
-        ContaminationVerdict::Clean => (false, None),
-        ContaminationVerdict::Contaminated => (
-            true,
-            Some(
-                verdict_reason
-                    .unwrap_or("interference thresholds exceeded")
-                    .to_string(),
-            ),
-        ),
-        ContaminationVerdict::Uncalibrated => (
-            true,
-            Some("no calibrated contamination thresholds exist yet (D-17)".to_string()),
-        ),
+    // 5. InterferenceCounters. Reads only the counters and the calibrated limit, never
+    // the shape of the measured latency: that is the whole point of this gate (D-28).
+    let observed_counters = format_counter_deltas(inputs.interference_delta, inputs.run_duration);
+    match inputs.counter_thresholds {
+        Some(limits) => match interference::counter_breach(
+            inputs.interference_delta,
+            limits,
+            inputs.run_duration,
+        ) {
+            Some(reason) => {
+                evidence.push(AdmissionEvidence {
+                    source: AdmissionEvidenceSource::InterferenceCounters,
+                    observed: observed_counters,
+                    disposition: AdmissionDisposition::Excluding,
+                });
+                exclusions.push(reason);
+            }
+            None => evidence.push(AdmissionEvidence {
+                source: AdmissionEvidenceSource::InterferenceCounters,
+                observed: observed_counters,
+                disposition: AdmissionDisposition::Clean,
+            }),
+        },
+        None => evidence.push(AdmissionEvidence {
+            source: AdmissionEvidenceSource::InterferenceCounters,
+            observed: observed_counters,
+            disposition: AdmissionDisposition::NotThresholded,
+        }),
+    }
+
+    // 6. SmiDelta. No calibrated SMI ceiling exists yet, so this is recorded and never
+    // excludes: a deliberate NotThresholded, not a forgotten comparison.
+    match &inputs.smi.unavailable_reason {
+        Some(reason) => evidence.push(AdmissionEvidence {
+            source: AdmissionEvidenceSource::SmiDelta,
+            observed: reason.clone(),
+            disposition: AdmissionDisposition::Unavailable,
+        }),
+        None => {
+            let observed = inputs
+                .smi
+                .delta
+                .iter()
+                .map(|counter| format!("cpu{}={}", counter.cpu, counter.count))
+                .collect::<Vec<_>>()
+                .join(" ");
+            evidence.push(AdmissionEvidence {
+                source: AdmissionEvidenceSource::SmiDelta,
+                observed,
+                disposition: AdmissionDisposition::NotThresholded,
+            });
+        }
+    }
+
+    // 7. ThermalMaximum. THERMAL_HEADROOM_CEILING_C is a start-of-run gate by its own
+    // documentation and there is no calibrated mid-run ceiling, so this records and
+    // never excludes.
+    match inputs.package_temp_c_max {
+        Some(temp) => evidence.push(AdmissionEvidence {
+            source: AdmissionEvidenceSource::ThermalMaximum,
+            observed: format!("{temp:.1} C"),
+            disposition: AdmissionDisposition::NotThresholded,
+        }),
+        None => evidence.push(AdmissionEvidence {
+            source: AdmissionEvidenceSource::ThermalMaximum,
+            observed: "not recorded".to_string(),
+            disposition: AdmissionDisposition::Unavailable,
+        }),
+    }
+
+    SeriesAdmission {
+        admitted: exclusions.is_empty(),
+        exclusions,
+        evidence,
     }
 }
 
@@ -2155,48 +2365,428 @@ VERSION=\"26.04.1 LTS\"
         }
     }
 
+    /// One `Pass` result per entry of `PreconditionCheck::ALL` (15 today), the baseline
+    /// every `determine_admission` test below starts from and mutates one entry of.
+    fn all_pass_preconditions() -> Vec<PreconditionResult> {
+        nr_manifest::PreconditionCheck::ALL
+            .iter()
+            .map(|check| PreconditionResult {
+                check: check.clone(),
+                status: PreconditionStatus::Pass,
+                observed: "ok".to_string(),
+                expected: "ok".to_string(),
+            })
+            .collect()
+    }
+
+    fn empty_delta() -> nr_manifest::InterferenceDelta {
+        nr_manifest::InterferenceDelta {
+            cal_ipis: vec![],
+            tlb_ipis: vec![],
+            context_switches: vec![],
+            irqs: vec![],
+        }
+    }
+
+    fn benign_smi() -> nr_manifest::SmiCounts {
+        nr_manifest::SmiCounts {
+            register: "0x34".to_string(),
+            before: vec![],
+            after: vec![],
+            delta: vec![],
+            unavailable_reason: None,
+        }
+    }
+
     /// hwlatdetect exits with `(maxlatency > hardlimit)` and defaults `hardlimit` to the
     /// threshold, so a screen that observes anything above the threshold exits 1 by design.
     /// Treating that as a tool failure excluded both D-18 arms on 2026-09-05 with the reason
     /// "hwlatdetect exited with code 1", which reads as a broken capture rather than the
     /// finding it is. Those two manifests are published and D-12 forbids editing them; this
-    /// stops it recurring.
+    /// stops it recurring. Adapted to `determine_admission`'s signature in plan 01-24 (D-28);
+    /// the assertions are unchanged.
     #[test]
     fn hwlatdetect_exit_one_is_a_finding_not_a_failure() {
-        let (excluded, reason) = determine_exclusion(
-            &[invocation("cyclictest", 0), invocation("hwlatdetect", 1)],
-            &ContaminationVerdict::Clean,
-            None,
-            false,
-        );
+        let admission = determine_admission(&AdmissionInputs {
+            preconditions: &all_pass_preconditions(),
+            instrument_class: &InstrumentClass::HeadlineSeries,
+            tools: &[invocation("cyclictest", 0), invocation("hwlatdetect", 1)],
+            fixtures_used: &[],
+            precondition_waiver: None,
+            interference_delta: &empty_delta(),
+            counter_thresholds: None,
+            run_duration: Duration::from_secs(600),
+            smi: &benign_smi(),
+            package_temp_c_max: Some(45.0),
+        });
         assert!(
-            !excluded,
-            "exit 1 from hwlatdetect must not exclude the run: {reason:?}"
+            admission.admitted,
+            "exit 1 from hwlatdetect must not exclude the run: {:?}",
+            admission.exclusions
         );
-        assert_eq!(reason, None);
+        assert_eq!(admission.exclusions, Vec::<String>::new());
     }
 
     /// Any other nonzero exit from hwlatdetect is still a real failure, and every nonzero
-    /// exit from any other tool remains one.
+    /// exit from any other tool remains one. Adapted to `determine_admission`'s signature in
+    /// plan 01-24 (D-28); the assertions are unchanged.
     #[test]
     fn other_nonzero_exits_still_exclude() {
-        let (excluded, reason) = determine_exclusion(
-            &[invocation("hwlatdetect", 2)],
-            &ContaminationVerdict::Clean,
-            None,
-            false,
+        let admission = determine_admission(&AdmissionInputs {
+            preconditions: &all_pass_preconditions(),
+            instrument_class: &InstrumentClass::HeadlineSeries,
+            tools: &[invocation("hwlatdetect", 2)],
+            fixtures_used: &[],
+            precondition_waiver: None,
+            interference_delta: &empty_delta(),
+            counter_thresholds: None,
+            run_duration: Duration::from_secs(600),
+            smi: &benign_smi(),
+            package_temp_c_max: Some(45.0),
+        });
+        assert!(!admission.admitted);
+        assert!(
+            admission
+                .exclusions
+                .iter()
+                .any(|reason| reason.contains("hwlatdetect exited with code 2")),
+            "{:?}",
+            admission.exclusions
         );
-        assert!(excluded);
-        assert!(reason.unwrap().contains("hwlatdetect exited with code 2"));
 
-        let (excluded, reason) = determine_exclusion(
-            &[invocation("cyclictest", 1)],
-            &ContaminationVerdict::Clean,
-            None,
-            false,
+        let admission = determine_admission(&AdmissionInputs {
+            preconditions: &all_pass_preconditions(),
+            instrument_class: &InstrumentClass::HeadlineSeries,
+            tools: &[invocation("cyclictest", 1)],
+            fixtures_used: &[],
+            precondition_waiver: None,
+            interference_delta: &empty_delta(),
+            counter_thresholds: None,
+            run_duration: Duration::from_secs(600),
+            smi: &benign_smi(),
+            package_temp_c_max: Some(45.0),
+        });
+        assert!(!admission.admitted, "cyclictest has no such convention");
+        assert!(
+            admission
+                .exclusions
+                .iter()
+                .any(|reason| reason.contains("cyclictest exited with code 1")),
+            "{:?}",
+            admission.exclusions
         );
-        assert!(excluded, "cyclictest has no such convention");
-        assert!(reason.unwrap().contains("cyclictest exited with code 1"));
+    }
+
+    /// D-28/01-REVIEW-2026-09-06.md finding A1: a run whose only problem is the shape of
+    /// its own latency distribution is admitted. Uses the real, committed 2026-08-28
+    /// global-stall capture (the same file `fake-cyclictest.sh` serves by default in
+    /// `crates/cli/tests/run_pipeline.rs`) and the real shipped
+    /// `config/contamination-thresholds.json`, so both halves of the claim are checked
+    /// against production data rather than a hand-picked pair of numbers: the capture
+    /// really does score Contaminated under the shipped thresholds, and admission is
+    /// unaffected by that regardless. This is the 01-13 case: a clean headline capture
+    /// whose `tail_excursion_ratio` happens to land above the provisional limit must
+    /// still reach `excluded_from_series: false`.
+    #[test]
+    fn a_bad_looking_shape_alone_does_not_exclude() {
+        use nr_manifest::ContaminationVerdict;
+
+        let hist_path = Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../histogram/tests/fixtures/cyclictest-rt-isolated-idle-10m.hist"
+        ));
+        let cyclictest_run =
+            parse_hist_file(hist_path, Some(400)).expect("the committed 2026-08-28 capture parses");
+
+        let thresholds_path = Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../config/contamination-thresholds.json"
+        ));
+        let thresholds = interference::Thresholds::load(thresholds_path)
+            .expect("the shipped thresholds file loads");
+
+        let snapshot = nr_manifest::InterferenceSnapshot {
+            isolated_cpus: vec![6, 7, 8, 9, 10, 11],
+            cal_ipis: vec![],
+            tlb_ipis: vec![],
+            context_switches: vec![],
+            irqs: vec![],
+        };
+        let outcome = interference::verdict(
+            snapshot.clone(),
+            snapshot,
+            &cyclictest_run,
+            &thresholds,
+            Duration::from_secs(600),
+        )
+        .expect("the D-24 tail signal computes over a real capture");
+        assert_eq!(
+            outcome.pair.verdict,
+            ContaminationVerdict::Contaminated,
+            "the 2026-08-28 capture is this project's own on-record global-stall shape; if \
+             this assertion ever fails, the fixture or the shipped thresholds changed and \
+             this test's premise needs re-checking, not the admission gate"
+        );
+
+        let admission = determine_admission(&AdmissionInputs {
+            preconditions: &all_pass_preconditions(),
+            instrument_class: &InstrumentClass::HeadlineSeries,
+            tools: &[invocation("cyclictest", 0)],
+            fixtures_used: &[],
+            precondition_waiver: None,
+            interference_delta: &outcome.pair.delta,
+            counter_thresholds: None,
+            run_duration: Duration::from_secs(600),
+            smi: &benign_smi(),
+            package_temp_c_max: Some(45.0),
+        });
+        assert!(
+            admission.admitted,
+            "a bad-looking shape alone must not exclude: {:?}",
+            admission.exclusions
+        );
+        assert_eq!(admission.exclusions, Vec::<String>::new());
+        let excluded_from_series = !admission.admitted;
+        assert!(
+            !excluded_from_series,
+            "excluded_from_series must be false while interference.verdict is Contaminated"
+        );
+    }
+
+    /// A run with one `Fail` precondition is excluded, and the exclusion text names that
+    /// check and its observed value.
+    #[test]
+    fn a_failed_precondition_excludes_and_names_the_check() {
+        let mut preconditions = all_pass_preconditions();
+        preconditions[0] = PreconditionResult {
+            check: nr_manifest::PreconditionCheck::NoActiveSshSessions,
+            status: PreconditionStatus::Fail,
+            observed: "2 sessions".to_string(),
+            expected: "0 sessions".to_string(),
+        };
+
+        let admission = determine_admission(&AdmissionInputs {
+            preconditions: &preconditions,
+            instrument_class: &InstrumentClass::HeadlineSeries,
+            tools: &[invocation("cyclictest", 0)],
+            fixtures_used: &[],
+            precondition_waiver: None,
+            interference_delta: &empty_delta(),
+            counter_thresholds: None,
+            run_duration: Duration::from_secs(600),
+            smi: &benign_smi(),
+            package_temp_c_max: Some(45.0),
+        });
+        assert!(!admission.admitted);
+        assert!(
+            admission
+                .exclusions
+                .iter()
+                .any(|reason| reason.contains("NoActiveSshSessions")
+                    && reason.contains("2 sessions")),
+            "exclusion text should name the failed check and its observed value: {:?}",
+            admission.exclusions
+        );
+    }
+
+    /// The same result with status `Unavailable` excludes a `headline-series` run and
+    /// does not exclude an `investigation` run, mirroring
+    /// `preconditions::refuse_on_violation` exactly.
+    #[test]
+    fn an_unavailable_precondition_excludes_a_headline_run_only() {
+        let mut preconditions = all_pass_preconditions();
+        preconditions[0] = PreconditionResult {
+            check: nr_manifest::PreconditionCheck::NoActiveSshSessions,
+            status: PreconditionStatus::Unavailable,
+            observed: "could not read".to_string(),
+            expected: "0 sessions".to_string(),
+        };
+
+        let headline = determine_admission(&AdmissionInputs {
+            preconditions: &preconditions,
+            instrument_class: &InstrumentClass::HeadlineSeries,
+            tools: &[invocation("cyclictest", 0)],
+            fixtures_used: &[],
+            precondition_waiver: None,
+            interference_delta: &empty_delta(),
+            counter_thresholds: None,
+            run_duration: Duration::from_secs(600),
+            smi: &benign_smi(),
+            package_temp_c_max: Some(45.0),
+        });
+        assert!(
+            !headline.admitted,
+            "an unavailable check must exclude a headline-series run: {:?}",
+            headline.exclusions
+        );
+
+        let investigation = determine_admission(&AdmissionInputs {
+            preconditions: &preconditions,
+            instrument_class: &InstrumentClass::Investigation,
+            tools: &[invocation("cyclictest", 0)],
+            fixtures_used: &[],
+            precondition_waiver: None,
+            interference_delta: &empty_delta(),
+            counter_thresholds: None,
+            run_duration: Duration::from_secs(600),
+            smi: &benign_smi(),
+            package_temp_c_max: Some(45.0),
+        });
+        assert!(
+            investigation.admitted,
+            "an investigation run may proceed with an unavailable check: {:?}",
+            investigation.exclusions
+        );
+    }
+
+    /// `cyclictest` exit 1 excludes; `hwlatdetect` exit 1 does not (the existing
+    /// convention, unchanged).
+    #[test]
+    fn a_tool_failure_still_excludes() {
+        let cyclictest_failed = determine_admission(&AdmissionInputs {
+            preconditions: &all_pass_preconditions(),
+            instrument_class: &InstrumentClass::HeadlineSeries,
+            tools: &[invocation("cyclictest", 1)],
+            fixtures_used: &[],
+            precondition_waiver: None,
+            interference_delta: &empty_delta(),
+            counter_thresholds: None,
+            run_duration: Duration::from_secs(600),
+            smi: &benign_smi(),
+            package_temp_c_max: Some(45.0),
+        });
+        assert!(
+            !cyclictest_failed.admitted,
+            "cyclictest exit 1 must exclude"
+        );
+
+        let hwlatdetect_finding = determine_admission(&AdmissionInputs {
+            preconditions: &all_pass_preconditions(),
+            instrument_class: &InstrumentClass::HeadlineSeries,
+            tools: &[invocation("cyclictest", 0), invocation("hwlatdetect", 1)],
+            fixtures_used: &[],
+            precondition_waiver: None,
+            interference_delta: &empty_delta(),
+            counter_thresholds: None,
+            run_duration: Duration::from_secs(600),
+            smi: &benign_smi(),
+            package_temp_c_max: Some(45.0),
+        });
+        assert!(
+            hwlatdetect_finding.admitted,
+            "hwlatdetect exit 1 is a finding, not a failure: {:?}",
+            hwlatdetect_finding.exclusions
+        );
+    }
+
+    /// With a `Calibrated` threshold set, a CAL delta above the per-run-hour limit
+    /// excludes, and the text names the counter, the CPU and the limit.
+    #[test]
+    fn calibrated_counter_breach_excludes() {
+        let limits = interference::CalibratedThresholds {
+            cal_delta_max: 5.0,
+            tlb_delta_max: 5.0,
+            res_delta_max: 5.0,
+            device_irq_delta_max: 5.0,
+            context_switch_delta_max: 5.0,
+            derived_from: vec!["a".to_string(), "b".to_string()],
+        };
+        let delta = nr_manifest::InterferenceDelta {
+            cal_ipis: vec![nr_manifest::CpuCounter { cpu: 9, count: 100 }],
+            tlb_ipis: vec![],
+            context_switches: vec![],
+            irqs: vec![],
+        };
+
+        let admission = determine_admission(&AdmissionInputs {
+            preconditions: &all_pass_preconditions(),
+            instrument_class: &InstrumentClass::HeadlineSeries,
+            tools: &[invocation("cyclictest", 0)],
+            fixtures_used: &[],
+            precondition_waiver: None,
+            interference_delta: &delta,
+            counter_thresholds: Some(&limits),
+            run_duration: Duration::from_secs(3600),
+            smi: &benign_smi(),
+            package_temp_c_max: Some(45.0),
+        });
+        assert!(!admission.admitted);
+        assert!(
+            admission
+                .exclusions
+                .iter()
+                .any(|reason| reason.contains("CAL") && reason.contains("cpu9")),
+            "exclusion text should name the counter and the CPU: {:?}",
+            admission.exclusions
+        );
+    }
+
+    /// With the shipped provisional file (`counter_thresholds: None`), the
+    /// interference-counter evidence entry is `NotThresholded` and does not exclude,
+    /// however large the observed delta is: there is no calibrated ceiling to judge it
+    /// against yet, and the magnitude alone must not stand in for one.
+    #[test]
+    fn uncalibrated_counters_are_recorded_not_thresholded() {
+        let delta = nr_manifest::InterferenceDelta {
+            cal_ipis: vec![nr_manifest::CpuCounter {
+                cpu: 9,
+                count: 1_000_000,
+            }],
+            tlb_ipis: vec![],
+            context_switches: vec![],
+            irqs: vec![],
+        };
+
+        let admission = determine_admission(&AdmissionInputs {
+            preconditions: &all_pass_preconditions(),
+            instrument_class: &InstrumentClass::HeadlineSeries,
+            tools: &[invocation("cyclictest", 0)],
+            fixtures_used: &[],
+            precondition_waiver: None,
+            interference_delta: &delta,
+            counter_thresholds: None,
+            run_duration: Duration::from_secs(3600),
+            smi: &benign_smi(),
+            package_temp_c_max: Some(45.0),
+        });
+        assert!(
+            admission.admitted,
+            "no calibrated ceiling exists yet, so a large delta must not exclude: {:?}",
+            admission.exclusions
+        );
+        let counters_evidence = admission
+            .evidence
+            .iter()
+            .find(|entry| entry.source == AdmissionEvidenceSource::InterferenceCounters)
+            .expect("InterferenceCounters evidence is always recorded");
+        assert_eq!(
+            counters_evidence.disposition,
+            AdmissionDisposition::NotThresholded
+        );
+    }
+
+    /// D-28: a compile-level guarantee. This test constructs `AdmissionInputs` and calls
+    /// `determine_admission` with no `ContaminationVerdict` or `TailMetrics` value
+    /// anywhere in scope; if the gate ever needed either, this test would not compile.
+    #[test]
+    fn admission_never_reads_the_verdict() {
+        let admission = determine_admission(&AdmissionInputs {
+            preconditions: &all_pass_preconditions(),
+            instrument_class: &InstrumentClass::HeadlineSeries,
+            tools: &[invocation("cyclictest", 0)],
+            fixtures_used: &[],
+            precondition_waiver: None,
+            interference_delta: &empty_delta(),
+            counter_thresholds: None,
+            run_duration: Duration::from_secs(3600),
+            smi: &benign_smi(),
+            package_temp_c_max: None,
+        });
+        assert!(
+            admission.admitted,
+            "no evidence source here excludes: {:?}",
+            admission.exclusions
+        );
     }
 
     /// T-1-62: a home-directory path and the operator's username, however they

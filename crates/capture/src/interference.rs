@@ -540,11 +540,18 @@ fn compute_tail_metrics(
     })
 }
 
-fn evaluate(
+/// The D-15 interference-counter comparison, scaled to the run's duration: `Some(reason)` when
+/// any per-CPU delta exceeds its per-run-hour limit, `None` when none does.
+///
+/// Public because run admission (D-28) needs exactly this comparison and nothing else from this
+/// module. It is deliberately separate from [`verdict`]: this reads the counters, which are
+/// upstream evidence about what the machine was doing, and never touches the tail metrics, which
+/// are an inference from the latency the run measured.
+pub fn counter_breach(
     delta: &InterferenceDelta,
     limits: &CalibratedThresholds,
     run_duration: Duration,
-) -> (ContaminationVerdict, Option<String>) {
+) -> Option<String> {
     let hours = (run_duration.as_secs_f64() / 3600.0).max(f64::MIN_POSITIVE);
 
     let checks: [(&str, &[CpuCounter], f64); 4] = [
@@ -558,16 +565,26 @@ fn evaluate(
         let limit = per_hour_limit * hours;
         for counter in counters {
             if counter.count as f64 > limit {
-                let reason = format!(
+                return Some(format!(
                     "{name} delta {} on cpu{} exceeds {per_hour_limit} per run hour",
                     counter.count, counter.cpu
-                );
-                return (ContaminationVerdict::Contaminated, Some(reason));
+                ));
             }
         }
     }
 
-    (ContaminationVerdict::Clean, None)
+    None
+}
+
+fn evaluate(
+    delta: &InterferenceDelta,
+    limits: &CalibratedThresholds,
+    run_duration: Duration,
+) -> (ContaminationVerdict, Option<String>) {
+    match counter_breach(delta, limits, run_duration) {
+        Some(reason) => (ContaminationVerdict::Contaminated, Some(reason)),
+        None => (ContaminationVerdict::Clean, None),
+    }
 }
 
 /// D-24's tail-based verdict: `Contaminated` only when BOTH the tail excursion ratio is
