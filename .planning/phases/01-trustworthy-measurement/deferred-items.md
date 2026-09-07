@@ -671,3 +671,27 @@ recorded with an owner.
   copy of. Worth considering as well: the dev host is the publication side and the rig is not,
   so the rig's `measurements/` could be treated as write-only from the dev host's point of view,
   with collection always naming what it collects.
+
+## From 01-12 (an acceptance criterion that cannot be satisfied, 2026-09-07)
+
+- **Task 1 requires the manifest note to record values derived from the run the manifest
+  describes.** The criterion reads: "Its manifest `notes` records `M_untraced`, `M_traced`, the
+  inflation factor, `T_A` and `T_B` as numbers." `M_traced` is the maximum the run produces, and
+  `T_A` and `T_B` are derived from it. The note is supplied as an argument when the run is
+  launched, and the manifest is written when the run ends and is immutable evidence under D-12,
+  so none of those four values can be in it. Only `M_untraced` can, and is.
+
+  Not a defect in the harness. The manifest correctly refuses to be a place where a later
+  conclusion is written back into earlier evidence, which is the property D-12 exists to give.
+  The criterion asks for the one thing the design forbids.
+
+  Resolved for cycle 1 by recording the derivation in `docs/rig/plat01-stall-investigation.md`,
+  which plan 01-12 task 3 owns and which its own `read_first` already expects to restate the
+  threshold derivation. The manifest notes carry what a manifest can carry: the armed event set,
+  the cpumask, the buffer size, the buffer verification counts, the breaktrace value, and
+  `M_untraced`.
+
+  Owner: the criterion should be reworded before the phase closes, to require the derivation in
+  the write-up and the experimental inputs in the manifest note. Left as a wording fix rather
+  than silently treated as met, because a criterion that cannot be satisfied and is marked passed
+  is worse than one that is wrong and says so.
