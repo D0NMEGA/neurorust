@@ -95,7 +95,7 @@ Plans:
 - [x] 01-22-PLAN.md - Rig entry point: sudoers rule, root scripts, msr-tools, format probes [wave 11]
 - [x] 01-23-PLAN.md - Re-take D-18 on the isolated cores and correct the published firmware record [wave 14]
 - [x] 01-24-PLAN.md - Run admission decided from evidence upstream of the measured latency (D-28) [wave 15]
-- [ ] 01-25-PLAN.md - TracersQuiescent sees rtla's own instance and its sampling threads [wave 16]
+- [x] 01-25-PLAN.md - TracersQuiescent sees rtla's own instance and its sampling threads [wave 16]
 - [ ] 01-26-PLAN.md - Strict verification re-derives firmware figures; the published labels become true [wave 17]
 - [ ] 01-27-PLAN.md - Rig source identity (D-29) and one harness check on the real machine (rig runbook) [wave 18]
 
@@ -212,7 +212,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Trustworthy measurement | 20/27 | In Progress|  |
+| 1. Trustworthy measurement | 21/27 | In Progress|  |
 | 2. Proven emergency_stop | 0/TBD | Not started | - |
 | 3. Deterministic substrate | 0/TBD | Not started | - |
 | 4. Lock-free transport | 0/TBD | Not started | - |

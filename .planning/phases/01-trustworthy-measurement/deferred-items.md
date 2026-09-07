@@ -434,6 +434,16 @@ audit record and the fix can be read together.
   A stopgap guard now lives in the operator-side `~/nr-arm.sh` on the rig, which refuses to
   launch an arm when such kthreads are present, but that is a runbook aid, not the mechanism.
 
+  **CLOSED, commit `b04c229` (plan 01-25 task 1).** `check_tracers_quiescent` now also lists
+  `/sys/kernel/tracing/instances/` and checks the same four controls inside every instance
+  found, and scans `/proc/*/comm` for an `osnoise/<cpu>` or `timerlat/<cpu>` kthread on each
+  target CPU. Both are readable without root, an unreadable instances directory is recorded
+  rather than treated as a violation, and the check is still named `TracersQuiescent`
+  (extended, not a sixteenth precondition), so `run_all` still returns exactly fifteen
+  results. Commit `0b1fa65` (task 2) moves the stopgap guard out of `~/nr-arm.sh` on the rig
+  and into `scripts/nr-measure-mode`, version controlled; it reaches the rig once plan 01-27
+  reinstalls it.
+
   Note also that the contaminated run is retained rather than deleted, per this plan's own
   rule that every arm attempted appears under `measurements/`, including failures. Its
   hwnoise half is good (rows for all of 6-11, max single event 1us on five cores and 7us on
