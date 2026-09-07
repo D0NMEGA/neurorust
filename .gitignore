@@ -7,3 +7,6 @@
 # insta's own pending-review artifact when a snapshot test fails; regenerated
 # on every red run, never something to commit.
 **/*.snap.new
+
+# Agent operating instructions: local only, never published.
+CLAUDE.md
