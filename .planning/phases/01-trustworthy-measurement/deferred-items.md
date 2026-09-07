@@ -438,3 +438,63 @@ audit record and the fix can be read together.
   rule that every arm attempted appears under `measurements/`, including failures. Its
   hwnoise half is good (rows for all of 6-11, max single event 1us on five cores and 7us on
   cpu 7, NMI 0, SMI delta 0 on every isolated core); only its cyclictest half is starved.
+
+## From 01-23 (second independent review, 2026-09-07: four items found and left alone)
+
+Four items `01-REVIEW-2026-09-06.md` found while checking the corrected firmware record
+(its own Disposition section names these "cheap and independent" of plan 01-23's B1/B2/B3
+fixes). None are fixed here; each is out of scope for a documentation-correction pass and is
+recorded with an owner.
+
+- **Finding B4. REPORT.md publishes RES rescheduling-interrupt counts under the label
+  "context switches".** `crates/capture/src/interference.rs` documents the substitution directly
+  (`context_switches` counter is populated from the RES row; see the module's own comment
+  above `TRACKED_ROWS` and the `InterferenceSnapshot::context_switches` doc comment): plan
+  01-05 chose RES because `InterferenceSnapshot` had no better field, since `/proc/stat`'s
+  `ctxt` counter is machine-wide with no per-CPU breakdown. The label a reader sees in a
+  published REPORT.md is still "context switches," which is not what RES counts. Owner:
+  whichever plan next touches `nr_manifest::InterferenceSnapshot`'s schema (`crates/manifest/`)
+  or the report renderer that prints the label (`crates/metrics/src/report.rs` /
+  `crates/cli/src/cmd/run.rs`) should rename the published label to match the field it
+  actually reports, or add a real per-CPU context-switch source and keep RES separate.
+
+- **Finding C1. `verify --strict` does not re-derive firmware-screen figures from the raw
+  capture.**
+  Confirmed directly: `crates/cli/src/cmd/verify.rs` only knows `hwlatdetect*.txt` and
+  `rtla-hwnoise*.txt` as filename globs for checksum and stray-file detection (lines 74 and
+  80); nothing in that file parses the raw capture and compares the result against
+  `manifest.json`'s `firmware_screens[].max_us`/`observed_cpus`. A hand-edited firmware
+  maximum in a committed `REPORT.md` or `manifest.json` would pass `verify --strict` today.
+  Owner: whichever plan extends `verify.rs`'s strict mode to re-run `nr_capture::hwnoise::
+  parse_hwnoise_file` (and the equivalent `hwlatdetect` parser) against the checksummed raw
+  capture and reconcile the result against the manifest, the same reconciliation D-15/D-19
+  already do for the cyclictest histogram.
+
+- **Finding C2. All three new D-18 captures record `harness.git_sha:
+  "unavailable-at-build-time"`.**
+  Confirmed in all three manifests
+  (`measurements/2026-09-06-precision3591-screen-03/manifest.json`,
+  `measurements/2026-09-06-precision3591-screen-04/manifest.json`,
+  `measurements/2026-09-07-precision3591-screen/manifest.json`, all line 12). This is the
+  honest value, not a bug: it is the same rig-has-no-git condition the 01-22 entry above
+  already recorded ("`git` is not installed on the rig, and `~/neurorust` there is a plain
+  directory, not a git clone"), now showing up in provenance data for the first time since
+  that entry was filed. The field correctly refuses to fabricate a commit hash, but it
+  identifies which bytes ran, not which source revision produced them. Owner: whichever plan
+  gives the rig a real git identity (installing `git` and cloning properly, closing the 01-22
+  entry) or adds a secondary, content-addressed identity (for example hashing the built
+  binary's own embedded source manifest) that does not depend on the rig having git at all.
+
+- **Finding B5. A CPU absent from `rtla hwnoise` output is reported as "sampled and reported
+  nothing," which missing output cannot establish.** The exact phrase is in
+  `crates/metrics/src/report.rs:419`. Idle CPU 7 in the 2026-09-06 idle arm is the
+  counter-example that shows the claim can be wrong in the other direction too: a CPU that
+  genuinely was sampled and saw nothing still produces an explicit row (`Noise 0, Max Single
+  0, HW 0`, full `674250000` us of `Runtime`). A CPU missing from the output entirely has no
+  such row to point to, so "sampled and reported nothing" and "never sampled" are
+  indistinguishable from the rendered text alone; only checking `observed_cpus` against
+  `requested_cpus` (which the coverage test already does) actually distinguishes them. Owner:
+  whichever plan next touches `render_firmware_screens`/`render_plat03_verdict`
+  (`crates/metrics/src/report.rs`) should reword the missing-CPU case to say plainly that the
+  CPU produced no row and coverage cannot be confirmed for it, rather than asserting sampling
+  occurred.

@@ -5,9 +5,10 @@ firmware floor for the cores this project cares about; the reason was a measurem
 defect that also affects the 2026-08-28 screening this was meant to be compared against, and
 that defect is itself the result of that attempt. The second re-take, with `rtla hwnoise`
 (the section immediately below the coverage defect it fixes), does cover CPUs 6 to 11
-directly: three 900-second arms, idle and under two different loads, each report a maximum
-single event of 1 us on every one of the six isolated CPUs, with a `MSR_SMI_COUNT` delta of
-zero on every one of them in every arm. That is a bound stated with its conditions (this
+directly: three 900-second arms, idle and under two different loads, each report a pooled
+maximum single event of 1 us across the six isolated CPUs -- no CPU exceeded it, and CPU 7
+recorded no noise event at all in the idle arm -- with a `MSR_SMI_COUNT` delta of zero on
+every one of them in every arm. That is a bound stated with its conditions (this
 duration, these loads, this machine, this firmware revision), not a floor claimed without
 them, and it does not retract or replace finding 1.
 
@@ -96,7 +97,9 @@ artifact was closer to right than it knew, for a different reason than it gave.
 Three arms, each a 900 second `rtla hwnoise -c 6-11 -H 0-5 -P f:99 -d 900s` window on the
 installed PREEMPT_RT system, one osnoise sampling thread per isolated CPU rather than the
 single migrating thread `hwlatdetect` uses. `MSR_SMI_COUNT` (register `0x34`) was read on
-every one of CPUs 6 to 11 immediately before and after each run.
+every one of CPUs 6 to 11 once before cyclictest started and once after the hwnoise window
+closed, so the delta brackets cyclictest, the hwnoise screen, and the harness's own
+environment snapshots around them, not the 900 second hwnoise window by itself.
 
 | Arm | Run directory | Load | Package temp at start | Observed CPUs | Max (population) | SMI delta |
 |---|---|---|---|---|---|---|
@@ -107,7 +110,8 @@ every one of CPUs 6 to 11 immediately before and after each run.
 Every arm's `rtla hwnoise` rows name all six isolated CPUs, idle and under two different loads.
 The event count rises with load (13, then 64, then 44), but the size of the largest single
 event does not: 1 us in every arm. `MSR_SMI_COUNT` delta is zero on every one of CPUs 6 to 11
-in every arm, read directly before and after each 900 second window.
+in every arm, read before cyclictest started and after the hwnoise window closed in each arm,
+a bracket wider than the 900 second hwnoise window by itself.
 
 `rtla hwnoise`'s own three statements, identical across all three arms and stated once here
 rather than per arm: it measures hardware-related noise, the execution gaps left after
@@ -122,11 +126,13 @@ statements is the `hwlatdetect` version restated: the exposure argument in parti
 carry over, because each listed CPU here has its own sampling thread rather than sharing one
 migrating thread's polling time.
 
-A zero SMI delta across a 900 second window, on two different loads and one idle arm, is a
+A zero SMI delta over each arm's full run, on two different loads and one idle arm, is a
 stronger and simpler statement than any `hwlatdetect` arm above could make, and it is the
 answer D-18 has been trying to reach since 2026-08-28: no system management interrupt reached
-CPUs 6 to 11 during any of these three windows. State the bound with it, not instead of it:
-900 seconds, under each stated load, on this machine, at this firmware revision (BIOS 1.23.0,
+CPUs 6 to 11 during any of these three runs. State the bound with it, not instead of it: the
+delta brackets cyclictest plus the 900 second hwnoise screen, not the hwnoise screen alone
+(the manifest's own utc_start to utc_end spans about 961 seconds for each of these three
+runs), under each stated load, on this machine, at this firmware revision (BIOS 1.23.0,
 released 04/24/2026, microcode 0x28). It is not a guarantee that no SMI can ever reach these
 cores, and a longer window, a different load, or a later firmware revision could show
 otherwise.

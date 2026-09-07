@@ -11,6 +11,11 @@ core without the kernel's knowledge. All runs used the stock Ubuntu 26.04.1 kern
 SMI behaviour is a firmware property and is independent of which kernel is running, so
 these figures carry over to a PREEMPT_RT install.
 
+**That carry-over claim was untested when written.** It was the reason D-18 was opened, and
+it was neither confirmed nor contradicted by the PREEMPT_RT re-measurements: see
+`docs/rig/firmware-floor-rt-vs-stock.md`'s Interpretation section for why the instrument
+available at the time could not test it either.
+
 See `RIG.txt` for the full environment: BIOS 1.23.0 (2026-04-24), microcode 0x28,
 Core Ultra 9 185H, P-cores 0-11, E-cores 12-21.
 
@@ -19,7 +24,7 @@ Core Ultra 9 185H, P-cores 0-11, E-cores 12-21.
 | Run | Config | Load | Max | Events >10us / 900s |
 |---|---|---|---|---|
 | `hwlatdetect-stock-15m.txt` | powersave, turbo on, C-states to C10 | idle | **125 us** | 291 |
-| `hwlatdetect-tuned-15m.txt` | performance, turbo off, C6/C10 off | idle | **<10 us** (7 us at 1us threshold) | 0 |
+| `hwlatdetect-tuned-15m.txt` | performance, turbo off, C6/C10 off | idle | **<10 us** (7 us at a 1us threshold per an unsaved, unverifiable capture; see Caveats) | 0 |
 | `hwlatdetect-tuned-underload-15m.txt` | performance, turbo off, C6/C10 off | 22 cores saturated, 91-93 C | **29 us** | 26 |
 | `hwlatdetect-pcore-underload-10m.txt` | as above, sampling restricted to P-cores 0-11 | 22 cores saturated, 93-95 C | **22 us** | 13 / 600 s (~19 / 900 s) |
 
@@ -34,8 +39,10 @@ disabling C6 and C10 while keeping POLL and C1E.
 ## Findings
 
 **Tuning removes almost all firmware latency.** The observed maximum fell from 125 us to
-under 10 us, an 18x improvement, from sysfs writes alone. The 21 us mode present roughly once
-per second on the stock configuration disappeared entirely.
+under 10 us, at least a 12x improvement, from sysfs writes alone (the unsaved 1us-threshold
+capture would put this closer to 18x, but that figure is not independently verifiable; see
+Caveats). The 21 us mode present roughly once per second on the stock configuration
+disappeared entirely.
 
 **Thermal load reintroduces it, bounded.** Saturating all 22 cores to 91-93 C brought back
 26 events, a maximum of 29 us. This is the load-triggered SMI behaviour that idle screening
