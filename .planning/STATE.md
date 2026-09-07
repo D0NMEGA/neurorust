@@ -3,7 +3,7 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: 01-26 complete. All three tasks committed (c4b2b4c, bf850e7, 472fe44); verify --strict re-derives firmware figures, the RES-IPI field is renamed behind a backward-compatible alias, and all eleven eligible REPORT.md files were regenerated with the numeric-survival check confirming no published figure changed or dropped.
+stopped_at: 01-27 task 1 committed (d4d8883): the pushed-stamp provenance source and scripts/nr-push-to-rig.sh. Task 2 is a BLOCKING rig checkpoint awaiting the human operator: push, rebuild on the rig, take one 2-minute recon capture, confirm series_admission.admitted is true. Plans 01-24 through 01-26 are complete.
 last_updated: "2026-09-07T09:00:34.325Z"
 last_activity: 2026-09-07 -- 01-26 executed
 progress:
