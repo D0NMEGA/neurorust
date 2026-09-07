@@ -169,13 +169,14 @@ fn tracers_quiescent_refuses_headline_run() {
         .find(|r| r.check == PreconditionCheck::TracersQuiescent)
         .expect("TracersQuiescent result present");
     assert_eq!(tracer_result.status, PreconditionStatus::Fail);
-    // VIOLATED only ever captured current_tracer; the other three controls are
-    // genuinely absent from this fixture and read back as unavailable, not as a
-    // second, fabricated violation.
+    // VIOLATED only ever captured current_tracer; the other three controls, the
+    // instances directory and the process list are genuinely absent from this
+    // fixture and read back as unavailable or none, not as a second, fabricated
+    // violation.
     assert_eq!(
         tracer_result.observed,
         "current_tracer=timerlat events/enable=unavailable set_event=unavailable \
-         tracing_on=unavailable"
+         tracing_on=unavailable instances=unavailable samplers=none"
     );
 }
 
@@ -188,8 +189,12 @@ fn tracers_quiescent_allows_investigation_run() {
         .find(|r| r.check == PreconditionCheck::TracersQuiescent)
         .expect("TracersQuiescent result present");
     assert_eq!(tracer_result.status, PreconditionStatus::NotApplicable);
-    // NotApplicable still records what was observed.
-    assert_eq!(tracer_result.observed, "timerlat");
+    // NotApplicable still records what was observed, now including the two signals
+    // this plan adds (instances=, samplers=) alongside current_tracer.
+    assert_eq!(
+        tracer_result.observed,
+        "timerlat instances=unavailable samplers=none"
+    );
 }
 
 /// `FixtureFacts::default()` answers every other fact with `Unavailable`; only
@@ -647,4 +652,133 @@ fn tracers_quiescent_reports_which_control_is_armed() {
         "observed should name the armed control: {}",
         result.observed
     );
+}
+
+/// A fixture where the four top-level controls all read quiescent, so anything this
+/// test catches is caught by the two new signals alone. Named for the real capture it
+/// exists because of: `measurements/2026-09-06-precision3591-screen-02`, taken
+/// 2026-09-06 after a killed `rtla` left an osnoise instance running on cpus 6-11.
+/// That run's cyclictest lost 75 percent of its cycles on every isolated thread
+/// (thread 0, cpu 6: 75055 of an expected 300000 cycles; thread 5, cpu 11: 75051),
+/// every thread's maximum stalled at roughly 750021us, which is
+/// `/sys/kernel/tracing/osnoise/runtime_us` (750000 of a 1000000 `period_us`). All
+/// fifteen preconditions passed on that run.
+fn quiescent_top_level_facts() -> nr_capture::sources::FixtureFacts {
+    FixtureFacts::parse(RIG_AS_FOUND)
+        .with("/sys/kernel/tracing/events/enable", "0")
+        .with("/sys/kernel/tracing/set_event", "")
+        .with("/sys/kernel/tracing/tracing_on", "0")
+}
+
+#[test]
+fn orphaned_osnoise_kthread_on_a_target_cpu_fails() {
+    let facts = quiescent_top_level_facts().with("processes.running", "osnoise/6");
+    let result = tracer_result(&run_all(&facts, &headline_spec()));
+    assert_eq!(result.status, PreconditionStatus::Fail, "{result:#?}");
+    assert!(
+        result.observed.contains("osnoise/6"),
+        "observed should name the orphaned kthread: {}",
+        result.observed
+    );
+}
+
+#[test]
+fn orphaned_timerlat_kthread_on_a_target_cpu_fails() {
+    let facts = quiescent_top_level_facts().with("processes.running", "timerlat/9");
+    let result = tracer_result(&run_all(&facts, &headline_spec()));
+    assert_eq!(result.status, PreconditionStatus::Fail, "{result:#?}");
+    assert!(
+        result.observed.contains("timerlat/9"),
+        "observed should name the orphaned kthread: {}",
+        result.observed
+    );
+}
+
+/// A sampler thread on a CPU this run is not measuring is not this check's business:
+/// target_cpus is 6-11, and cpu 3 is a housekeeping core.
+#[test]
+fn a_sampling_thread_on_a_non_target_cpu_does_not_fail() {
+    let facts = quiescent_top_level_facts().with("processes.running", "osnoise/3");
+    let result = tracer_result(&run_all(&facts, &headline_spec()));
+    assert_eq!(result.status, PreconditionStatus::Pass, "{result:#?}");
+    assert!(
+        result.observed.contains("samplers=none"),
+        "cpu 3 is not a target cpu, so no sampler should be reported: {}",
+        result.observed
+    );
+}
+
+#[test]
+fn a_live_tracing_instance_fails() {
+    let facts = quiescent_top_level_facts()
+        .with_dir("/sys/kernel/tracing/instances", &["osnoise_top"])
+        .with(
+            "/sys/kernel/tracing/instances/osnoise_top/current_tracer",
+            "osnoise",
+        );
+    let result = tracer_result(&run_all(&facts, &headline_spec()));
+    assert_eq!(result.status, PreconditionStatus::Fail, "{result:#?}");
+    assert!(
+        result.observed.contains("osnoise_top"),
+        "observed should name the live instance: {}",
+        result.observed
+    );
+}
+
+#[test]
+fn an_empty_instances_directory_passes() {
+    let facts = quiescent_top_level_facts().with_dir("/sys/kernel/tracing/instances", &[]);
+    let result = tracer_result(&run_all(&facts, &headline_spec()));
+    assert_eq!(result.status, PreconditionStatus::Pass, "{result:#?}");
+    assert!(
+        result.observed.contains("instances=none"),
+        "an empty, readable instances directory is not unavailable: {}",
+        result.observed
+    );
+}
+
+/// `RIG_AS_FOUND` never calls `with_dir` for `/sys/kernel/tracing/instances`, so
+/// `list_dir` genuinely fails here, the same "no with_dir call" shape every other
+/// fixture-driven test in this suite uses to represent a path the probe never
+/// captured. A machine where this directory cannot be read (permissions, or a
+/// kernel with no instances support) must not be refused a run on that basis alone.
+#[test]
+fn an_unreadable_instances_directory_is_not_a_violation() {
+    let facts = quiescent_top_level_facts();
+    let result = tracer_result(&run_all(&facts, &headline_spec()));
+    assert_eq!(result.status, PreconditionStatus::Pass, "{result:#?}");
+    assert!(
+        result.observed.contains("instances=unavailable"),
+        "observed should record the unreadable instances directory: {}",
+        result.observed
+    );
+}
+
+#[test]
+fn investigation_records_both_new_signals_without_failing() {
+    let facts = FixtureFacts::parse(RIG_AS_FOUND).with("processes.running", "osnoise/6");
+    let result = tracer_result(&run_all(&facts, &investigation_spec()));
+    assert_eq!(
+        result.status,
+        PreconditionStatus::NotApplicable,
+        "{result:#?}"
+    );
+    assert!(
+        result.observed.contains("osnoise/6"),
+        "observed should still name the kthread on an investigation run: {}",
+        result.observed
+    );
+}
+
+#[test]
+fn all_fifteen_preconditions_are_still_evaluated() {
+    let facts = FixtureFacts::parse(RIG_AS_FOUND);
+    let results = run_all(&facts, &headline_spec());
+    assert_eq!(results.len(), 15, "got {results:#?}");
+    for check in ALL_CHECKS {
+        assert!(
+            results.iter().any(|r| r.check == check),
+            "missing a result for {check:?}"
+        );
+    }
 }

@@ -100,7 +100,7 @@ pub fn run_all(facts: &dyn SystemFacts, spec: &PreconditionSpec) -> Vec<Precondi
         check_on_ac_power(facts),
         check_thermal_headroom_at_start(facts, &spec.thermal_profile),
         check_no_package_manager_activity(facts),
-        check_tracers_quiescent(facts, &spec.instrument_class),
+        check_tracers_quiescent(facts, spec),
     ]
 }
 
@@ -720,16 +720,86 @@ const TRACING_CONTROLS: [(&str, &str); 4] = [
     ("tracing_on", "0"),
 ];
 
+/// Kernel thread name prefixes for the two `rtla` samplers. A thread is named
+/// `<prefix><cpu>`, for example `osnoise/6`, and is matched exactly against
+/// `/proc/<pid>/comm`.
+///
+/// These exist as a separate signal because `rtla` drives its tracer through its own
+/// instance under [`TRACING_INSTANCES_DIR`], so all four of [`TRACING_CONTROLS`] read
+/// quiescent while these threads are spinning. An osnoise thread runs at the requested
+/// SCHED_FIFO priority for `osnoise/runtime_us` of every `osnoise/period_us`; with the
+/// rig's recorded 750000 of 1000000, an orphan takes 75 percent of every period from
+/// anything sharing its CPU at the same priority. On 2026-09-06 that cost a real
+/// capture (`measurements/2026-09-06-precision3591-screen-02`: 75055 of 300000 cycles
+/// on cpu 6, every thread's maximum at roughly 750000 us) with all fifteen
+/// preconditions passing.
+const SAMPLER_KTHREAD_PREFIXES: [&str; 2] = ["osnoise/", "timerlat/"];
+
+/// Where `rtla` puts its own tracing instance. Each instance carries its own copy of
+/// the same controls the top level has, so [`TRACING_CONTROLS`] is reused per instance
+/// rather than a second, differently-shaped check being invented for them.
+const TRACING_INSTANCES_DIR: &str = "/sys/kernel/tracing/instances";
+
+/// Every sampler kthread found on a CPU in `target_cpus`, by exact name.
+///
+/// One name is built per target CPU per prefix, because
+/// [`SystemFacts::running_processes_matching`] matches `/proc/<pid>/comm` exactly. A
+/// sampler on a CPU this run is not measuring is not this check's business and is not
+/// reported as a violation.
+fn sampler_kthreads_on(facts: &dyn SystemFacts, target_cpus: &[u32]) -> Result<Vec<String>, ()> {
+    let mut names = Vec::new();
+    for &cpu in target_cpus {
+        for prefix in SAMPLER_KTHREAD_PREFIXES {
+            names.push(format!("{prefix}{cpu}"));
+        }
+    }
+    let name_refs: Vec<&str> = names.iter().map(String::as_str).collect();
+    facts.running_processes_matching(&name_refs).map_err(|_| ())
+}
+
+/// Every instance under [`TRACING_INSTANCES_DIR`] that is not quiescent, with the
+/// control that gave it away, e.g. `osnoise_top:current_tracer=osnoise`.
+///
+/// An instance directory that cannot be listed is not a violation: the check cannot
+/// claim a machine is dirty on the strength of a read it could not perform, the same
+/// rule the per-control `Err` arm below follows. The same applies to a single control
+/// file inside a listed instance: an unreadable control is skipped rather than
+/// counted, since it gives no evidence either way.
+fn live_tracing_instances(facts: &dyn SystemFacts) -> Result<Vec<String>, ()> {
+    let instances = facts.list_dir(TRACING_INSTANCES_DIR).map_err(|_| ())?;
+    let mut live = Vec::new();
+    for instance in instances {
+        for (name, quiescent) in TRACING_CONTROLS {
+            let path = format!("{TRACING_INSTANCES_DIR}/{instance}/{name}");
+            if let Ok(value) = facts.read_text(&path) {
+                let value = value.trim();
+                if value != quiescent {
+                    live.push(format!(
+                        "{instance}:{name}={}",
+                        if value.is_empty() { "(empty)" } else { value }
+                    ));
+                }
+            }
+        }
+    }
+    Ok(live)
+}
+
 /// RESEARCH.md pattern 2, mechanised: a headline-class run is refused when any tracing
 /// control is armed, so an investigation run's overhead can never leak into the
 /// published series, even by mistake.
-fn check_tracers_quiescent(
-    facts: &dyn SystemFacts,
-    instrument_class: &InstrumentClass,
-) -> PreconditionResult {
-    let expected = "current_tracer=nop, events/enable=0, set_event=(empty), tracing_on=0";
+///
+/// Widened beyond [`TRACING_CONTROLS`] by the same reasoning that widened it from
+/// `current_tracer` alone to all four controls (plan 01-18): `rtla` arms
+/// `osnoise`/`timerlat` through its own instance under [`TRACING_INSTANCES_DIR`],
+/// which none of the four top-level controls can see, so this also checks every
+/// instance and the target CPUs' own sampler kthreads. See
+/// [`SAMPLER_KTHREAD_PREFIXES`] for the capture this closes.
+fn check_tracers_quiescent(facts: &dyn SystemFacts, spec: &PreconditionSpec) -> PreconditionResult {
+    let expected = "current_tracer=nop, events/enable=0, set_event=(empty), tracing_on=0, \
+                    no live tracing instance, no osnoise/timerlat kthread on the target cpus";
 
-    match instrument_class {
+    match &spec.instrument_class {
         InstrumentClass::HeadlineSeries => {
             let mut observed_parts = Vec::new();
             let mut any_readable = false;
@@ -756,6 +826,33 @@ fn check_tracers_quiescent(
                 }
             }
 
+            match live_tracing_instances(facts) {
+                Ok(live) if live.is_empty() => {
+                    any_readable = true;
+                    observed_parts.push("instances=none".to_string());
+                }
+                Ok(live) => {
+                    any_readable = true;
+                    violated = true;
+                    observed_parts.push(format!("instances={}", live.join(",")));
+                }
+                // Not a violation; see live_tracing_instances's own doc comment.
+                Err(()) => observed_parts.push("instances=unavailable".to_string()),
+            }
+
+            match sampler_kthreads_on(facts, &spec.target_cpus) {
+                Ok(found) if found.is_empty() => {
+                    any_readable = true;
+                    observed_parts.push("samplers=none".to_string());
+                }
+                Ok(found) => {
+                    any_readable = true;
+                    violated = true;
+                    observed_parts.push(format!("samplers={}", found.join(",")));
+                }
+                Err(()) => observed_parts.push("samplers=unavailable".to_string()),
+            }
+
             if !any_readable {
                 return unavailable(
                     PreconditionCheck::TracersQuiescent,
@@ -776,16 +873,34 @@ fn check_tracers_quiescent(
             }
         }
         InstrumentClass::Investigation => {
-            // Unchanged from before this plan: only current_tracer is recorded,
-            // since tracing is the point of an investigation run.
-            let observed = facts
-                .read_text("/sys/kernel/tracing/current_tracer")
-                .map(|t| t.trim().to_string())
-                .unwrap_or_else(|_| "unavailable".to_string());
+            // Unchanged from before this plan: current_tracer alone decides the
+            // status (NotApplicable, since tracing is the point of an investigation
+            // run), but the observed string now also carries the two signals below,
+            // so a capture that was itself starved by an orphaned instance or
+            // kthread leaves the evidence in its own manifest.
+            let mut parts = vec![
+                facts
+                    .read_text("/sys/kernel/tracing/current_tracer")
+                    .map(|t| t.trim().to_string())
+                    .unwrap_or_else(|_| "unavailable".to_string()),
+            ];
+
+            parts.push(match live_tracing_instances(facts) {
+                Ok(live) if live.is_empty() => "instances=none".to_string(),
+                Ok(live) => format!("instances={}", live.join(",")),
+                Err(()) => "instances=unavailable".to_string(),
+            });
+
+            parts.push(match sampler_kthreads_on(facts, &spec.target_cpus) {
+                Ok(found) if found.is_empty() => "samplers=none".to_string(),
+                Ok(found) => format!("samplers={}", found.join(",")),
+                Err(()) => "samplers=unavailable".to_string(),
+            });
+
             PreconditionResult {
                 check: PreconditionCheck::TracersQuiescent,
                 status: PreconditionStatus::NotApplicable,
-                observed,
+                observed: parts.join(" "),
                 expected: expected.to_string(),
             }
         }
