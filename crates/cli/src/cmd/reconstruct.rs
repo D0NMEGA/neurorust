@@ -360,10 +360,9 @@ fn harness_info() -> HarnessInfo {
         version: env!("CARGO_PKG_VERSION").to_string(),
         git_sha: env!("NR_BUILD_GIT_SHA").to_string(),
         git_dirty: env!("NR_BUILD_GIT_DIRTY") == "true",
-        git_sha_source: Some(match env!("NR_BUILD_GIT_SHA_SOURCE") {
-            "build-time" => GitShaSource::BuildTime,
-            _ => GitShaSource::Unavailable,
-        }),
+        git_sha_source: Some(GitShaSource::from_build_env(env!(
+            "NR_BUILD_GIT_SHA_SOURCE"
+        ))),
         executable_blake3,
         executable_bytes,
         invoked_from_git_sha: git_output(&["rev-parse", "HEAD"]),

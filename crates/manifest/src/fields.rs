@@ -176,7 +176,33 @@ pub struct HarnessInfo {
 #[serde(rename_all = "kebab-case")]
 pub enum GitShaSource {
     BuildTime,
+    /// The sha was read from a `.git-sha` stamp written into the source tree by
+    /// `scripts/nr-push-to-rig.sh` at push time, because the build machine had no git checkout
+    /// to read. It asserts which revision was pushed; it is not an observation made on the
+    /// machine that compiled the binary.
+    ///
+    /// Recorded as its own value rather than as `BuildTime` deliberately. The reference rig has
+    /// no `git` and its `~/neurorust` is an rsync mirror with no `.git`, so a build there can
+    /// never make the build-time observation. Presenting an asserted revision as an observed one
+    /// is the shape of finding 6 of `01-EXTERNAL-AUDIT.md`, which recorded a failed read as
+    /// `git_dirty: false` and so asserted a clean tree nobody looked at.
+    PushedStamp,
     Unavailable,
+}
+
+impl GitShaSource {
+    /// Maps the literal string `crates/cli/build.rs` embeds in `NR_BUILD_GIT_SHA_SOURCE` to a
+    /// `GitShaSource`. Shared by `cmd::run::harness_info` and `cmd::reconstruct::harness_info`
+    /// so the mapping exists in one place, and an unrecognised value (a binary built before this
+    /// variant existed, or a corrupted embed) falls through to `Unavailable` rather than
+    /// panicking: an unreadable provenance is still safer to report than a guessed one.
+    pub fn from_build_env(value: &str) -> Self {
+        match value {
+            "build-time" => Self::BuildTime,
+            "pushed-stamp" => Self::PushedStamp,
+            _ => Self::Unavailable,
+        }
+    }
 }
 
 /// The machine, per BENCH-04's rig-discipline requirement. `rig_slug` is a chosen
@@ -1179,5 +1205,29 @@ mod tests {
             checked >= 12,
             "expected at least the twelve manifests committed before plan 01-24; found {checked}"
         );
+    }
+
+    #[test]
+    fn git_sha_source_parses_pushed_stamp() {
+        let json =
+            serde_json::to_string(&GitShaSource::PushedStamp).expect("GitShaSource must serialize");
+        assert_eq!(json, "\"pushed-stamp\"");
+        let restored: GitShaSource =
+            serde_json::from_str("\"pushed-stamp\"").expect("\"pushed-stamp\" must deserialize");
+        assert_eq!(restored, GitShaSource::PushedStamp);
+    }
+
+    /// `from_build_env` is what `harness_info()` in both `cmd::run` and
+    /// `cmd::reconstruct` calls on the literal `NR_BUILD_GIT_SHA_SOURCE` string
+    /// `crates/cli/build.rs` embeds at compile time. A value neither of them ever
+    /// emits (a stale binary built before `pushed-stamp` existed, or a corrupted
+    /// embed) must still resolve to something, not panic.
+    #[test]
+    fn an_unknown_source_string_is_unavailable_not_a_panic() {
+        assert_eq!(
+            GitShaSource::from_build_env("some-future-value-this-build-does-not-know"),
+            GitShaSource::Unavailable
+        );
+        assert_eq!(GitShaSource::from_build_env(""), GitShaSource::Unavailable);
     }
 }

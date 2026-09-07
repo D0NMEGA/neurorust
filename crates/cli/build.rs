@@ -9,6 +9,14 @@
 //! launched by `systemd-run` with no working directory inside the checkout recorded
 //! `git_sha: "unknown"` alongside `git_dirty: false`, asserting a clean tree nobody
 //! observed).
+//!
+//! A build machine can also have no git checkout to read at all, rather than merely
+//! the wrong one: the reference rig's `~/neurorust` is an rsync mirror with no
+//! `.git`, so `git rev-parse HEAD` fails there in exactly the place a stale-binary
+//! check needs it to succeed. For that case, `scripts/nr-push-to-rig.sh` stamps the
+//! revision it is pushing into `.git-sha`, which this build reads and records under
+//! its own source value, `pushed-stamp`: an asserted revision, labelled as asserted,
+//! never presented as the build-time observation git itself could not make (D-29).
 
 fn main() {
     let sha = git(&["rev-parse", "HEAD"]);
@@ -19,14 +27,22 @@ fn main() {
             println!("cargo:rustc-env=NR_BUILD_GIT_DIRTY={dirty}");
             println!("cargo:rustc-env=NR_BUILD_GIT_SHA_SOURCE=build-time");
         }
-        _ => {
-            println!("cargo:rustc-env=NR_BUILD_GIT_SHA=unavailable-at-build-time");
-            println!("cargo:rustc-env=NR_BUILD_GIT_DIRTY=false");
-            println!("cargo:rustc-env=NR_BUILD_GIT_SHA_SOURCE=unavailable");
-        }
+        _ => match read_stamp() {
+            Some(stamp) => {
+                println!("cargo:rustc-env=NR_BUILD_GIT_SHA={}", stamp.sha);
+                println!("cargo:rustc-env=NR_BUILD_GIT_DIRTY={}", stamp.dirty);
+                println!("cargo:rustc-env=NR_BUILD_GIT_SHA_SOURCE=pushed-stamp");
+            }
+            None => {
+                println!("cargo:rustc-env=NR_BUILD_GIT_SHA=unavailable-at-build-time");
+                println!("cargo:rustc-env=NR_BUILD_GIT_DIRTY=false");
+                println!("cargo:rustc-env=NR_BUILD_GIT_SHA_SOURCE=unavailable");
+            }
+        },
     }
     println!("cargo:rerun-if-changed=../../.git/HEAD");
     println!("cargo:rerun-if-changed=../../.git/index");
+    println!("cargo:rerun-if-changed=../../.git-sha");
 }
 
 /// Mirrors the shape of `crates/cli/src/cmd/run.rs::git_output`: `None` on any
@@ -40,4 +56,39 @@ fn git(args: &[&str]) -> Option<String> {
         .ok()
         .filter(|output| output.status.success())
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+/// The revision `scripts/nr-push-to-rig.sh` stamped into the source tree it pushed.
+struct Stamp {
+    sha: String,
+    dirty: bool,
+}
+
+/// Reads `../../.git-sha`, written by `scripts/nr-push-to-rig.sh`. Returns `None` on
+/// a missing or unreadable file, or on a line shape it does not recognise: a
+/// half-read or hand-edited stamp must never become a confident sha, so any
+/// deviation from exactly what the script writes falls through to the
+/// `unavailable` branch in `main` rather than reporting a value nobody asserted.
+fn read_stamp() -> Option<Stamp> {
+    let text = std::fs::read_to_string("../../.git-sha").ok()?;
+    let mut sha = None;
+    let mut dirty = None;
+    for line in text.lines() {
+        if let Some(value) = line.strip_prefix("sha=") {
+            sha = Some(value.to_string());
+        } else if let Some(value) = line.strip_prefix("dirty=") {
+            dirty = Some(value.to_string());
+        }
+    }
+    let sha = sha.filter(|s| {
+        s.len() == 40
+            && s.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    })?;
+    let dirty = match dirty.as_deref() {
+        Some("true") => true,
+        Some("false") => false,
+        _ => return None,
+    };
+    Some(Stamp { sha, dirty })
 }

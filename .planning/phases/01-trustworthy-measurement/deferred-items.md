@@ -395,6 +395,11 @@ audit record and the fix can be read together.
   apt install`, i.e. another password-gated step, for a machine that has managed fine without
   it so far).
 
+  **CLOSED, plan 01-27 task 1.** `scripts/nr-push-to-rig.sh` is now the one supported,
+  version-controlled way source reaches the rig: an explicit include list, no removal flag,
+  and a post-transfer sha256 check on `.git-sha`, which the rig-side build reads and records
+  as `git_sha_source: pushed-stamp` whenever it has no `.git` checkout to read directly (D-29).
+
 ## From 01-23 (a killed rtla leaves osnoise kthreads that D-06 cannot see, 2026-09-06)
 
 - **`TracersQuiescent` cannot observe `rtla`'s own tracing instance, so orphaned osnoise

@@ -10,3 +10,8 @@
 
 # Agent operating instructions: local only, never published.
 CLAUDE.md
+
+# Written by scripts/nr-push-to-rig.sh so a build on a machine with no git checkout can still
+# record which revision it was built from (git_sha_source: pushed-stamp). Machine-local, and
+# committing it would make a stale revision look like a tracked fact.
+/.git-sha

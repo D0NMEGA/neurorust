@@ -153,6 +153,20 @@ either on your `PATH` or by its full path; substitute your own `<rig-slug>` (a s
 you choose for the machine, for example `precision3591` for the reference rig) and your
 own `--cpus`/`--main-cpus` (see "Reproducing on different hardware" below).
 
+On a machine with no git checkout to read, source arrives by an explicit push. The reference
+rig's `~/neurorust` is an rsync mirror with no `.git`, so there is no repository there to
+sync against; from the dev host run `sh scripts/nr-push-to-rig.sh` before rebuilding there.
+It refuses to push a dirty tree unless `--allow-dirty` is given, and its include list never
+reaches `measurements/` or `metrics/` on the far end.
+
+Every manifest records how its binary's revision was obtained, in `harness.git_sha_source`.
+`build-time` means the build ran inside a real git checkout and read the commit directly,
+which is what the dev host always produces. `pushed-stamp` means the build machine had no
+checkout to read and instead used the revision `nr-push-to-rig.sh` asserted at push time: an
+assertion about what was sent, not an observation made where the binary was compiled.
+`unavailable` means neither was possible, and no revision is recorded at all. A reader of a
+published manifest can tell an observed revision from an asserted one at a glance.
+
 1. Check the environment without measuring:
 
    ```

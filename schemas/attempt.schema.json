@@ -168,10 +168,19 @@
     },
     "GitShaSource": {
       "description": "How [`HarnessInfo::git_sha`] was obtained.",
-      "type": "string",
-      "enum": [
-        "build-time",
-        "unavailable"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "build-time",
+            "unavailable"
+          ]
+        },
+        {
+          "description": "The sha was read from a `.git-sha` stamp written into the source tree by\n`scripts/nr-push-to-rig.sh` at push time, because the build machine had no git checkout\nto read. It asserts which revision was pushed; it is not an observation made on the\nmachine that compiled the binary.\n\nRecorded as its own value rather than as `BuildTime` deliberately. The reference rig has\nno `git` and its `~/neurorust` is an rsync mirror with no `.git`, so a build there can\nnever make the build-time observation. Presenting an asserted revision as an observed one\nis the shape of finding 6 of `01-EXTERNAL-AUDIT.md`, which recorded a failed read as\n`git_dirty: false` and so asserted a clean tree nobody looked at.",
+          "type": "string",
+          "const": "pushed-stamp"
+        }
       ]
     },
     "HarnessInfo": {

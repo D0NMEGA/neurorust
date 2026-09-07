@@ -864,6 +864,42 @@ fn harness_git_sha_source_is_explicit() {
     );
 }
 
+/// `crates/cli/build.rs` only reaches for the `.git-sha` pushed-stamp fallback when
+/// `git rev-parse HEAD` itself fails, which it never does inside this repository's
+/// own checkout. Guards against the D-29 fallback silently becoming the default here
+/// (which would hide a build machine's genuine `pushed-stamp`/`unavailable` provenance
+/// behind an always-true `build-time`).
+#[test]
+fn a_dev_host_build_still_records_build_time() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let run_dir = run_full_pipeline(temp.path());
+    let manifest: RunManifest = serde_json::from_str(
+        &std::fs::read_to_string(run_dir.join("manifest.json")).expect("read manifest.json"),
+    )
+    .expect("manifest.json parses");
+
+    assert_eq!(
+        manifest.harness.git_sha_source,
+        Some(GitShaSource::BuildTime),
+        "this repository's own build always has git available"
+    );
+    assert_eq!(
+        manifest.harness.git_sha.len(),
+        40,
+        "expected a full 40-character sha, got {:?}",
+        manifest.harness.git_sha
+    );
+    assert!(
+        manifest
+            .harness
+            .git_sha
+            .chars()
+            .all(|c| c.is_ascii_hexdigit()),
+        "expected the sha to be hex, got {:?}",
+        manifest.harness.git_sha
+    );
+}
+
 // ---------------------------------------------------------------------------------
 // Recorded argv and artifact_paths: the argv is byte for byte what ran, and every
 // output-file path in it maps to a named artifact (finding 6 of
