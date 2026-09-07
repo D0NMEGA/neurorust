@@ -2,16 +2,16 @@
 donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: paused
-stopped_at: 01-23 complete. Task 3 approved by the human operator with one authorized exception (commit 9066bdf); all three tasks committed; PLAT-03 deliberately left incomplete (see Blockers/Concerns and Decisions).
-last_updated: "2026-09-07T05:35:54.562Z"
-last_activity: 2026-09-07
+status: executing
+stopped_at: Phase 1 replanned 2026-09-07 against 01-REVIEW-2026-09-06.md. 27 plans, 19 complete, 8 pending in waves 15 through 22. Plan-checker returned no blockers. Next action is /donny-execute-phase 1, starting at plan 01-24.
+last_updated: "2026-09-07T06:39:15.197Z"
+last_activity: 2026-09-07 -- Phase 1 planning complete
 progress:
   total_phases: 8
   completed_phases: 0
-  total_plans: 23
+  total_plans: 27
   completed_plans: 19
-  percent: 83
+  percent: 70
 ---
 
 # Project State
@@ -39,17 +39,20 @@ Plan: 01-23-PLAN.md (re-taking D-18 on the real rig and correcting every publish
   either a clean headline cyclictest capture (plan 01-13, unexecuted) or the 3.8ms
   residual attributed to a named cause (PLAT-01, still Pending); this plan only rules
   firmware/SMI out as a contributor on CPUs 6-11.
-  Plans 01-12 through 01-15 (waves 15-18: PLAT-01 investigation, the PLAT-03 headline
-  capture, the weekly job, the rig install runbook) remain unexecuted. Per the second
-  review's disposition and the operator's explicit instruction, these are NOT started
-  now: plan 01-13 cannot complete as currently written until a new plan resolves A1
-  (provisional contamination thresholds exclude every run from the series), and 01-12/
-  01-14 need edits for D2/D1 before they run. This is a replan decision, not this
-  executor's to make.
-Status: Replanned 2026-09-07. Four new plans (01-24 through 01-27, waves 15 through 18) close the second review's blocking findings; 01-12 and 01-14 were edited in place for D2 and D1; 01-12 through 01-15 moved to waves 19 through 22. Ready for `/donny-execute-phase 1`, starting at plan 01-24.
-Last activity: 2026-09-07
+  Plans 01-12 through 01-15 (PLAT-01 investigation, the PLAT-03 headline capture, the
+  weekly job, the rig install runbook) remain unexecuted and now sit at waves 19 through
+  22, behind the four plans the 2026-09-07 replan added. They were held rather than
+  started: 01-13 could not complete as written until A1 was resolved (provisional
+  contamination thresholds excluded every run from the series, which plan 01-24 fixes),
+  and 01-12 and 01-14 needed the D2 and D1 edits, now made.
+Status: Ready to execute. Replanned 2026-09-07 against `01-REVIEW-2026-09-06.md`. Four new
+  plans (01-24 through 01-27, waves 15 through 18) close the second review's blocking findings;
+  01-12 and 01-14 were edited in place for D2 and D1; 01-12 through 01-15 moved to waves 19
+  through 22. The plan-checker returned no blockers and its three actionable advisories are
+  closed (commit 0138b4f). Start at plan 01-24.
+Last activity: 2026-09-07 -- Phase 1 planning complete
 
-Progress: [████████░░] 83%
+Progress: [███████░░░] 70%
 
 ## Performance Metrics
 
