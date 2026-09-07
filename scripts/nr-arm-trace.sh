@@ -52,10 +52,28 @@ tlb:tlb_flush
 # oldest-first, so this has to hold the window of interest rather than the whole run.
 BUFFER_KB=8192
 
+# Both counts come from ONE pass over the buffer. The buffer is live and keeps filling, so
+# counting total and isolated separately reports two numbers taken moments apart, and the
+# first version of this script printed 2405 in its report and 2414 in its exit check. Both
+# were true and the pair is useless: these numbers go in a manifest note as the evidence
+# that the tracer reached the isolated cores, and a reader cannot reconcile two of them.
+#
 # The CPU field ftrace prints is zero-padded to three digits, so CPUs 6 to 11 are [006]
 # through [011]. Matching on that is what distinguishes "the tracer ran" from "the tracer
 # ran on the cores this investigation is about".
-ISOLATED_RE='\[00[6-9]\]|\[01[01]\]'
+#
+# The pattern is an awk regex LITERAL, deliberately, and must not be moved into a shell
+# variable passed with -v. Awk processes escape sequences in a -v value before the regex
+# engine ever sees it, so `\[` arrives as a bare `[` and the pattern silently becomes a
+# character class that matches far too much. Checked against a sample of real trace lines:
+# the -v form counted 6 where grep -cE counted 5, matching `[000]`.
+count_trace() {
+    awk '
+        { total++ }
+        /\[00[6-9]\]|\[01[01]\]/ { isolated++ }
+        END { print total + 0, isolated + 0 }
+    ' "$T/trace"
+}
 
 report() {
     echo "=== set_event ==="
@@ -67,9 +85,9 @@ report() {
     echo "=== buffer_size_kb (per cpu) ==="
     cat "$T/buffer_size_kb"
     echo "=== total trace lines ==="
-    wc -l < "$T/trace"
+    echo "$TOTAL_LINES"
     echo "=== trace lines on CPUs 6-11 ==="
-    grep -cE "$ISOLATED_RE" "$T/trace"
+    echo "$ON_ISOLATED"
 }
 
 if [ ! -d "$T" ]; then
@@ -83,6 +101,9 @@ if [ ! -w "$T/tracing_on" ]; then
 fi
 
 if [ "${1:-}" = "--status" ]; then
+    read -r TOTAL_LINES ON_ISOLATED <<EOF
+$(count_trace)
+EOF
     report
     exit 0
 fi
@@ -122,9 +143,10 @@ echo 1 > "$T/tracing_on"
 echo "nr-arm-trace.sh: accumulating for 20 s"
 sleep 20
 
+read -r TOTAL_LINES ON_ISOLATED <<EOF
+$(count_trace)
+EOF
 report
-
-ON_ISOLATED=$(grep -cE "$ISOLATED_RE" "$T/trace")
 echo
 if [ "$ON_ISOLATED" -eq 0 ]; then
     echo "nr-arm-trace.sh: STOP. The buffer holds nothing from CPUs 6-11." >&2
