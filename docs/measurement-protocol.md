@@ -240,6 +240,35 @@ published manifest can tell an observed revision from an asserted one at a glanc
    This only ever writes `REPORT.md`; it never touches a manifest or a raw capture, skips a
    run it cannot re-derive (naming why), and refuses to run together with `--strict`.
 
+## Collecting a capture from the rig
+
+A capture is taken on the rig and published from the dev host, so it has to be brought
+across. Collect the run by name:
+
+```sh
+sh scripts/nr-collect-from-rig.sh 2026-09-07-precision3591-recon
+nrmeasure verify --write-index
+nrmeasure verify --strict --check-index
+git status --porcelain measurements/
+```
+
+That last line must show only the new run directory and `measurements/INDEX.md`. Anything
+else means something was overwritten.
+
+Do not sweep the whole tree. `rsync -az rig:~/neurorust/measurements/ measurements/` looks
+like it adds the new run and does not: it replaces every file the dev host holds with the
+rig's copy, and the rig's copies are older. Run once on 2026-09-07, it reverted eleven
+published `REPORT.md` files to their pre-correction state, wrote the operator's home
+directory back into manifests that had been published with `[redacted]`, and reset a
+capture's `ATTEMPT.json` from `failed` to `in-progress`, discarding the preserved evidence
+recorded for it. The strict gate caught the attempt record on the next run. It could not
+catch the other two, because neither makes a manifest disagree with its capture, which is
+what the gate checks. Recovery, if it happens again, is `git checkout -- measurements/`:
+tracked files revert and the newly collected run, being untracked, survives.
+
+The rig keeps its own copy of everything it has ever captured. That is deliberate
+redundancy, not a mirror to sync against.
+
 ## What the contamination detector measures
 
 The checklist above (`nrmeasure run`'s 15 preconditions) is asserted before a

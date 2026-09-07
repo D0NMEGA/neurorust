@@ -651,8 +651,20 @@ recorded with an owner.
   the new untracked run directory in place. The gate is green again and no pre-existing run
   differs from its committed state.
 
-  Owner: plan 01-15 (the rig install runbook), and `docs/measurement-protocol.md` alongside it.
-  The pull must be scoped to the run being collected rather than the whole tree. The obvious
+  **CLOSED, plan 01-27 follow-up.** Pulled forward from 01-15 rather than deferred, because
+  the same command is how plans 01-12 and 01-13 collect their captures, and overwriting
+  evidence while collecting the headline figure is a far worse place to find this than a two
+  minute recon run. `scripts/nr-collect-from-rig.sh <run-id>` collects one named run: it
+  refuses a run id containing a path separator, refuses when the run already exists on the dev
+  host (a capture is collected once), and checks the rig has it before transferring anything.
+  `docs/measurement-protocol.md` gained a "Collecting a capture from the rig" section carrying
+  the command, the `git status` check that proves nothing else moved, the account of what the
+  unscoped pull destroyed, and the `git checkout -- measurements/` recovery. Plan 01-13's
+  collection step now names the script.
+
+  Original owner note, kept for the record: plan 01-15 (the rig install runbook), and
+  `docs/measurement-protocol.md` alongside it. The pull must be scoped to the run being
+  collected rather than the whole tree. The obvious
   form is naming the run directory, `rsync -az rig:~/neurorust/measurements/<run-id>/
   measurements/<run-id>/`, which cannot touch anything else. `--ignore-existing` is a weaker
   second best: it protects existing files but silently skips a run the dev host has a partial
