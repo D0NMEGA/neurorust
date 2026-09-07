@@ -593,3 +593,35 @@ recorded with an owner.
   instead, and cheaper for everyone: have `nr-run-measurement` narrow the mode itself when the
   file is owned by the invoking user, or have the build step in the protocol be a single wrapper
   that builds and chmods, so the two cannot be separated.
+
+- **A dropped SSH connection leaves an ESTABLISHED socket on the rig that fails
+  `NoActiveSshSessions` for about two hours.** Observed on the rig 2026-09-07 during plan 01-27
+  task 2. An ssh session died from the operator's side with `Read from remote host: Operation
+  timed out` / `client_loop: send disconnect: Broken pipe`. The rig never saw the peer go away,
+  so `ss -Htn state established '( sport = :22 )'` kept reporting two connections, the live one
+  and the corpse:
+
+      100.80.101.80:22       100.111.252.101:64684    <- live session
+      100.80.101.80:22       100.111.252.101:64251    <- dropped, still ESTABLISHED
+
+  Default TCP keepalive on Linux does not probe an idle connection for 7200 seconds, so the dead
+  socket persists for roughly two hours. Nothing in the measurement path distinguishes it from a
+  real logged-in session: the D-06 precondition `NoActiveSshSessions` counts exactly this, and
+  the operator-side wait loop that launches a detached capture counts it too, so a flaky link
+  silently blocks measurement on the rig for two hours with no diagnostic that says so. The
+  operator sees either a refused run naming a session they are not in, or, with the wait-loop
+  launcher, nothing at all: an empty log and no unit ever starting.
+
+  Not a bug in the precondition. The check is right that an unaccounted-for SSH session is a
+  reason to refuse, and it must stay counting sockets rather than trusting `who`. What is missing
+  is that a stale socket is indistinguishable from a live one in the message the operator gets.
+
+  Immediate workaround, verified: `sudo ss -K -tn state established '( sport = :22 and dport =
+  :<peer-port> )'` destroys the single stale socket, after which the count is correct at once.
+
+  Owner: plan 01-15 (the rig install runbook). Two things belong there. The refusal message for
+  `NoActiveSshSessions` should print the peer address and port of every socket it counted, so the
+  operator can see at a glance that one of them is not them, instead of being told they are
+  connected when they are not. And the runbook needs the `ss -K` recovery step, named as the
+  response to a dropped connection, because the failure appears at the next capture rather than
+  when the link drops and nobody will connect the two events unprompted.
