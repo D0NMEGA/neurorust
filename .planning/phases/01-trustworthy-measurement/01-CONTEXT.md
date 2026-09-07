@@ -133,6 +133,16 @@ comparison is SUBS-06 in Phase 3, not here.
   the clean and contaminated runs side by side. The calibration pair in D-17 already produces
   the contaminated arm, so the comparison falls out at no extra cost. This outcome demonstrates
   the project's own thesis about measurement discipline better than a kernel bug would.
+  **The second sentence is superseded (2026-09-07).** Non-reproduction does not establish
+  contamination, or any other cause; it establishes only that the stall was not observed under a
+  stated protocol for a stated exposure. `01-REVIEW-2026-09-06.md` finding D2 caught plan 01-12
+  carrying this decision's wording through to a conclusion, and ROADMAP success criterion 1 was
+  rewritten the same day to forbid it: "Non-reproduction is not a cause and may not be recorded as
+  one." The rest of D-21 stands. On the non-reproduction branch PLAT-01 stays open, the clean and
+  contaminated runs are still published side by side, and what the exposure does and does not bound
+  is stated rather than converted into a cause. Plan 01-12 owns the corrected branch. Recorded here
+  rather than rewritten, because a decision this project acted on for two weeks is part of the
+  record.
 - **D-22:** PLAT-03 reports both the total observed max against the 30 us gate and, separately,
   the kernel's contribution above the independently measured firmware floor (D-18). The gate
   sits barely above a 22 to 29 us firmware floor under load, leaving roughly 1 to 8 us for
