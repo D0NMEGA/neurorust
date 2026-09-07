@@ -1,0 +1,149 @@
+{
+  "file_version": 1,
+  "cmdline:": "cyclictest --mainaffinity=0,1 --affinity=6-11 --threads=6 --mlockall --policy=fifo --priority=99 --interval=200 --distance=0 --histogram=400 --histfile=/home/d0nmega/neurorust/measurements/2026-09-06-precision3591-screen/cyclictest.hist --json=/home/d0nmega/neurorust/measurements/2026-09-06-precision3591-screen/cyclictest.json --duration=60",
+  "rt_test_version:": "2.80",
+  "start_time": "Sun, 06 Sep 2026 15:40:01 -0500",
+  "end_time": "Sun, 06 Sep 2026 15:41:01 -0500",
+  "return_code": 0,
+  "sysinfo": {
+    "sysname": "Linux",
+    "nodename": "d0nmega-Precision-3591",
+    "release": "7.0.0-30-realtime",
+    "version": "#30.1-Ubuntu SMP PREEMPT_RT Fri Aug  7 13:54:26 UTC 2026",
+    "machine": "x86_64",
+    "realtime": 1
+  },
+  "num_threads": 6,
+  "resolution_in_ns": 0,
+  "thread": {
+    "0": {
+      "histogram": {
+        "2": 197196,
+        "3": 77363,
+        "4": 15288,
+        "5": 212,
+        "6": 173,
+        "7": 4637,
+        "8": 4576,
+        "9": 543,
+        "10": 10,
+        "16": 2
+      },
+      "cycles": 300000,
+      "min": 2,
+      "max": 16,
+      "avg": 2.55,
+      "cpu": 6,
+      "node": 0
+    },
+    "1": {
+      "histogram": {
+        "2": 224763,
+        "3": 59064,
+        "4": 9244,
+        "5": 199,
+        "6": 17,
+        "7": 1853,
+        "8": 3768,
+        "9": 982,
+        "10": 100,
+        "11": 8,
+        "12": 1,
+        "13": 1
+      },
+      "cycles": 300000,
+      "min": 2,
+      "max": 13,
+      "avg": 2.39,
+      "cpu": 7,
+      "node": 0
+    },
+    "2": {
+      "histogram": {
+        "2": 147380,
+        "3": 126210,
+        "4": 18458,
+        "5": 736,
+        "6": 28,
+        "7": 1510,
+        "8": 3345,
+        "9": 1692,
+        "10": 534,
+        "11": 94,
+        "12": 11
+      },
+      "cycles": 299998,
+      "min": 2,
+      "max": 12,
+      "avg": 2.70,
+      "cpu": 8,
+      "node": 0
+    },
+    "3": {
+      "histogram": {
+        "2": 200826,
+        "3": 72184,
+        "4": 16651,
+        "5": 395,
+        "6": 88,
+        "7": 4153,
+        "8": 4593,
+        "9": 981,
+        "10": 107,
+        "11": 17,
+        "12": 4
+      },
+      "cycles": 299999,
+      "min": 2,
+      "max": 12,
+      "avg": 2.54,
+      "cpu": 9,
+      "node": 0
+    },
+    "4": {
+      "histogram": {
+        "2": 227099,
+        "3": 43129,
+        "4": 20159,
+        "5": 900,
+        "6": 36,
+        "7": 2396,
+        "8": 4128,
+        "9": 1717,
+        "10": 354,
+        "11": 73,
+        "12": 6,
+        "14": 1
+      },
+      "cycles": 299998,
+      "min": 2,
+      "max": 14,
+      "avg": 2.46,
+      "cpu": 10,
+      "node": 0
+    },
+    "5": {
+      "histogram": {
+        "2": 151420,
+        "3": 109052,
+        "4": 28380,
+        "5": 3342,
+        "6": 141,
+        "7": 621,
+        "8": 3109,
+        "9": 2862,
+        "10": 886,
+        "11": 149,
+        "12": 30,
+        "13": 4,
+        "14": 1
+      },
+      "cycles": 299997,
+      "min": 2,
+      "max": 14,
+      "avg": 2.76,
+      "cpu": 11,
+      "node": 0
+    }
+  }
+}

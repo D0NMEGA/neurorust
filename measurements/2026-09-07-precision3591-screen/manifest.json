@@ -1,0 +1,1615 @@
+{
+  "schema_version": 1,
+  "provenance_tier": "harness-generated",
+  "run_id": "2026-09-07-precision3591-screen",
+  "run_class": "screen",
+  "instrument_class": "headline-series",
+  "thermal_profile": "hot-screen",
+  "utc_start": "2026-09-07T01:17:11.530076323Z",
+  "utc_end": "2026-09-07T01:33:13.1929631Z",
+  "harness": {
+    "version": "0.1.0",
+    "git_sha": "unavailable-at-build-time",
+    "git_dirty": false,
+    "git_sha_source": "unavailable",
+    "executable_blake3": "dd0203595d4ed7895e8e44016401b9f3ce1a4c9d55c30a0833b1e5926dc840b9",
+    "executable_bytes": 3559784
+  },
+  "host": {
+    "rig_slug": "precision3591",
+    "system_vendor": "Dell Inc.",
+    "system_model": "Precision 3591",
+    "bios_version": "1.23.0",
+    "bios_release_date": "04/24/2026",
+    "cpu_model": "Intel(R) Core(TM) Ultra 9 185H",
+    "microcode": "0x28",
+    "logical_cpus": 22,
+    "physical_cores": 16,
+    "sockets": 1,
+    "p_cores": "",
+    "e_cores": "",
+    "memory_gb": 30
+  },
+  "kernel": {
+    "release": "7.0.0-30-realtime",
+    "version_string": "#30.1-Ubuntu SMP PREEMPT_RT Fri Aug  7 13:54:26 UTC 2026",
+    "is_realtime": true,
+    "preempt_model": "PREEMPT_RT",
+    "cmdline": "BOOT_IMAGE=/boot/vmlinuz-7.0.0-30-realtime root=[redacted] ro quiet splash isolcpus=6-11 nohz_full=6-11 rcu_nocbs=6-11 irqaffinity=0-5,12-21 intel_idle.max_cstate=1 processor.max_cstate=1 nosoftlockup nowatchdog nmi_watchdog=0 tsc=reliable skew_tick=1 crashkernel=2G-4G:320M,4G-32G:512M,32G-64G:1024M,64G-128G:2048M,128G-:4096M",
+    "isolcpus": "6-11",
+    "nohz_full": "6-11",
+    "rcu_nocbs": "6-11",
+    "irqaffinity": "0-5,12-21"
+  },
+  "os": {
+    "distro": "Ubuntu",
+    "version": "26.04.1 LTS (Resolute Raccoon)",
+    "session_kind": "installed",
+    "systemd_default_target": "multi-user.target",
+    "display_manager_active": false
+  },
+  "tuning": {
+    "per_cpu_governor": [
+      {
+        "cpu": 0,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 1,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 2,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 3,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 4,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 5,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 6,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 7,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 8,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 9,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 10,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 11,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 12,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 13,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 14,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 15,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 16,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 17,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 18,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 19,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 20,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 21,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      }
+    ],
+    "no_turbo": true,
+    "cstates": [
+      {
+        "cpu": 0,
+        "name": "POLL",
+        "disabled": false
+      },
+      {
+        "cpu": 0,
+        "name": "C1E",
+        "disabled": false
+      }
+    ],
+    "rt_tuning_service": {
+      "unit": "rt-tuning.service",
+      "active_state": "active",
+      "sub_state": "exited",
+      "unit_file_state": "enabled"
+    }
+  },
+  "power": {
+    "ac_online": true,
+    "battery_status": "Not charging",
+    "battery_percent": 100,
+    "thermal_zones": [
+      {
+        "name": "TCPU",
+        "temp_c_start": 78.05,
+        "temp_c_end": 83.05
+      },
+      {
+        "name": "TCPU_PCI",
+        "temp_c_start": 79.0,
+        "temp_c_end": 81.0
+      },
+      {
+        "name": "INT3400 Thermal",
+        "temp_c_start": 20.0,
+        "temp_c_end": 20.0
+      },
+      {
+        "name": "SEN1",
+        "temp_c_start": 36.05,
+        "temp_c_end": 37.05
+      },
+      {
+        "name": "SEN2",
+        "temp_c_start": 52.05,
+        "temp_c_end": 55.05
+      },
+      {
+        "name": "SEN3",
+        "temp_c_start": 51.05,
+        "temp_c_end": 54.05
+      },
+      {
+        "name": "SEN4",
+        "temp_c_start": 37.05,
+        "temp_c_end": 38.05
+      },
+      {
+        "name": "SEN5",
+        "temp_c_start": 52.05,
+        "temp_c_end": 54.05
+      },
+      {
+        "name": "SEN6",
+        "temp_c_start": 57.05,
+        "temp_c_end": 60.05
+      },
+      {
+        "name": "SEN7",
+        "temp_c_start": 25.05,
+        "temp_c_end": 25.05
+      },
+      {
+        "name": "x86_pkg_temp",
+        "temp_c_start": 79.0,
+        "temp_c_end": 82.0
+      },
+      {
+        "name": "iwlwifi_1",
+        "temp_c_start": 38.0,
+        "temp_c_end": 39.0
+      }
+    ],
+    "package_temp_c_max": 83.05
+  },
+  "network": {
+    "wired_iface": "enp0s31f6",
+    "wired_driver": "e1000e",
+    "wired_state": "down",
+    "ptp_capabilities": "hardware-clock-present",
+    "wifi_iface": "wlp0s20f3",
+    "wifi_driver": "iwlwifi",
+    "wifi_state": "up"
+  },
+  "preconditions": [
+    {
+      "check": "no-active-ssh-sessions",
+      "status": "pass",
+      "observed": "0",
+      "expected": "0"
+    },
+    {
+      "check": "systemd-default-target-is-multi-user",
+      "status": "pass",
+      "observed": "multi-user.target",
+      "expected": "multi-user.target"
+    },
+    {
+      "check": "display-manager-inactive",
+      "status": "pass",
+      "observed": "gdm.service=inactive, sddm.service=inactive, lightdm.service=inactive",
+      "expected": "inactive"
+    },
+    {
+      "check": "no-graphical-session",
+      "status": "pass",
+      "observed": "0",
+      "expected": "0"
+    },
+    {
+      "check": "no-active-login-sessions",
+      "status": "pass",
+      "observed": "none",
+      "expected": "no local console login session"
+    },
+    {
+      "check": "governor-is-performance-on-all-cpus",
+      "status": "pass",
+      "observed": "performance on 22 CPUs",
+      "expected": "performance on all CPUs"
+    },
+    {
+      "check": "no-turbo-enabled",
+      "status": "pass",
+      "observed": "1",
+      "expected": "1"
+    },
+    {
+      "check": "deep-cstates-disabled",
+      "status": "pass",
+      "observed": "C6 not present, C10 not present on cpus 6-11",
+      "expected": "C6 disabled, C10 disabled"
+    },
+    {
+      "check": "isolcpus-covers-target-cpus",
+      "status": "pass",
+      "observed": "6-11",
+      "expected": "6-11"
+    },
+    {
+      "check": "kernel-is-realtime",
+      "status": "pass",
+      "observed": "1",
+      "expected": "1"
+    },
+    {
+      "check": "rt-tuning-service-active",
+      "status": "pass",
+      "observed": "active",
+      "expected": "active"
+    },
+    {
+      "check": "on-ac-power",
+      "status": "pass",
+      "observed": "AC=1",
+      "expected": "AC=1"
+    },
+    {
+      "check": "thermal-headroom-at-start",
+      "status": "not-applicable",
+      "observed": "79.0 C",
+      "expected": "package temp <= 70 C"
+    },
+    {
+      "check": "no-package-manager-activity",
+      "status": "pass",
+      "observed": "none",
+      "expected": "no apt, dpkg, unattended-upgrade or snapd process"
+    },
+    {
+      "check": "tracers-quiescent",
+      "status": "pass",
+      "observed": "current_tracer=nop events/enable=0 set_event=(empty) tracing_on=0",
+      "expected": "current_tracer=nop, events/enable=0, set_event=(empty), tracing_on=0"
+    }
+  ],
+  "interference": {
+    "before": {
+      "isolated_cpus": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "cal_ipis": [
+        {
+          "cpu": 6,
+          "count": 30138
+        },
+        {
+          "cpu": 7,
+          "count": 29903
+        },
+        {
+          "cpu": 8,
+          "count": 29956
+        },
+        {
+          "cpu": 9,
+          "count": 29906
+        },
+        {
+          "cpu": 10,
+          "count": 29905
+        },
+        {
+          "cpu": 11,
+          "count": 30324
+        }
+      ],
+      "tlb_ipis": [
+        {
+          "cpu": 6,
+          "count": 15
+        },
+        {
+          "cpu": 7,
+          "count": 15
+        },
+        {
+          "cpu": 8,
+          "count": 15
+        },
+        {
+          "cpu": 9,
+          "count": 15
+        },
+        {
+          "cpu": 10,
+          "count": 15
+        },
+        {
+          "cpu": 11,
+          "count": 15
+        }
+      ],
+      "context_switches": [
+        {
+          "cpu": 6,
+          "count": 262040
+        },
+        {
+          "cpu": 7,
+          "count": 241680
+        },
+        {
+          "cpu": 8,
+          "count": 279341
+        },
+        {
+          "cpu": 9,
+          "count": 261349
+        },
+        {
+          "cpu": 10,
+          "count": 263319
+        },
+        {
+          "cpu": 11,
+          "count": 261778
+        }
+      ],
+      "irqs": [
+        {
+          "cpu": 6,
+          "count": 49951
+        },
+        {
+          "cpu": 7,
+          "count": 94157
+        },
+        {
+          "cpu": 8,
+          "count": 32910
+        },
+        {
+          "cpu": 9,
+          "count": 63406
+        },
+        {
+          "cpu": 10,
+          "count": 20387
+        },
+        {
+          "cpu": 11,
+          "count": 12431
+        }
+      ]
+    },
+    "after": {
+      "isolated_cpus": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "cal_ipis": [
+        {
+          "cpu": 6,
+          "count": 30626
+        },
+        {
+          "cpu": 7,
+          "count": 30390
+        },
+        {
+          "cpu": 8,
+          "count": 30443
+        },
+        {
+          "cpu": 9,
+          "count": 30393
+        },
+        {
+          "cpu": 10,
+          "count": 30392
+        },
+        {
+          "cpu": 11,
+          "count": 30811
+        }
+      ],
+      "tlb_ipis": [
+        {
+          "cpu": 6,
+          "count": 16
+        },
+        {
+          "cpu": 7,
+          "count": 16
+        },
+        {
+          "cpu": 8,
+          "count": 16
+        },
+        {
+          "cpu": 9,
+          "count": 16
+        },
+        {
+          "cpu": 10,
+          "count": 16
+        },
+        {
+          "cpu": 11,
+          "count": 16
+        }
+      ],
+      "context_switches": [
+        {
+          "cpu": 6,
+          "count": 262137
+        },
+        {
+          "cpu": 7,
+          "count": 241714
+        },
+        {
+          "cpu": 8,
+          "count": 279483
+        },
+        {
+          "cpu": 9,
+          "count": 261389
+        },
+        {
+          "cpu": 10,
+          "count": 263477
+        },
+        {
+          "cpu": 11,
+          "count": 261821
+        }
+      ],
+      "irqs": [
+        {
+          "cpu": 6,
+          "count": 50184
+        },
+        {
+          "cpu": 7,
+          "count": 94394
+        },
+        {
+          "cpu": 8,
+          "count": 32931
+        },
+        {
+          "cpu": 9,
+          "count": 63412
+        },
+        {
+          "cpu": 10,
+          "count": 20402
+        },
+        {
+          "cpu": 11,
+          "count": 12546
+        }
+      ]
+    },
+    "delta": {
+      "cal_ipis": [
+        {
+          "cpu": 6,
+          "count": 488
+        },
+        {
+          "cpu": 7,
+          "count": 487
+        },
+        {
+          "cpu": 8,
+          "count": 487
+        },
+        {
+          "cpu": 9,
+          "count": 487
+        },
+        {
+          "cpu": 10,
+          "count": 487
+        },
+        {
+          "cpu": 11,
+          "count": 487
+        }
+      ],
+      "tlb_ipis": [
+        {
+          "cpu": 6,
+          "count": 1
+        },
+        {
+          "cpu": 7,
+          "count": 1
+        },
+        {
+          "cpu": 8,
+          "count": 1
+        },
+        {
+          "cpu": 9,
+          "count": 1
+        },
+        {
+          "cpu": 10,
+          "count": 1
+        },
+        {
+          "cpu": 11,
+          "count": 1
+        }
+      ],
+      "context_switches": [
+        {
+          "cpu": 6,
+          "count": 97
+        },
+        {
+          "cpu": 7,
+          "count": 34
+        },
+        {
+          "cpu": 8,
+          "count": 142
+        },
+        {
+          "cpu": 9,
+          "count": 40
+        },
+        {
+          "cpu": 10,
+          "count": 158
+        },
+        {
+          "cpu": 11,
+          "count": 43
+        }
+      ],
+      "irqs": [
+        {
+          "cpu": 6,
+          "count": 233
+        },
+        {
+          "cpu": 7,
+          "count": 237
+        },
+        {
+          "cpu": 8,
+          "count": 21
+        },
+        {
+          "cpu": 9,
+          "count": 6
+        },
+        {
+          "cpu": 10,
+          "count": 15
+        },
+        {
+          "cpu": 11,
+          "count": 115
+        }
+      ]
+    },
+    "tail_metrics": {
+      "tail_excursion_ratio": 9.6,
+      "thread_max_spread": 0.84375,
+      "overflow_rate_per_s": 0.0
+    },
+    "thresholds_provisional": true,
+    "verdict": "clean",
+    "windows": [
+      {
+        "instrument": "cyclictest",
+        "elapsed_seconds": 60.055925144,
+        "requested_seconds": 60,
+        "before": {
+          "isolated_cpus": [
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ],
+          "cal_ipis": [
+            {
+              "cpu": 6,
+              "count": 30138
+            },
+            {
+              "cpu": 7,
+              "count": 29903
+            },
+            {
+              "cpu": 8,
+              "count": 29956
+            },
+            {
+              "cpu": 9,
+              "count": 29906
+            },
+            {
+              "cpu": 10,
+              "count": 29905
+            },
+            {
+              "cpu": 11,
+              "count": 30324
+            }
+          ],
+          "tlb_ipis": [
+            {
+              "cpu": 6,
+              "count": 15
+            },
+            {
+              "cpu": 7,
+              "count": 15
+            },
+            {
+              "cpu": 8,
+              "count": 15
+            },
+            {
+              "cpu": 9,
+              "count": 15
+            },
+            {
+              "cpu": 10,
+              "count": 15
+            },
+            {
+              "cpu": 11,
+              "count": 15
+            }
+          ],
+          "context_switches": [
+            {
+              "cpu": 6,
+              "count": 262040
+            },
+            {
+              "cpu": 7,
+              "count": 241680
+            },
+            {
+              "cpu": 8,
+              "count": 279341
+            },
+            {
+              "cpu": 9,
+              "count": 261349
+            },
+            {
+              "cpu": 10,
+              "count": 263319
+            },
+            {
+              "cpu": 11,
+              "count": 261778
+            }
+          ],
+          "irqs": [
+            {
+              "cpu": 6,
+              "count": 49951
+            },
+            {
+              "cpu": 7,
+              "count": 94157
+            },
+            {
+              "cpu": 8,
+              "count": 32910
+            },
+            {
+              "cpu": 9,
+              "count": 63406
+            },
+            {
+              "cpu": 10,
+              "count": 20387
+            },
+            {
+              "cpu": 11,
+              "count": 12431
+            }
+          ]
+        },
+        "after": {
+          "isolated_cpus": [
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ],
+          "cal_ipis": [
+            {
+              "cpu": 6,
+              "count": 30139
+            },
+            {
+              "cpu": 7,
+              "count": 29904
+            },
+            {
+              "cpu": 8,
+              "count": 29957
+            },
+            {
+              "cpu": 9,
+              "count": 29907
+            },
+            {
+              "cpu": 10,
+              "count": 29906
+            },
+            {
+              "cpu": 11,
+              "count": 30325
+            }
+          ],
+          "tlb_ipis": [
+            {
+              "cpu": 6,
+              "count": 16
+            },
+            {
+              "cpu": 7,
+              "count": 16
+            },
+            {
+              "cpu": 8,
+              "count": 16
+            },
+            {
+              "cpu": 9,
+              "count": 16
+            },
+            {
+              "cpu": 10,
+              "count": 16
+            },
+            {
+              "cpu": 11,
+              "count": 16
+            }
+          ],
+          "context_switches": [
+            {
+              "cpu": 6,
+              "count": 262045
+            },
+            {
+              "cpu": 7,
+              "count": 241689
+            },
+            {
+              "cpu": 8,
+              "count": 279343
+            },
+            {
+              "cpu": 9,
+              "count": 261351
+            },
+            {
+              "cpu": 10,
+              "count": 263329
+            },
+            {
+              "cpu": 11,
+              "count": 261782
+            }
+          ],
+          "irqs": [
+            {
+              "cpu": 6,
+              "count": 49965
+            },
+            {
+              "cpu": 7,
+              "count": 94168
+            },
+            {
+              "cpu": 8,
+              "count": 32912
+            },
+            {
+              "cpu": 9,
+              "count": 63407
+            },
+            {
+              "cpu": 10,
+              "count": 20388
+            },
+            {
+              "cpu": 11,
+              "count": 12433
+            }
+          ]
+        },
+        "delta": {
+          "cal_ipis": [
+            {
+              "cpu": 6,
+              "count": 1
+            },
+            {
+              "cpu": 7,
+              "count": 1
+            },
+            {
+              "cpu": 8,
+              "count": 1
+            },
+            {
+              "cpu": 9,
+              "count": 1
+            },
+            {
+              "cpu": 10,
+              "count": 1
+            },
+            {
+              "cpu": 11,
+              "count": 1
+            }
+          ],
+          "tlb_ipis": [
+            {
+              "cpu": 6,
+              "count": 1
+            },
+            {
+              "cpu": 7,
+              "count": 1
+            },
+            {
+              "cpu": 8,
+              "count": 1
+            },
+            {
+              "cpu": 9,
+              "count": 1
+            },
+            {
+              "cpu": 10,
+              "count": 1
+            },
+            {
+              "cpu": 11,
+              "count": 1
+            }
+          ],
+          "context_switches": [
+            {
+              "cpu": 6,
+              "count": 5
+            },
+            {
+              "cpu": 7,
+              "count": 9
+            },
+            {
+              "cpu": 8,
+              "count": 2
+            },
+            {
+              "cpu": 9,
+              "count": 2
+            },
+            {
+              "cpu": 10,
+              "count": 10
+            },
+            {
+              "cpu": 11,
+              "count": 4
+            }
+          ],
+          "irqs": [
+            {
+              "cpu": 6,
+              "count": 14
+            },
+            {
+              "cpu": 7,
+              "count": 11
+            },
+            {
+              "cpu": 8,
+              "count": 2
+            },
+            {
+              "cpu": 9,
+              "count": 1
+            },
+            {
+              "cpu": 10,
+              "count": 1
+            },
+            {
+              "cpu": 11,
+              "count": 2
+            }
+          ]
+        }
+      },
+      {
+        "instrument": "rtla-hwnoise",
+        "elapsed_seconds": 901.327507357,
+        "requested_seconds": 900,
+        "before": {
+          "isolated_cpus": [
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ],
+          "cal_ipis": [
+            {
+              "cpu": 6,
+              "count": 30139
+            },
+            {
+              "cpu": 7,
+              "count": 29904
+            },
+            {
+              "cpu": 8,
+              "count": 29957
+            },
+            {
+              "cpu": 9,
+              "count": 29907
+            },
+            {
+              "cpu": 10,
+              "count": 29906
+            },
+            {
+              "cpu": 11,
+              "count": 30325
+            }
+          ],
+          "tlb_ipis": [
+            {
+              "cpu": 6,
+              "count": 16
+            },
+            {
+              "cpu": 7,
+              "count": 16
+            },
+            {
+              "cpu": 8,
+              "count": 16
+            },
+            {
+              "cpu": 9,
+              "count": 16
+            },
+            {
+              "cpu": 10,
+              "count": 16
+            },
+            {
+              "cpu": 11,
+              "count": 16
+            }
+          ],
+          "context_switches": [
+            {
+              "cpu": 6,
+              "count": 262045
+            },
+            {
+              "cpu": 7,
+              "count": 241689
+            },
+            {
+              "cpu": 8,
+              "count": 279343
+            },
+            {
+              "cpu": 9,
+              "count": 261351
+            },
+            {
+              "cpu": 10,
+              "count": 263329
+            },
+            {
+              "cpu": 11,
+              "count": 261782
+            }
+          ],
+          "irqs": [
+            {
+              "cpu": 6,
+              "count": 49965
+            },
+            {
+              "cpu": 7,
+              "count": 94168
+            },
+            {
+              "cpu": 8,
+              "count": 32912
+            },
+            {
+              "cpu": 9,
+              "count": 63407
+            },
+            {
+              "cpu": 10,
+              "count": 20388
+            },
+            {
+              "cpu": 11,
+              "count": 12433
+            }
+          ]
+        },
+        "after": {
+          "isolated_cpus": [
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ],
+          "cal_ipis": [
+            {
+              "cpu": 6,
+              "count": 30626
+            },
+            {
+              "cpu": 7,
+              "count": 30390
+            },
+            {
+              "cpu": 8,
+              "count": 30443
+            },
+            {
+              "cpu": 9,
+              "count": 30393
+            },
+            {
+              "cpu": 10,
+              "count": 30392
+            },
+            {
+              "cpu": 11,
+              "count": 30811
+            }
+          ],
+          "tlb_ipis": [
+            {
+              "cpu": 6,
+              "count": 16
+            },
+            {
+              "cpu": 7,
+              "count": 16
+            },
+            {
+              "cpu": 8,
+              "count": 16
+            },
+            {
+              "cpu": 9,
+              "count": 16
+            },
+            {
+              "cpu": 10,
+              "count": 16
+            },
+            {
+              "cpu": 11,
+              "count": 16
+            }
+          ],
+          "context_switches": [
+            {
+              "cpu": 6,
+              "count": 262137
+            },
+            {
+              "cpu": 7,
+              "count": 241714
+            },
+            {
+              "cpu": 8,
+              "count": 279483
+            },
+            {
+              "cpu": 9,
+              "count": 261389
+            },
+            {
+              "cpu": 10,
+              "count": 263477
+            },
+            {
+              "cpu": 11,
+              "count": 261821
+            }
+          ],
+          "irqs": [
+            {
+              "cpu": 6,
+              "count": 50184
+            },
+            {
+              "cpu": 7,
+              "count": 94394
+            },
+            {
+              "cpu": 8,
+              "count": 32931
+            },
+            {
+              "cpu": 9,
+              "count": 63412
+            },
+            {
+              "cpu": 10,
+              "count": 20402
+            },
+            {
+              "cpu": 11,
+              "count": 12546
+            }
+          ]
+        },
+        "delta": {
+          "cal_ipis": [
+            {
+              "cpu": 6,
+              "count": 487
+            },
+            {
+              "cpu": 7,
+              "count": 486
+            },
+            {
+              "cpu": 8,
+              "count": 486
+            },
+            {
+              "cpu": 9,
+              "count": 486
+            },
+            {
+              "cpu": 10,
+              "count": 486
+            },
+            {
+              "cpu": 11,
+              "count": 486
+            }
+          ],
+          "tlb_ipis": [
+            {
+              "cpu": 6,
+              "count": 0
+            },
+            {
+              "cpu": 7,
+              "count": 0
+            },
+            {
+              "cpu": 8,
+              "count": 0
+            },
+            {
+              "cpu": 9,
+              "count": 0
+            },
+            {
+              "cpu": 10,
+              "count": 0
+            },
+            {
+              "cpu": 11,
+              "count": 0
+            }
+          ],
+          "context_switches": [
+            {
+              "cpu": 6,
+              "count": 92
+            },
+            {
+              "cpu": 7,
+              "count": 25
+            },
+            {
+              "cpu": 8,
+              "count": 140
+            },
+            {
+              "cpu": 9,
+              "count": 38
+            },
+            {
+              "cpu": 10,
+              "count": 148
+            },
+            {
+              "cpu": 11,
+              "count": 39
+            }
+          ],
+          "irqs": [
+            {
+              "cpu": 6,
+              "count": 219
+            },
+            {
+              "cpu": 7,
+              "count": 226
+            },
+            {
+              "cpu": 8,
+              "count": 19
+            },
+            {
+              "cpu": 9,
+              "count": 5
+            },
+            {
+              "cpu": 10,
+              "count": 14
+            },
+            {
+              "cpu": 11,
+              "count": 113
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "cyclictest",
+      "version": "cyclictest V 2.80",
+      "argv": [
+        "cyclictest",
+        "--mainaffinity=0,1",
+        "--affinity=6-11",
+        "--threads=6",
+        "--mlockall",
+        "--policy=fifo",
+        "--priority=99",
+        "--interval=200",
+        "--distance=0",
+        "--histogram=400",
+        "--histfile=[redacted]/neurorust/measurements/2026-09-07-precision3591-screen/cyclictest.hist",
+        "--json=[redacted]/neurorust/measurements/2026-09-07-precision3591-screen/cyclictest.json",
+        "--duration=60"
+      ],
+      "exit_code": 0,
+      "artifact_paths": [
+        {
+          "executed_path": "[redacted]/neurorust/measurements/2026-09-07-precision3591-screen/cyclictest.hist",
+          "artifact_path": "cyclictest.hist"
+        },
+        {
+          "executed_path": "[redacted]/neurorust/measurements/2026-09-07-precision3591-screen/cyclictest.json",
+          "artifact_path": "cyclictest.json"
+        }
+      ]
+    },
+    {
+      "name": "rtla",
+      "version": "rtla hwnoise: a summary of hardware-related noise (version 7.0.12)",
+      "argv": [
+        "rtla",
+        "hwnoise",
+        "-c",
+        "6-11",
+        "-H",
+        "0-5",
+        "-P",
+        "f:99",
+        "-d",
+        "900s"
+      ],
+      "exit_code": 0,
+      "artifact_paths": []
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "cyclictest.stderr.txt",
+      "bytes": 61,
+      "blake3": "8b3a6f104bfc5f0d3ebeb25de3dd7005487c3692fe24edd2ad22930be87ee508",
+      "kind": "other",
+      "stored": "in-repo"
+    },
+    {
+      "path": "rtla-hwnoise.txt",
+      "bytes": 754071,
+      "blake3": "a6cff6950483738bf4a9febd7c62e8e948c950cd926c0eed9f6f39720afecfa7",
+      "kind": "rtla-hwnoise",
+      "stored": "in-repo"
+    },
+    {
+      "path": "cyclictest.hist",
+      "bytes": 1180,
+      "blake3": "fa61e82e99265910dca1c5e595f55e8a3f502a5f8337aa750676871a79305032",
+      "kind": "cyclictest-hist",
+      "stored": "in-repo"
+    },
+    {
+      "path": "cyclictest.json",
+      "bytes": 3465,
+      "blake3": "0f5a2dbeb02b0342d777d7b9128e24ecf5d8a51fc3619feb2e97a8ffb551e681",
+      "kind": "cyclictest-json",
+      "stored": "in-repo"
+    }
+  ],
+  "firmware_screens": [
+    {
+      "instrument": "rtla-hwnoise",
+      "tool_version": "rtla hwnoise: a summary of hardware-related noise (version 7.0.12)",
+      "argv": [
+        "rtla",
+        "hwnoise",
+        "-c",
+        "6-11",
+        "-H",
+        "0-5",
+        "-P",
+        "f:99",
+        "-d",
+        "900s"
+      ],
+      "requested_cpus": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "observed_cpus": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "per_cpu_exposure_seconds": [
+        {
+          "cpu": 6,
+          "seconds": 674.25
+        },
+        {
+          "cpu": 7,
+          "seconds": 674.25
+        },
+        {
+          "cpu": 8,
+          "seconds": 674.25
+        },
+        {
+          "cpu": 9,
+          "seconds": 674.25
+        },
+        {
+          "cpu": 10,
+          "seconds": 674.25
+        },
+        {
+          "cpu": 11,
+          "seconds": 674.25
+        }
+      ],
+      "max_us": 1,
+      "max_population": "the largest Max Single value (one-shot hardware-noise event) across the observed CPUs' final rtla hwnoise rows",
+      "events_recorded": 44
+    }
+  ],
+  "smi_counts": {
+    "register": "0x34",
+    "before": [
+      {
+        "cpu": 6,
+        "count": 4017
+      },
+      {
+        "cpu": 7,
+        "count": 4017
+      },
+      {
+        "cpu": 8,
+        "count": 4017
+      },
+      {
+        "cpu": 9,
+        "count": 4017
+      },
+      {
+        "cpu": 10,
+        "count": 4017
+      },
+      {
+        "cpu": 11,
+        "count": 4017
+      }
+    ],
+    "after": [
+      {
+        "cpu": 6,
+        "count": 4017
+      },
+      {
+        "cpu": 7,
+        "count": 4017
+      },
+      {
+        "cpu": 8,
+        "count": 4017
+      },
+      {
+        "cpu": 9,
+        "count": 4017
+      },
+      {
+        "cpu": 10,
+        "count": 4017
+      },
+      {
+        "cpu": 11,
+        "count": 4017
+      }
+    ],
+    "delta": [
+      {
+        "cpu": 6,
+        "count": 0
+      },
+      {
+        "cpu": 7,
+        "count": 0
+      },
+      {
+        "cpu": 8,
+        "count": 0
+      },
+      {
+        "cpu": 9,
+        "count": 0
+      },
+      {
+        "cpu": 10,
+        "count": 0
+      },
+      {
+        "cpu": 11,
+        "count": 0
+      }
+    ],
+    "unavailable_reason": null
+  },
+  "absent_fields": [
+    {
+      "field_path": "host.p_cores",
+      "reason": "neither cpu_capacity nor cpuinfo_max_freq readable for every CPU"
+    },
+    {
+      "field_path": "host.e_cores",
+      "reason": "neither cpu_capacity nor cpuinfo_max_freq readable for every CPU"
+    }
+  ],
+  "excluded_from_series": true,
+  "exclusion_reason": "contamination verdict Clean was reached against provisional (D-24, not yet calibrated) thresholds; see config/contamination-thresholds.json",
+  "fixtures_used": [],
+  "notes": "D-18 re-take arm 3: housekeeping loaded, measured cores 6-11 idle, one pinned stress-ng --cpu 1 --cpu-method matrixprod worker per listed CPU, package 78.0 C at launch. Load timeout 2400 s, which outlasts this arm's ~1020 s by design; the observed post-capture worker count is recorded in the run log and the plan summary. rtla hwnoise runs one osnoise thread per CPU on 6-11 with control threads on 0-5, replacing the hwlatdetect arms, which could not sample 6-11 at all (docs/rig/firmware-floor-rt-vs-stock.md)."
+}

@@ -1,0 +1,147 @@
+{
+  "file_version": 1,
+  "cmdline:": "cyclictest --mainaffinity=0,1 --affinity=6-11 --threads=6 --mlockall --policy=fifo --priority=99 --interval=200 --distance=0 --histogram=400 --histfile=/home/d0nmega/neurorust/measurements/2026-09-06-precision3591-screen-02/cyclictest.hist --json=/home/d0nmega/neurorust/measurements/2026-09-06-precision3591-screen-02/cyclictest.json --duration=60",
+  "rt_test_version:": "2.80",
+  "start_time": "Sun, 06 Sep 2026 16:25:02 -0500",
+  "end_time": "Sun, 06 Sep 2026 16:26:02 -0500",
+  "return_code": 0,
+  "sysinfo": {
+    "sysname": "Linux",
+    "nodename": "d0nmega-Precision-3591",
+    "release": "7.0.0-30-realtime",
+    "version": "#30.1-Ubuntu SMP PREEMPT_RT Fri Aug  7 13:54:26 UTC 2026",
+    "machine": "x86_64",
+    "realtime": 1
+  },
+  "num_threads": 6,
+  "resolution_in_ns": 0,
+  "thread": {
+    "0": {
+      "histogram": {
+        "2": 50987,
+        "3": 16949,
+        "4": 4854,
+        "5": 112,
+        "6": 15,
+        "7": 248,
+        "8": 1128,
+        "9": 600,
+        "10": 95,
+        "11": 5,
+        "12": 2
+      },
+      "cycles": 75055,
+      "min": 2,
+      "max": 750016,
+      "avg": 602.03,
+      "cpu": 6,
+      "node": 0
+    },
+    "1": {
+      "histogram": {
+        "2": 49560,
+        "3": 17675,
+        "4": 5298,
+        "5": 570,
+        "6": 22,
+        "7": 634,
+        "8": 838,
+        "9": 303,
+        "10": 81,
+        "11": 12,
+        "16": 1
+      },
+      "cycles": 75054,
+      "min": 2,
+      "max": 750019,
+      "avg": 602.05,
+      "cpu": 7,
+      "node": 0
+    },
+    "2": {
+      "histogram": {
+        "2": 53290,
+        "3": 14560,
+        "4": 4888,
+        "5": 180,
+        "6": 19,
+        "7": 389,
+        "8": 1021,
+        "9": 527,
+        "10": 109,
+        "11": 8
+      },
+      "cycles": 75051,
+      "min": 2,
+      "max": 750021,
+      "avg": 602.03,
+      "cpu": 8,
+      "node": 0
+    },
+    "3": {
+      "histogram": {
+        "2": 41759,
+        "3": 18159,
+        "4": 10101,
+        "5": 710,
+        "6": 14,
+        "7": 709,
+        "8": 2000,
+        "9": 1219,
+        "10": 288,
+        "11": 30,
+        "12": 3
+      },
+      "cycles": 75052,
+      "min": 2,
+      "max": 750012,
+      "avg": 602.41,
+      "cpu": 9,
+      "node": 0
+    },
+    "4": {
+      "histogram": {
+        "2": 50404,
+        "3": 15356,
+        "4": 6999,
+        "5": 292,
+        "6": 15,
+        "7": 196,
+        "8": 822,
+        "9": 652,
+        "10": 211,
+        "11": 38,
+        "12": 5,
+        "13": 1
+      },
+      "cycles": 75051,
+      "min": 2,
+      "max": 750017,
+      "avg": 602.10,
+      "cpu": 10,
+      "node": 0
+    },
+    "5": {
+      "histogram": {
+        "2": 48271,
+        "3": 15894,
+        "4": 7490,
+        "5": 488,
+        "6": 12,
+        "7": 228,
+        "8": 1024,
+        "9": 1029,
+        "10": 432,
+        "11": 100,
+        "12": 20,
+        "13": 3
+      },
+      "cycles": 75051,
+      "min": 2,
+      "max": 750020,
+      "avg": 602.21,
+      "cpu": 11,
+      "node": 0
+    }
+  }
+}

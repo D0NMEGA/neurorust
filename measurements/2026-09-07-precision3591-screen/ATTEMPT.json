@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "run_id": "2026-09-07-precision3591-screen",
+  "utc_start": "2026-09-07T01:17:11.530076323Z",
+  "utc_end": "2026-09-07T01:33:13.1929631Z",
+  "status": "completed",
+  "harness": {
+    "version": "0.1.0",
+    "git_sha": "unavailable-at-build-time",
+    "git_dirty": false,
+    "git_sha_source": "unavailable",
+    "executable_blake3": "dd0203595d4ed7895e8e44016401b9f3ce1a4c9d55c30a0833b1e5926dc840b9",
+    "executable_bytes": 3559784
+  },
+  "requested": {
+    "run_class": "screen",
+    "instrument_class": "headline-series",
+    "cpus": "6-11",
+    "main_cpus": "0,1",
+    "duration_seconds": 60,
+    "with_hwlatdetect": false
+  },
+  "tools": [
+    {
+      "name": "cyclictest",
+      "version": "cyclictest V 2.80",
+      "argv": [
+        "cyclictest",
+        "--mainaffinity=0,1",
+        "--affinity=6-11",
+        "--threads=6",
+        "--mlockall",
+        "--policy=fifo",
+        "--priority=99",
+        "--interval=200",
+        "--distance=0",
+        "--histogram=400",
+        "--histfile=[redacted]/neurorust/measurements/2026-09-07-precision3591-screen/cyclictest.hist",
+        "--json=[redacted]/neurorust/measurements/2026-09-07-precision3591-screen/cyclictest.json",
+        "--duration=60"
+      ],
+      "exit_code": 0,
+      "artifact_paths": [
+        {
+          "executed_path": "[redacted]/neurorust/measurements/2026-09-07-precision3591-screen/cyclictest.hist",
+          "artifact_path": "cyclictest.hist"
+        },
+        {
+          "executed_path": "[redacted]/neurorust/measurements/2026-09-07-precision3591-screen/cyclictest.json",
+          "artifact_path": "cyclictest.json"
+        }
+      ]
+    },
+    {
+      "name": "rtla",
+      "version": "rtla hwnoise: a summary of hardware-related noise (version 7.0.12)",
+      "argv": [
+        "rtla",
+        "hwnoise",
+        "-c",
+        "6-11",
+        "-H",
+        "0-5",
+        "-P",
+        "f:99",
+        "-d",
+        "900s"
+      ],
+      "exit_code": 0,
+      "artifact_paths": []
+    }
+  ],
+  "preserved": [
+    {
+      "path": "cyclictest.stderr.txt",
+      "bytes": 61,
+      "blake3": "8b3a6f104bfc5f0d3ebeb25de3dd7005487c3692fe24edd2ad22930be87ee508",
+      "kind": "other",
+      "stored": "in-repo"
+    },
+    {
+      "path": "rtla-hwnoise.txt",
+      "bytes": 754071,
+      "blake3": "a6cff6950483738bf4a9febd7c62e8e948c950cd926c0eed9f6f39720afecfa7",
+      "kind": "rtla-hwnoise",
+      "stored": "in-repo"
+    },
+    {
+      "path": "cyclictest.hist",
+      "bytes": 1180,
+      "blake3": "fa61e82e99265910dca1c5e595f55e8a3f502a5f8337aa750676871a79305032",
+      "kind": "cyclictest-hist",
+      "stored": "in-repo"
+    },
+    {
+      "path": "cyclictest.json",
+      "bytes": 3465,
+      "blake3": "0f5a2dbeb02b0342d777d7b9128e24ecf5d8a51fc3619feb2e97a8ffb551e681",
+      "kind": "cyclictest-json",
+      "stored": "in-repo"
+    }
+  ],
+  "failure": null,
+  "usable_for_numerical_analysis": true
+}

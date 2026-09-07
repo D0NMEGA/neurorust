@@ -1,0 +1,1 @@
+WARN: distance is ignored and set to 0, if histogram enabled
