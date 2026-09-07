@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: 01-27 task 1 committed (d4d8883): the pushed-stamp provenance source and scripts/nr-push-to-rig.sh. Task 2 is a BLOCKING rig checkpoint awaiting the human operator: push, rebuild on the rig, take one 2-minute recon capture, confirm series_admission.admitted is true. Plans 01-24 through 01-26 are complete.
+stopped_at: 01-27 complete. The rig harness check is committed (d8ec9bf) and records excluded_from_series: false, the first admitted run; A1 is closed on real hardware. Plans 01-24 through 01-27 done. Four runbook defects found during the rig session are recorded in deferred-items.md, owned by 01-15.
 last_updated: "2026-09-07T09:00:34.325Z"
-last_activity: 2026-09-07 -- 01-26 executed
+last_activity: 2026-09-07 -- 01-27 executed
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 27
-  completed_plans: 22
-  percent: 81
+  completed_plans: 23
+  percent: 85
 ---
 
 # Project State
@@ -25,24 +25,31 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 
 ## Current Position
 
-Phase: 01 (trustworthy-measurement), 22 of 27 plans done (wave 17 of the roadmap).
-Plan: 01-26-PLAN.md (C1/B4/B5: verify --strict re-derives every firmware screen
-  figure from its raw rtla-hwnoise capture, the manifest's RES-rescheduling-IPI
-  field is renamed off its old "context switches" name behind a backward-
-  compatible alias, and the coverage caveat no longer claims a CPU absent from
-  rtla hwnoise's observed list "was sampled and reported nothing") is COMPLETE.
-  All three tasks committed: the firmware re-derivation and coverage check
-  (c4b2b4c); the rescheduling_ipis rename, its two re-pinned snapshots and the
-  two backward-compatibility tests (bf850e7); and the eleven-file
-  --rewrite-reports pass whose numeric-survival check confirmed no published
-  figure changed or dropped (472fe44). See 01-26-SUMMARY.md for the full record.
-Status: Executing Phase 01. Plan 01-27 (wave 18, D-29 and C2, which also
-  reinstalls the rig's scripts, carrying plan 01-25's scripts/nr-measure-mode
-  change onto the machine) is next. Plans 01-12 through 01-15 remain at waves
-  19 through 22, held until it lands.
-Last activity: 2026-09-07 -- 01-26 executed
+Phase: 01 (trustworthy-measurement), 23 of 27 plans done (waves 0 through 18 complete).
+Plan: 01-27-PLAN.md is COMPLETE. Task 1 (the pushed-stamp provenance source and
+  scripts/nr-push-to-rig.sh) committed as d4d8883; its executor was killed mid-verification
+  by a session limit and the task was finished from the main thread after re-running the
+  full gate set. Task 2 (the rig checkpoint) is done: measurements/2026-09-07-precision3591-recon
+  is committed as d8ec9bf and records excluded_from_series: false with
+  series_admission.admitted true and no exclusions, while the contamination thresholds are
+  still provisional. That closes finding A1 on the real machine, not only in tests, and
+  unblocks plans 01-13 and 01-14. The same capture confirmed git_sha_source pushed-stamp
+  matching the dev host's .git-sha, tracers-quiescent passing with instances= and samplers=,
+  and rtla-hwnoise observing all six of CPUs 6-11 with the strict gate re-deriving five
+  firmware figures.
+  Four defects surfaced during the rig session and are recorded in deferred-items.md rather
+  than fixed, all owned by plan 01-15 and all defects against success criterion 2: every rig
+  rebuild trips the exec-mode guard (1cdf6a2); a dropped SSH link leaves an ESTABLISHED
+  socket that blocks measurement for about two hours (b5322ff); the documented rig pull is an
+  unfiltered rsync that overwrites committed evidence, which it did (ed1c1db, recovered); and
+  the published manifest blake3 line is not the digest of manifest.json (b06194c).
+  Remaining: 01-12 (wave 19, PLAT-01 investigation), 01-13 (wave 20, the PLAT-03 headline
+  capture), 01-14 (wave 21, the weekly job), 01-15 (wave 22, the rig install runbook, which
+  now also owns the four findings above). All four need the rig.
+Status: Ready to execute wave 19 (plan 01-12).
+Last activity: 2026-09-07 -- 01-27 executed
 
-Progress: [████████░░] 81%
+Progress: [████████░░] 85%
 
 ## Performance Metrics
 
