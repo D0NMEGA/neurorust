@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "run_id": "2026-09-08-precision3591-headline",
+  "utc_start": "2026-09-08T05:17:26.167067763Z",
+  "utc_end": "2026-09-08T09:17:26.368295436Z",
+  "status": "completed",
+  "harness": {
+    "version": "0.1.0",
+    "git_sha": "6ae0e01ee62d02a1c5e1553062878596041ae58e",
+    "git_dirty": false,
+    "git_sha_source": "pushed-stamp",
+    "executable_blake3": "dfeff7f69bb515ea7b4542581b78741014c7d6f99d4905e5e4bc59b98f2d4b81",
+    "executable_bytes": 3648040
+  },
+  "requested": {
+    "run_class": "headline",
+    "instrument_class": "headline-series",
+    "cpus": "6-11",
+    "main_cpus": "0,1",
+    "duration_seconds": 14400,
+    "with_hwlatdetect": false
+  },
+  "tools": [
+    {
+      "name": "cyclictest",
+      "version": "cyclictest V 2.80",
+      "argv": [
+        "cyclictest",
+        "--mainaffinity=0,1",
+        "--affinity=6-11",
+        "--threads=6",
+        "--mlockall",
+        "--policy=fifo",
+        "--priority=99",
+        "--interval=200",
+        "--distance=0",
+        "--histogram=400",
+        "--histfile=[redacted]/neurorust/measurements/2026-09-08-precision3591-headline/cyclictest.hist",
+        "--json=[redacted]/neurorust/measurements/2026-09-08-precision3591-headline/cyclictest.json",
+        "--duration=14400"
+      ],
+      "exit_code": 0,
+      "artifact_paths": [
+        {
+          "executed_path": "[redacted]/neurorust/measurements/2026-09-08-precision3591-headline/cyclictest.hist",
+          "artifact_path": "cyclictest.hist"
+        },
+        {
+          "executed_path": "[redacted]/neurorust/measurements/2026-09-08-precision3591-headline/cyclictest.json",
+          "artifact_path": "cyclictest.json"
+        }
+      ]
+    }
+  ],
+  "preserved": [
+    {
+      "path": "cyclictest.stderr.txt",
+      "bytes": 61,
+      "blake3": "8b3a6f104bfc5f0d3ebeb25de3dd7005487c3692fe24edd2ad22930be87ee508",
+      "kind": "other",
+      "stored": "in-repo"
+    },
+    {
+      "path": "cyclictest.hist",
+      "bytes": 2926,
+      "blake3": "d339f6f1d78802532dcb8526abf11032dce1d0ab9b755072aa5c5c67f15bc933",
+      "kind": "cyclictest-hist",
+      "stored": "in-repo"
+    },
+    {
+      "path": "cyclictest.json",
+      "bytes": 4759,
+      "blake3": "32db0316d5871a2abe0e0da4c9b575f3140767d3ef35afd2ebfb5397fb438d56",
+      "kind": "cyclictest-json",
+      "stored": "in-repo"
+    }
+  ],
+  "failure": null,
+  "usable_for_numerical_analysis": true
+}
