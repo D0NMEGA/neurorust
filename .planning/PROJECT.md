@@ -152,7 +152,7 @@ materially tighter jitter, plus a safety guarantee BRAND does not offer.
 | Do not touch bicfcomp01's kernel | Shared preprocessing node under real load; rebooting it for a side project risks access and disrupts other users | ✓ Good |
 | Ubuntu real-time kernel over a hand-built PREEMPT_RT | On 26.04 LTS it is in the main archive, needs no Pro token, and ships RT 7.0, which is well past the 6.12 mainline merge | - Pending |
 | BRAND parity downgraded to published-figures comparison | Standing up someone else's Redis-based stack is real work that is not on the critical path for a solo build | - Pending |
-| Software timestamps, gap documented | No available NIC reports a PTP hardware clock; measure and publish the added uncertainty rather than pretend | - Pending |
+| Software timestamps, gap documented | The reference rig's wired `e1000e` NIC does report a PTP hardware clock (confirmed 2026-08-28); the software-timestamp gap applies only to the BIC Broadcom NICs and the Raspberry Pi, where the added uncertainty is measured and published rather than pretended away | - Corrected 2026-08-28 |
 | Screen the Dell before buying anything | `hwlatdetect` from a live USB is free, risks nothing on disk, and decides the question with data | - Pending |
 | Rig chosen for determinism and availability over speed | The rig is a measurement instrument. The project's own thesis, that a bounded worst case beats a good average, applies to choosing it | - Pending |
 
