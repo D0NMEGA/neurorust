@@ -192,7 +192,7 @@ None yet.
 
 ### Blockers/Concerns
 
-- Open question, Phase 1: a ~3.8 ms global stall appeared on all six isolated threads at nearly identical values (stop_machine or a system-wide TLB shootdown signature). Unexplained. No latency figure should be published until it is named.
+- Open question, Phase 1: a ~3.8 ms global stall appeared on all six isolated threads at nearly identical values (stop_machine or a system-wide TLB shootdown signature). Still UNEXPLAINED. PLAT-01's three-cycle investigation closed 2026-09-08 on stop condition 3, not-reproduced: it was not observed across 6.5 hours of clean running on the rig, 4.5 of them with a nine-event tracer armed and break limits at 200 us and 3000 us, highest excursion anywhere 96 us. That is a non-observation and not a cause, and it bounds no rate or frequency. See docs/rig/plat01-stall-investigation.md. PLAT-01 stays Pending. Latency figures may now be published and each carries the stall as an explicit limitation naming that exposure, per ROADMAP criterion 1 as rewritten 2026-09-07; the earlier rule here, that no figure be published until the stall is named, would have held the phase open on a positive finding no amount of disciplined investigation can guarantee.
 - Contaminated baseline: `cyclictest-rt-isolated-idle-10m.hist` was taken with SSH activity and an active GNOME session. Not publishable; re-run under the Phase 1 protocol with `--tracemark` and ftrace armed.
 - Doc inconsistency: PROJECT.md Constraints still says "software timestamping only", which the corrected Out of Scope entry (PTP hardware timestamps back in scope, WIRE-06) supersedes. Fix at the next PROJECT.md update.
 - WIRE-06 needs an ethernet cable on `enp0s31f6`; the wifi adapter has no PTP clock.

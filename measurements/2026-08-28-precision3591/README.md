@@ -153,15 +153,25 @@ rather than per-core interference.
 1,820,584 to 1,826,674, which at a 200 us interval is about 1.2 seconds of wall time carrying a
 stall over 400 us roughly every 10 ms on every isolated core at once. Separately, a handful of
 isolated cross-thread events appear (cycles near 2,259,348, 2,349,428 and 2,709,344, each
-landing on two or three threads within about 30 cycles), and the roughly 3.8 ms maximum belongs
-to that second category. The sustained burst and the isolated global spikes are different
-phenomena and are investigated separately under PLAT-01.
+landing on two or three threads within about 30 cycles). Both patterns are visible in this
+capture and the maximum is 3806 us, but which pattern produced that maximum cannot be determined
+from these artifacts: cyclictest records per-thread maxima in its summary and overflow cycle
+numbers in its overflow list, and nothing in either ties an amplitude to a cycle. An earlier
+version of this paragraph assigned the maximum to the second category; that assignment was not
+recoverable and is withdrawn. The sustained burst and the isolated global spikes are different
+phenomena and were investigated separately under PLAT-01; see
+`docs/rig/plat01-stall-investigation.md`.
 
 **CAVEAT - do not publish this figure.** The run was contaminated. SSH commands were executed
 against the machine during the measurement (`ps -L`, `tmux capture-pane`, `scp`), each creating
 processes, taking network interrupts, and triggering TLB shootdown IPIs that broadcast to the
 isolated cores; `/proc/interrupts` showed CAL (function-call interrupt) counts of ~137k on
 CPUs 6-11. A GNOME session was also active with a user typing into it.
+
+**PLAT-01 outcome.** Neither phenomenon reproduced across the three-cycle investigation. See
+`docs/rig/plat01-stall-investigation.md` for the protocol, the exposure and what it does and does
+not bound; that document is the single source of truth for this stall and this file does not
+restate it.
 
 **Next measurement must**: run with no SSH activity, with the desktop idle or the system
 dropped to `multi-user.target`, and with `--tracemark` plus ftrace armed so the kernel records
