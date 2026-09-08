@@ -82,7 +82,7 @@ Plans:
 - [x] 01-09-PLAN.md - The measurement protocol and the publication layout documents
 - [x] 01-10-PLAN.md - Reconstructed manifests and the 2026-08-28 README correction
 - [x] 01-11-PLAN.md - Calibration pair and the RT firmware floor re-run (rig runbook)
-- [ ] 01-12-PLAN.md - PLAT-01 investigation: armed tracing, threshold calibration, three cycles (rig runbook) [wave 19]
+- [x] 01-12-PLAN.md - PLAT-01 investigation: armed tracing, threshold calibration, three cycles (rig runbook) [wave 19]
 - [ ] 01-13-PLAN.md - PLAT-03 headline capture and the verdict, with no subtraction (rig runbook) [wave 20]
 - [ ] 01-14-PLAN.md - Weekly job: nrmeasure series with nullable statistics, systemd units, regression gate [wave 21]
 - [ ] 01-15-PLAN.md - Rig install runbook: enable the weekly timer and observe the first fire [wave 22]
@@ -212,7 +212,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Trustworthy measurement | 23/27 | In Progress|  |
+| 1. Trustworthy measurement | 24/27 | In Progress|  |
 | 2. Proven emergency_stop | 0/TBD | Not started | - |
 | 3. Deterministic substrate | 0/TBD | Not started | - |
 | 4. Lock-free transport | 0/TBD | Not started | - |

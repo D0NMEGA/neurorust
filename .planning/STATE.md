@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: 01-27 complete. The rig harness check is committed (d8ec9bf) and records excluded_from_series: false, the first admitted run; A1 is closed on real hardware. Plans 01-24 through 01-27 done. Four runbook defects found during the rig session are recorded in deferred-items.md, owned by 01-15.
+stopped_at: 01-12 complete. PLAT-01 closed on stop condition 3, not-reproduced: neither phenomenon appeared across 6.5 hours of clean running, 4.5 traced. The stall stays unexplained and PLAT-01 stays Pending. Remaining: 01-13 (headline capture, rig), 01-14 (weekly job, dev host), 01-15 (rig runbook, rig).
 last_updated: "2026-09-07T09:00:34.325Z"
-last_activity: 2026-09-07 -- 01-27 executed
+last_activity: 2026-09-08 -- 01-12 executed
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 27
-  completed_plans: 23
-  percent: 85
+  completed_plans: 24
+  percent: 89
 ---
 
 # Project State
@@ -49,7 +49,7 @@ Plan: 01-27-PLAN.md is COMPLETE. Task 1 (the pushed-stamp provenance source and
 Status: Ready to execute wave 19 (plan 01-12).
 Last activity: 2026-09-07 -- 01-27 executed
 
-Progress: [████████░░] 85%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
