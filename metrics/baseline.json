@@ -10,7 +10,7 @@
       "absolute_us": 100
     }
   },
-  "note": "A run fails when the metric exceeds max(baseline * (1 + relative_pct/100), baseline + absolute_us). The absolute floor exists because p99 on this rig is around 9 us, where a 20 percent relative threshold alone is 1.8 us, below the 1 us bin resolution of the instrument, and the check would flap on quantisation. The max threshold is looser in both terms because worst case on a laptop under a firmware floor of 22 to 29 us is genuinely more variable than p99.",
+  "note": "A run fails when the metric exceeds max(baseline * (1 + relative_pct/100), baseline + absolute_us). The absolute floor exists because p99 on this rig is around 9 us, where a 20 percent relative threshold alone is 1.8 us, below the 1 us bin resolution of the instrument, and the check would flap on quantisation. The max threshold is looser in both terms because the maximum is a single sample while p99 is a statistic over the whole population: across the clean runs in latency-series.json, spanning 60 seconds to 4 hours, p50 stays at 2 to 3 us and p99 at 8 to 10 us while the maximum ranges from 13 us to 96 us with no tight relationship to duration. A threshold tuned to p99's stability would flag ordinary run-to-run variation in the maximum. No firmware figure is used to justify these thresholds: there is no firmware floor for cpus 6-11, the hwlatdetect maxima of 22 and 29 us characterise cpu 0 and cpu 5 rather than the isolated cores, and rtla hwnoise observes 1 us there. See docs/rig/firmware-floor-rt-vs-stock.md.",
   "entries": [
     {
       "rig_slug": "precision3591",
