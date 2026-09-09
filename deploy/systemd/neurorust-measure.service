@@ -1,0 +1,40 @@
+[Unit]
+Description=neurorust weekly measurement run
+Documentation=file:///opt/neurorust/docs/measurement-protocol.md
+After=multi-user.target
+ConditionPathExists=/opt/neurorust/target/release/nrmeasure
+# The interactive entry point (scripts/nr-run-measurement) launches a transient unit named
+# nr-measurement. Two captures at once contaminate each other, so refuse to start while
+# that one is active.
+Conflicts=nr-measurement.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/neurorust
+ExecStart=/opt/neurorust/deploy/systemd/neurorust-weekly-run.sh
+# TimeoutStartSec is the bound that actually applies here, not its sibling that bounds a
+# service's total runtime. On a Type=oneshot unit the whole run is the start phase, and
+# systemd ignores that sibling directive entirely: it prints a warning into the journal
+# naming the directive and saying it has no effect in combination with Type=oneshot. That
+# printed warning is the only reason this defect was ever found; check the journal for its
+# absence after any change here. See deploy/systemd/README.md for the exact warning text.
+TimeoutStartSec=3h
+StandardOutput=journal
+StandardError=journal
+# The measurement needs these; nothing else. CapabilityBoundingSet restricts the effective
+# set even though the unit runs as root: CAP_SYS_NICE for SCHED_FIFO, CAP_IPC_LOCK for
+# mlockall, CAP_SYS_ADMIN for the tracing and cgroup reads the preconditions take,
+# CAP_DAC_OVERRIDE for the sysfs and procfs paths the environment snapshot reads, and
+# CAP_SYS_RAWIO for rdmsr's /dev/cpu/*/msr read (the SMI count). Without CAP_SYS_RAWIO the
+# weekly run records smi_counts as unavailable every week.
+CapabilityBoundingSet=CAP_SYS_NICE CAP_IPC_LOCK CAP_SYS_ADMIN CAP_DAC_OVERRIDE CAP_SYS_RAWIO
+NoNewPrivileges=false
+# PrivateTmp and ProtectHome are off deliberately, not an oversight: the run writes into
+# this repository's own working tree (a path under /opt, not /tmp or a home directory) and
+# reads the real /sys and /proc to snapshot the actual machine. A namespace placed between
+# the harness and the machine would change the very environment being measured, which is a
+# measurement error, not a hardening improvement, for a unit whose entire job is to observe
+# the real system.
+ProtectHome=false
+PrivateTmp=false

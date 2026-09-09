@@ -1,0 +1,16 @@
+[Unit]
+Description=neurorust weekly measurement trigger
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00
+# D-08: a missed week is a recorded gap, never a backfill. Persistent=true would fire a
+# catch-up run at the next boot, which would be a measurably different environment and would
+# silently fill a hole that should stay visible in metrics/coverage.json.
+Persistent=false
+AccuracySec=1min
+# A randomised start would vary the thermal and idle state the run begins in, and
+# ThermalHeadroomAtStart is one of the fifteen preconditions this run is asserted against.
+RandomizedDelaySec=0
+
+[Install]
+WantedBy=timers.target
