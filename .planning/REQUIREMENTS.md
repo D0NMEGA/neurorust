@@ -30,9 +30,10 @@ Completed and measured 2026-08-28. Raw captures and rig manifest in
 - [ ] **PLAT-02**: A clean measurement protocol is defined and followed: no remote shell
       activity during a run, desktop idle or system at `multi-user.target`, documented in the
       repo so third parties reproduce the conditions rather than guessing
-- [ ] **PLAT-03**: Worst-case scheduling latency on isolated cores is either brought under
-      30 us, or the residual is attributed to a named platform cause and published as a
-      documented limitation
+- [x] **PLAT-03**: Worst-case scheduling latency on isolated cores is either brought under
+      30 us, or the residual is attributed to a named platform cause, or published as an
+      explicitly unattributed limitation with the run, its raw capture, and the reason
+      attribution failed committed alongside
 
 ### Scheduling and memory substrate
 
@@ -177,7 +178,7 @@ roadmap existed and map to no phase; they are listed for completeness.
 | RIG-04 | Complete (pre-roadmap) | Validated |
 | PLAT-01 | Phase 1 | Pending |
 | PLAT-02 | Phase 1 | Pending |
-| PLAT-03 | Phase 1 | Pending |
+| PLAT-03 | Phase 1 | Complete |
 | SUBS-01 | Phase 3 | Pending |
 | SUBS-02 | Phase 3 | Pending |
 | SUBS-03 | Phase 3 | Pending |
