@@ -225,11 +225,18 @@ and are verified against real data. Nothing here is installed on the rig; plan 0
 and also seeds the weekly-class baseline once the first weekly run exists (`metrics/baseline.json`
 today carries only a `headline`-class entry, by design; see `docs/publication-layout.md`).
 
-**Requirements completed:** BENCH-08. `metrics/latency-series.json` is a real, committed weekly
-metrics file: p50/p95/p99 for every cyclictest stage, and an explicit null with a named
-population for every stage (firmware, SMI) whose instrument does not produce one, which is what
-BENCH-08 means once finding 10 of the external audit is applied rather than the max-filling
-convention this plan replaces.
+**Requirements completed:** none. BENCH-08 was marked Complete by this plan's executor on the
+strength of `metrics/latency-series.json` existing, and that was reverted the same day during
+the orchestrator's spot-check. The file is real and carries p50/p95/p99 for every cyclictest
+stage, with an explicit null and a named population for every stage (firmware, SMI) whose
+instrument does not produce one, which is finding 10 applied rather than the max-filling
+convention this plan replaces. What it is not is weekly. It was produced by a hand-run command
+on the dev host and committed by hand; ROADMAP criterion 5 says "A CI job commits a weekly
+metrics JSON", and no CI job has committed anything. This plan's own `provides` block says the
+units are "not yet installed on the rig", plan 01-15 carries BENCH-08 in its frontmatter, and
+01-15's objective states that until it completes the weekly job is a set of files that have
+never run. BENCH-08 is 01-15's to close, matching the precedent 01-23 set when it reverted its
+own PLAT-03 mark-complete for the same reason.
 
 ## Self-Check: PASSED
 
