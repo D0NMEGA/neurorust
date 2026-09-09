@@ -695,3 +695,28 @@ recorded with an owner.
   the write-up and the experimental inputs in the manifest note. Left as a wording fix rather
   than silently treated as met, because a criterion that cannot be satisfied and is marked passed
   is worse than one that is wrong and says so.
+
+## 01-14: one unreproduced failure in `nr-cli --test run_pipeline`
+
+Found 2026-09-09 while spot-checking plan 01-14's executor output. A `cargo test --workspace`
+reported `test result: FAILED. 36 passed; 1 failed` for the `nr-cli --test run_pipeline` target.
+The failing test name was not captured, because the run was filtered to result lines.
+
+Immediately rerunning that target gave `37 passed; 0 failed`, and six further consecutive
+full-workspace runs were clean. The cause is unknown and no code was changed in response.
+
+Two things make this worth recording rather than dismissing. This project's whole claim is
+bounded, reproducible behaviour, so a suite that fails once and passes on rerun is a finding in
+its own right. And `run_pipeline` is the suite that exercises the full capture pipeline, including
+the provenance gate and the admission gate, which are the checks every published figure depends
+on; a flake there is not cosmetic.
+
+The one lead: `run_pipeline` constructs run ids from the current date, and the system date rolled
+from 2026-09-08 to 2026-09-09 during this session. A test that reads the date twice and compares
+would fail exactly once, at midnight, and pass forever afterwards. That is a hypothesis with no
+evidence behind it, not a diagnosis.
+
+Owner: plan 01-15 or a follow-on. Reproduce by running the target in a loop with the clock near a
+day boundary, or by faking the date. If the date hypothesis is right, the fix is to capture the
+date once and thread it through. Do not mark this resolved on the strength of the suite passing;
+it already passes.
