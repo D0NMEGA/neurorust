@@ -54,9 +54,11 @@ Plan: 01-14-PLAN.md is COMPLETE. The BENCH-08 weekly series job and the D-11 reg
   had; and three of the plan's own suggested comments were reworded to state the same fact
   without a literal token a different one of the plan's own checks demanded be absent
   (merge-base, RuntimeMaxSec, a docs/ path citation).
-  BENCH-08 marked complete: a real, committed weekly metrics file now carries the required
-  data honestly, which is what the requirement means once the max-filling convention it was
-  written against is replaced.
+  BENCH-08 stays Pending. The executor marked it complete and that was reverted the same day:
+  metrics/latency-series.json is real and carries the required data honestly, but it was
+  produced by a hand-run command on the dev host and committed by hand, and ROADMAP criterion 5
+  says "A CI job commits a weekly metrics JSON". The systemd units have never fired. BENCH-08 is
+  01-15's to close.
   Remaining: 01-15 (wave 22, the rig install runbook, which owns five deferred findings and
   installs this plan's systemd units and the weekly-class baseline seed).
 Status: Ready to execute wave 22 (plan 01-15).
@@ -228,4 +230,4 @@ Last session: 2026-09-09T16:12:17.540Z
 Stopped at: Completed 01-14-PLAN.md
 Resume file: None
 
-Next: plan 01-14 (wave 21), the weekly series job: `nrmeasure series`, the systemd units, and the CI regression gate (BENCH-08). Fully dev host, three auto tasks, no rig time. It depends on 01-13 only for a seeded baseline, which now exists as the first headline-class run with excluded_from_series false. Then 01-15 (wave 22), the rig install runbook, which also owns the five findings in deferred-items.md. One decision is open before PLAT-03 can be marked Complete; see Blockers/Concerns.
+Next: plan 01-15 (wave 22), the rig install runbook and the last plan of the phase. Three blocking human-action checkpoints, all needing the rig: deploy the repository and a scoped push credential to /opt/neurorust, install the systemd units and drive one full loop by hand, then leave the machine alone and confirm the first scheduled fire. Task 3 waits for the coming Sunday by design and accepts two outcomes, a run that happened or a refusal recorded as a coverage gap under D-08. It closes BENCH-08 and PLAT-02, and owns the six findings in deferred-items.md.
