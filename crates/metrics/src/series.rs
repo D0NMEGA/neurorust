@@ -55,12 +55,23 @@ pub struct StageMetrics {
     /// Binned samples plus overflows.
     pub sample_count: u64,
     pub overflow_count: u64,
-    pub p50_us: u64,
-    pub p95_us: u64,
-    pub p99_us: u64,
-    pub p999_us: u64,
+    /// Null when the instrument does not produce this statistic. Never substituted.
+    ///
+    /// A firmware screen reports threshold-exceeding records, not a distribution over
+    /// sampling windows, so it has a maximum and a count and no percentiles at all. Filling
+    /// these with the maximum was the earlier instruction here; it produced four numbers
+    /// that look like a distribution and are not one. Finding 10 of `01-EXTERNAL-AUDIT.md`.
+    pub p50_us: Option<u64>,
+    pub p95_us: Option<u64>,
+    pub p99_us: Option<u64>,
+    pub p999_us: Option<u64>,
     /// Exact worst case, never the overflow bound.
     pub max_us: u64,
+    /// What `max_us` and the percentiles, where present, are computed over. Required, so a
+    /// reader never has to guess. For cyclictest: `scheduling wakeups, binned samples plus
+    /// overflows`. For rtla hwnoise: `hardware noise reported per CPU over the sampling
+    /// window`.
+    pub population: String,
     pub contamination_verdict: ContaminationVerdict,
     /// BENCH-06: a contaminated or otherwise non-headline run is still recorded here, but
     /// excluded from the regression series. See [`Self::exclusion_reason`].
@@ -75,10 +86,13 @@ pub struct StageMetrics {
 /// Errors appending to a [`MetricsSeries`].
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SeriesError {
-    /// A run is recorded once. `append` rejects a duplicate `run_id` rather than writing a
-    /// second copy.
-    #[error("run_id {0:?} already exists in the series")]
-    DuplicateRunId(String),
+    /// A run's given stage is recorded once. `append` rejects a duplicate `(run_id, stage)`
+    /// pair rather than writing a second copy. This is scoped to the pair, not to `run_id`
+    /// alone: one run directory legitimately produces more than one entry sharing a `run_id`,
+    /// one per stage it instrumented (a cyclictest capture and an `rtla hwnoise` firmware
+    /// screen from the same run are two entries, both carrying that run's `run_id`).
+    #[error("run_id {run_id:?} already has an entry for stage {stage:?}")]
+    DuplicateRunId { run_id: String, stage: String },
 }
 
 /// Appends `entry` to `series`, keeping `entries` sorted by `utc_start`.
@@ -86,14 +100,17 @@ pub enum SeriesError {
 /// This is the only mutation `MetricsSeries` offers: there is no edit and no delete. Nothing
 /// here inspects `contamination_verdict` or `excluded_from_series` to decide whether to keep an
 /// entry, because BENCH-06 and D-11 both require that a contaminated, regressed, or refused run
-/// is still reported, not dropped. The one rejection is a duplicate `run_id`.
+/// is still reported, not dropped. The one rejection is a duplicate `(run_id, stage)` pair.
 pub fn append(series: &mut MetricsSeries, entry: StageMetrics) -> Result<(), SeriesError> {
     if series
         .entries
         .iter()
-        .any(|existing| existing.run_id == entry.run_id)
+        .any(|existing| existing.run_id == entry.run_id && existing.stage == entry.stage)
     {
-        return Err(SeriesError::DuplicateRunId(entry.run_id));
+        return Err(SeriesError::DuplicateRunId {
+            run_id: entry.run_id,
+            stage: entry.stage,
+        });
     }
     let insert_at = series
         .entries

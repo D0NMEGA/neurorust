@@ -15,11 +15,12 @@ fn base_entry() -> StageMetrics {
         stage: "cyclictest.wakeup_latency".to_string(),
         sample_count: 18_000_000,
         overflow_count: 888,
-        p50_us: 2,
-        p95_us: 6,
-        p99_us: 9,
-        p999_us: 12,
+        p50_us: Some(2),
+        p95_us: Some(6),
+        p99_us: Some(9),
+        p999_us: Some(12),
         max_us: 60,
+        population: "scheduling wakeups, binned samples plus overflows".to_string(),
         contamination_verdict: ContaminationVerdict::Clean,
         excluded_from_series: false,
         exclusion_reason: None,
@@ -66,7 +67,7 @@ fn regression_gate() {
     let baseline = baseline_with_entries(vec![baseline_entry_for(&run, 9, 60)]);
 
     let failing_p99 = StageMetrics {
-        p99_us: 12,
+        p99_us: Some(12),
         ..run.clone()
     };
     match compare(&failing_p99, &baseline) {
@@ -82,7 +83,7 @@ fn regression_gate() {
     }
 
     let boundary_p99 = StageMetrics {
-        p99_us: 11,
+        p99_us: Some(11),
         ..run.clone()
     };
     match compare(&boundary_p99, &baseline) {
@@ -109,7 +110,7 @@ fn regression_gate() {
 #[test]
 fn regression_gate_absolute_floor() {
     let run = StageMetrics {
-        p99_us: 3,
+        p99_us: Some(3),
         ..base_entry()
     };
     let baseline = baseline_with_entries(vec![baseline_entry_for(&run, 2, 60)]);

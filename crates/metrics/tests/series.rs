@@ -15,11 +15,12 @@ fn base_entry() -> StageMetrics {
         stage: "cyclictest.wakeup_latency".to_string(),
         sample_count: 18_000_000,
         overflow_count: 888,
-        p50_us: 2,
-        p95_us: 6,
-        p99_us: 9,
-        p999_us: 12,
+        p50_us: Some(2),
+        p95_us: Some(6),
+        p99_us: Some(9),
+        p999_us: Some(12),
         max_us: 27,
+        population: "scheduling wakeups, binned samples plus overflows".to_string(),
         contamination_verdict: ContaminationVerdict::Clean,
         excluded_from_series: false,
         exclusion_reason: None,
@@ -29,8 +30,10 @@ fn base_entry() -> StageMetrics {
 
 /// schema_roundtrip: a MetricsSeries with one cyclictest entry serialises, validates against
 /// schemas/metrics.schema.json, and deserialises back to an equal value. Every entry carries
-/// p50_us, p95_us and p99_us, and a series entry missing any of the three fields fails to
-/// deserialise.
+/// p50_us, p95_us, p99_us and a population string, and `population` is required: a series
+/// entry missing it fails to deserialise. The percentile fields are `Option<u64>` (finding 10
+/// of `01-EXTERNAL-AUDIT.md`), so a missing or null percentile is no longer an error; see
+/// [`a_null_percentile_deserialises_to_none_not_zero`] for that case.
 #[test]
 fn schema_roundtrip() {
     let series = MetricsSeries {
@@ -41,7 +44,7 @@ fn schema_roundtrip() {
     let json = serde_json::to_string(&series).expect("a MetricsSeries always serialises");
     let value: serde_json::Value = serde_json::from_str(&json).expect("valid json");
     let entry = &value["entries"][0];
-    for field in ["p50_us", "p95_us", "p99_us"] {
+    for field in ["p50_us", "p95_us", "p99_us", "p999_us", "population"] {
         assert!(entry.get(field).is_some(), "missing {field} in {entry}");
     }
 
@@ -49,15 +52,50 @@ fn schema_roundtrip() {
         serde_json::from_str(&json).expect("a well-formed series always deserialises");
     assert_eq!(round_tripped, series);
 
-    for field in ["p50_us", "p95_us", "p99_us"] {
-        let mut broken = value.clone();
-        broken["entries"][0].as_object_mut().unwrap().remove(field);
-        let result: Result<MetricsSeries, _> = serde_json::from_value(broken);
-        assert!(
-            result.is_err(),
-            "expected a series entry missing {field} to fail deserialization"
-        );
-    }
+    let mut missing_population = value.clone();
+    missing_population["entries"][0]
+        .as_object_mut()
+        .expect("entry is a JSON object")
+        .remove("population");
+    let result: Result<MetricsSeries, _> = serde_json::from_value(missing_population);
+    assert!(
+        result.is_err(),
+        "expected a series entry missing population to fail deserialization"
+    );
+}
+
+/// A percentile the instrument did not produce is recorded as an explicit JSON `null`, never
+/// omitted and never defaulted to zero: the entry still deserialises, and the value comes back
+/// `None`, not `Some(0)`. This is the exact shape a firmware or SMI stage entry takes. Finding
+/// 10 of `01-EXTERNAL-AUDIT.md`.
+#[test]
+fn a_null_percentile_deserialises_to_none_not_zero() {
+    let entry = StageMetrics {
+        p50_us: None,
+        p95_us: None,
+        p99_us: None,
+        p999_us: None,
+        population: "hardware noise reported per CPU over the sampling window".to_string(),
+        ..base_entry()
+    };
+
+    let json = serde_json::to_string(&entry).expect("serialises with null percentiles");
+    assert!(
+        json.contains("\"p99_us\":null"),
+        "expected an explicit null, got {json}"
+    );
+
+    let restored: StageMetrics =
+        serde_json::from_str(&json).expect("a null percentile deserialises");
+    assert_eq!(restored.p50_us, None);
+    assert_eq!(restored.p95_us, None);
+    assert_eq!(restored.p99_us, None);
+    assert_eq!(restored.p999_us, None);
+    assert_ne!(
+        restored.p99_us,
+        Some(restored.max_us),
+        "never the maximum either"
+    );
 }
 
 /// The committed schema is generated, never hand-authored (RESEARCH.md pattern 3). CI runs this
@@ -99,7 +137,7 @@ fn stage_names_are_open() {
 }
 
 /// Appending keeps entries sorted by utc_start regardless of insertion order, and a duplicate
-/// run_id is rejected rather than written as a second copy.
+/// (run_id, stage) pair is rejected rather than written as a second copy.
 #[test]
 fn append_is_ordered_and_idempotent() {
     let mut series = MetricsSeries {
@@ -125,15 +163,62 @@ fn append_is_ordered_and_idempotent() {
     assert_eq!(series.entries[0].run_id, "run-earlier");
     assert_eq!(series.entries[1].run_id, "run-later");
 
-    let result = append(&mut series, earlier);
+    let result = append(&mut series, earlier.clone());
     assert_eq!(
         result,
-        Err(SeriesError::DuplicateRunId("run-earlier".to_string()))
+        Err(SeriesError::DuplicateRunId {
+            run_id: "run-earlier".to_string(),
+            stage: earlier.stage.clone(),
+        })
     );
     assert_eq!(
         series.entries.len(),
         2,
-        "a duplicate run_id must not add a second copy"
+        "a duplicate (run_id, stage) pair must not add a second copy"
+    );
+}
+
+/// A run legitimately produces more than one entry sharing a `run_id`, one per stage it
+/// instrumented (a cyclictest capture and an `rtla hwnoise` firmware screen from the same run).
+/// `append` allows a second entry under the same `run_id` when the stage differs, and rejects
+/// a third entry under that same `run_id` and stage.
+#[test]
+fn append_allows_two_stages_of_the_same_run() {
+    let mut series = MetricsSeries {
+        schema_version: 1,
+        entries: Vec::new(),
+    };
+
+    let cyclictest_stage = base_entry();
+    let hwnoise_stage = StageMetrics {
+        stage: "rtla_hwnoise.hardware_noise".to_string(),
+        tool: "rtla-hwnoise".to_string(),
+        p50_us: None,
+        p95_us: None,
+        p99_us: None,
+        p999_us: None,
+        max_us: 1,
+        population: "hardware noise reported per CPU over the sampling window".to_string(),
+        ..base_entry()
+    };
+
+    append(&mut series, cyclictest_stage.clone()).expect("first stage of the run appends");
+    append(&mut series, hwnoise_stage.clone())
+        .expect("a second stage sharing the run's run_id appends");
+    assert_eq!(series.entries.len(), 2);
+
+    let result = append(&mut series, cyclictest_stage.clone());
+    assert_eq!(
+        result,
+        Err(SeriesError::DuplicateRunId {
+            run_id: cyclictest_stage.run_id.clone(),
+            stage: cyclictest_stage.stage.clone(),
+        })
+    );
+    assert_eq!(
+        series.entries.len(),
+        2,
+        "the same (run_id, stage) pair again must not duplicate"
     );
 }
 

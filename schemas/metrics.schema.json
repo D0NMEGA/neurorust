@@ -104,24 +104,41 @@
           "minimum": 0
         },
         "p50_us": {
-          "type": "integer",
+          "description": "Null when the instrument does not produce this statistic. Never substituted.\n\nA firmware screen reports threshold-exceeding records, not a distribution over\nsampling windows, so it has a maximum and a count and no percentiles at all. Filling\nthese with the maximum was the earlier instruction here; it produced four numbers\nthat look like a distribution and are not one. Finding 10 of `01-EXTERNAL-AUDIT.md`.",
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "uint64",
           "minimum": 0
         },
         "p95_us": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "uint64",
           "minimum": 0
         },
         "p999_us": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "uint64",
           "minimum": 0
         },
         "p99_us": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "uint64",
           "minimum": 0
+        },
+        "population": {
+          "description": "What `max_us` and the percentiles, where present, are computed over. Required, so a\nreader never has to guess. For cyclictest: `scheduling wakeups, binned samples plus\noverflows`. For rtla hwnoise: `hardware noise reported per CPU over the sampling\nwindow`.",
+          "type": "string"
         },
         "rig_slug": {
           "type": "string"
@@ -163,11 +180,8 @@
         "stage",
         "sample_count",
         "overflow_count",
-        "p50_us",
-        "p95_us",
-        "p99_us",
-        "p999_us",
         "max_us",
+        "population",
         "contamination_verdict",
         "excluded_from_series",
         "manifest_blake3"

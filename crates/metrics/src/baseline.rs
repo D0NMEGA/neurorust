@@ -112,6 +112,11 @@ pub enum RegressionVerdict {
     SkippedContaminated { reason: String },
     /// No calibrated thresholds exist yet (D-17) to render a real verdict against.
     SkippedUncalibrated { reason: String },
+    /// The entry has no value for a metric the baseline names, because its instrument does
+    /// not produce that statistic. Not a regression and not a pass. Finding 10 of
+    /// `01-EXTERNAL-AUDIT.md`: a null statistic must never be defaulted to zero or treated as
+    /// a pass, either of which would silently stop checking the stage.
+    SkippedNoStatistic { reason: String },
     /// The triple (rig, run class, stage) has no matching entry in the baseline. A neutral
     /// result, reported but never treated as a failure or defaulted to a pass.
     NoComparableBaseline {
@@ -144,6 +149,20 @@ pub fn compare(entry: &StageMetrics, baseline: &Baseline) -> RegressionVerdict {
         ContaminationVerdict::Clean => {}
     }
 
+    // A firmware or SMI stage has a maximum and no percentiles at all (finding 10 of
+    // 01-EXTERNAL-AUDIT.md). Checked before the baseline lookup: a statistic the instrument
+    // never produced cannot be compared regardless of what the baseline names, and defaulting
+    // it to zero or treating it as a pass would both silently stop checking the stage.
+    let Some(entry_p99_us) = entry.p99_us else {
+        return RegressionVerdict::SkippedNoStatistic {
+            reason: format!(
+                "stage {:?} has no p99 statistic to compare: the instrument does not produce \
+                 percentiles",
+                entry.stage
+            ),
+        };
+    };
+
     let Some(baseline_entry) = baseline.entries.iter().find(|candidate| {
         candidate.rig_slug == entry.rig_slug
             && candidate.run_class == entry.run_class
@@ -160,10 +179,10 @@ pub fn compare(entry: &StageMetrics, baseline: &Baseline) -> RegressionVerdict {
     let max_threshold_us = threshold_us(baseline_entry.max_us, &baseline.thresholds.max);
 
     let mut failures = Vec::new();
-    if entry.p99_us > p99_threshold_us {
+    if entry_p99_us > p99_threshold_us {
         failures.push(MetricRegression {
             metric: RegressedMetric::P99,
-            observed_us: entry.p99_us,
+            observed_us: entry_p99_us,
             threshold_us: p99_threshold_us,
         });
     }
@@ -177,7 +196,7 @@ pub fn compare(entry: &StageMetrics, baseline: &Baseline) -> RegressionVerdict {
 
     if failures.is_empty() {
         RegressionVerdict::Pass {
-            p99_headroom_us: p99_threshold_us as i64 - entry.p99_us as i64,
+            p99_headroom_us: p99_threshold_us as i64 - entry_p99_us as i64,
             max_headroom_us: max_threshold_us as i64 - entry.max_us as i64,
         }
     } else {
