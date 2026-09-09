@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: 01-12 complete. PLAT-01 closed on stop condition 3, not-reproduced: neither phenomenon appeared across 6.5 hours of clean running, 4.5 traced. The stall stays unexplained and PLAT-01 stays Pending. Remaining: 01-13 (headline capture, rig), 01-14 (weekly job, dev host), 01-15 (rig runbook, rig).
-last_updated: "2026-09-07T09:00:34.325Z"
-last_activity: 2026-09-08 -- 01-12 executed
+stopped_at: 01-13 complete. The PLAT-03 headline capture is taken and the verdict published: 81 us against the 30 us gate, so PLAT-03 closes as a documented limitation with the residual explicitly unattributed. PLAT-03 stays Pending pending one decision, see Blockers. Remaining: 01-14 (weekly job, dev host), 01-15 (rig runbook, rig).
+last_updated: "2026-09-09T00:00:00.000Z"
+last_activity: 2026-09-09 -- 01-13 executed
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 27
-  completed_plans: 24
-  percent: 89
+  completed_plans: 25
+  percent: 93
 ---
 
 # Project State
@@ -25,31 +25,32 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 
 ## Current Position
 
-Phase: 01 (trustworthy-measurement), 23 of 27 plans done (waves 0 through 18 complete).
-Plan: 01-27-PLAN.md is COMPLETE. Task 1 (the pushed-stamp provenance source and
-  scripts/nr-push-to-rig.sh) committed as d4d8883; its executor was killed mid-verification
-  by a session limit and the task was finished from the main thread after re-running the
-  full gate set. Task 2 (the rig checkpoint) is done: measurements/2026-09-07-precision3591-recon
-  is committed as d8ec9bf and records excluded_from_series: false with
-  series_admission.admitted true and no exclusions, while the contamination thresholds are
-  still provisional. That closes finding A1 on the real machine, not only in tests, and
-  unblocks plans 01-13 and 01-14. The same capture confirmed git_sha_source pushed-stamp
-  matching the dev host's .git-sha, tracers-quiescent passing with instances= and samplers=,
-  and rtla-hwnoise observing all six of CPUs 6-11 with the strict gate re-deriving five
-  firmware figures.
-  Four defects surfaced during the rig session and are recorded in deferred-items.md rather
-  than fixed, all owned by plan 01-15 and all defects against success criterion 2: every rig
-  rebuild trips the exec-mode guard (1cdf6a2); a dropped SSH link leaves an ESTABLISHED
-  socket that blocks measurement for about two hours (b5322ff); the documented rig pull is an
-  unfiltered rsync that overwrites committed evidence, which it did (ed1c1db, recovered); and
-  the published manifest blake3 line is not the digest of manifest.json (b06194c).
-  Remaining: 01-12 (wave 19, PLAT-01 investigation), 01-13 (wave 20, the PLAT-03 headline
-  capture), 01-14 (wave 21, the weekly job), 01-15 (wave 22, the rig install runbook, which
-  now also owns the four findings above). All four need the rig.
-Status: Ready to execute wave 19 (plan 01-12).
-Last activity: 2026-09-07 -- 01-27 executed
+Phase: 01 (trustworthy-measurement), 25 of 27 plans done (waves 0 through 20 complete).
+Plan: 01-13-PLAN.md is COMPLETE. The PLAT-03 headline capture is taken, committed and
+  published. measurements/2026-09-08-precision3591-headline (690bddd) is four hours on cpus
+  6-11 with no login session, cyclictest alone, all 15 preconditions passing, contamination
+  verdict clean, excluded_from_series false with no exclusions on any of the eight admission
+  evidence sources, SMI delta 0 on all six isolated cores. It is the first headline-class run
+  admitted to the series and the first hardware demonstration that the D-28 split does what
+  01-24 claimed. Maximum 81 us, p99 8 us, p50 2 us, 283 of 431999988 samples at or above the
+  30 us gate.
+  docs/rig/plat03-scheduling-latency-verdict.md (f315870) publishes the verdict as
+  `documented limitation` with the residual explicitly unattributed, the firmware observation
+  from 01-23 reported beside the scheduling maximum and combined with it nowhere, and the
+  reason attribution failed stated as a fact about the instruments: a headline-series run is
+  taken with tracing quiescent, and the traced PLAT-01 cycles used break limits of 200 us and
+  3000 us, both far above every excursion here.
+  The tail has structure and none of it is attributed: 701 samples between 25 and 34 us all on
+  cpu6 stopping dead at 34, nothing at all between 35 and 41, the 24 samples from 42 to 81 us
+  on cpu7/8/9 only, cpu10 and cpu11 never above 22 us, and cpu6 carrying 4158 irqs against 56
+  on cpu9. Recorded as a lead for a traced run designed around 25 to 81 us, which nobody has
+  taken.
+  Remaining: 01-14 (wave 21, the weekly series job, fully dev host, needs no rig time) and
+  01-15 (wave 22, the rig install runbook, which owns five deferred findings).
+Status: Ready to execute wave 21 (plan 01-14).
+Last activity: 2026-09-09 -- 01-13 executed
 
-Progress: [█████████░] 89%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
@@ -192,6 +193,7 @@ None yet.
 
 ### Blockers/Concerns
 
+- OPEN DECISION, PLAT-03 wording: REQUIREMENTS.md:33-35 states PLAT-03 as two outcomes, "either brought under 30 us, or the residual is attributed to a named platform cause and published as a documented limitation". ROADMAP.md Phase 1 success criterion 3 states three, adding "or published as an explicitly unattributed limitation with the run, its raw capture, and the reason attribution failed committed alongside". The 2026-09-08 headline capture closes the ROADMAP criterion on that third branch and does not satisfy the REQUIREMENTS.md text, which has no unattributed branch. PLAT-03 is therefore left Pending rather than marked Complete, matching the precedent 01-23 set when it reverted its own mark-complete for the same requirement. The discrepancy looks like the criterion 3 rewrite of 2026-09-07 not reaching REQUIREMENTS.md, the same class of miss as the PROJECT.md:155 Key Decisions row, but widening a requirement's own text is a human decision and is not being made here.
 - Open question, Phase 1: a ~3.8 ms global stall appeared on all six isolated threads at nearly identical values (stop_machine or a system-wide TLB shootdown signature). Still UNEXPLAINED. PLAT-01's three-cycle investigation closed 2026-09-08 on stop condition 3, not-reproduced: it was not observed across 6.5 hours of clean running on the rig, 4.5 of them with a nine-event tracer armed and break limits at 200 us and 3000 us, highest excursion anywhere 96 us. That is a non-observation and not a cause, and it bounds no rate or frequency. See docs/rig/plat01-stall-investigation.md. PLAT-01 stays Pending. Latency figures may now be published and each carries the stall as an explicit limitation naming that exposure, per ROADMAP criterion 1 as rewritten 2026-09-07; the earlier rule here, that no figure be published until the stall is named, would have held the phase open on a positive finding no amount of disciplined investigation can guarantee.
 - RESOLVED 2026-09-08: a clean headline run now exists. `measurements/2026-09-08-precision3591-headline` is four hours on cpus 6-11 under the Phase 1 protocol with no login session, all 15 preconditions passing, contamination verdict clean, `excluded_from_series` false. Maximum 81 us against the 30 us gate, so PLAT-03 closes as a documented limitation with the residual explicitly unattributed; see docs/rig/plat03-scheduling-latency-verdict.md. The superseded `cyclictest-rt-isolated-idle-10m.hist` was taken with SSH activity and an active GNOME session, stays committed under `measurements/2026-08-28-precision3591` as a reconstructed run excluded from the series, and is not deleted.
 - RESOLVED 2026-09-08: the PROJECT.md software-timestamping inconsistency is gone. Constraints and Out of Scope were corrected on 2026-08-28 (acb9d56); the Key Decisions row was the last copy the correction never reached and it now names the wired NIC's PTP hardware clock, marked `- Corrected 2026-08-28` to match the vocabulary Out of Scope already used.
@@ -205,8 +207,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-07T09:00:34.322Z
-Stopped at: 01-26 complete. All three tasks committed (c4b2b4c, bf850e7, 472fe44); verify --strict re-derives firmware figures, the RES-IPI field is renamed behind a backward-compatible alias, and all eleven eligible REPORT.md files were regenerated with the numeric-survival check confirming no published figure changed or dropped.
-Resume file: .planning/phases/01-trustworthy-measurement/01-26-SUMMARY.md
+Last session: 2026-09-09T00:00:00.000Z
+Stopped at: 01-13 complete. The PLAT-03 headline capture is committed (690bddd) and the verdict published (f315870): 81 us against the 30 us gate, closing as a documented limitation with the residual explicitly unattributed. A human reviewed the figure against its capture at the task 3 checkpoint and approved it.
+Resume file: .planning/phases/01-trustworthy-measurement/01-13-SUMMARY.md
 
-Next: plan 01-27 (wave 18), closing D-29 and C2. 01-26 (this plan) closed findings C1/B4/B5: verify --strict now re-derives firmware screen figures from the raw rtla-hwnoise capture, the manifest field is renamed to rescheduling_ipis behind a backward-compatible alias, and the coverage caveat no longer claims a CPU absent from rtla hwnoise's observed list was sampled. Plans 01-12 through 01-15 run last, at waves 19 through 22.
+Next: plan 01-14 (wave 21), the weekly series job: `nrmeasure series`, the systemd units, and the CI regression gate (BENCH-08). Fully dev host, three auto tasks, no rig time. It depends on 01-13 only for a seeded baseline, which now exists as the first headline-class run with excluded_from_series false. Then 01-15 (wave 22), the rig install runbook, which also owns the five findings in deferred-items.md. One decision is open before PLAT-03 can be marked Complete; see Blockers/Concerns.
