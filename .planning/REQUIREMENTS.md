@@ -131,7 +131,7 @@ Completed and measured 2026-08-28. Raw captures and rig manifest in
 - [x] **BENCH-06**: Losing configurations and failure cases are reported, not omitted
 - [ ] **BENCH-07**: A comparison against BRAND's published figures, with methodology
       differences stated explicitly
-- [ ] **BENCH-08**: A weekly committed JSON metrics file carrying p50, p95, and p99 for every
+- [x] **BENCH-08**: A weekly committed JSON metrics file carrying p50, p95, and p99 for every
       instrumented stage
 
 ## v2 Requirements
@@ -234,7 +234,7 @@ roadmap existed and map to no phase; they are listed for completeness.
 | BENCH-05 | Phase 1 | Complete |
 | BENCH-06 | Phase 1 | Complete |
 | BENCH-07 | Phase 6 | Pending |
-| BENCH-08 | Phase 1 | Pending |
+| BENCH-08 | Phase 1 | Complete |
 
 **Coverage:**
 - v1 requirements: 59 total

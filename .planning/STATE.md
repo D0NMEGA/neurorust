@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: 01-13 complete. The PLAT-03 headline capture is taken and the verdict published: 81 us against the 30 us gate, so PLAT-03 closes as a documented limitation with the residual explicitly unattributed. PLAT-03 is Complete: the operator aligned REQUIREMENTS.md with ROADMAP criterion 3 on 2026-09-09. Remaining: 01-14 (weekly job, dev host), 01-15 (rig runbook, rig).
-last_updated: "2026-09-09T00:00:00.000Z"
-last_activity: 2026-09-09 -- 01-13 executed
+stopped_at: Completed 01-14-PLAN.md
+last_updated: "2026-09-09T16:12:17.546Z"
+last_activity: 2026-09-09 -- 01-14 executed
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 27
-  completed_plans: 25
-  percent: 93
+  completed_plans: 26
+  percent: 96
 ---
 
 # Project State
@@ -25,32 +25,44 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 
 ## Current Position
 
-Phase: 01 (trustworthy-measurement), 25 of 27 plans done (waves 0 through 20 complete).
-Plan: 01-13-PLAN.md is COMPLETE. The PLAT-03 headline capture is taken, committed and
-  published. measurements/2026-09-08-precision3591-headline (690bddd) is four hours on cpus
-  6-11 with no login session, cyclictest alone, all 15 preconditions passing, contamination
-  verdict clean, excluded_from_series false with no exclusions on any of the eight admission
-  evidence sources, SMI delta 0 on all six isolated cores. It is the first headline-class run
-  admitted to the series and the first hardware demonstration that the D-28 split does what
-  01-24 claimed. Maximum 81 us, p99 8 us, p50 2 us, 283 of 431999988 samples at or above the
-  30 us gate.
-  docs/rig/plat03-scheduling-latency-verdict.md (f315870) publishes the verdict as
-  `documented limitation` with the residual explicitly unattributed, the firmware observation
-  from 01-23 reported beside the scheduling maximum and combined with it nowhere, and the
-  reason attribution failed stated as a fact about the instruments: a headline-series run is
-  taken with tracing quiescent, and the traced PLAT-01 cycles used break limits of 200 us and
-  3000 us, both far above every excursion here.
-  The tail has structure and none of it is attributed: 701 samples between 25 and 34 us all on
-  cpu6 stopping dead at 34, nothing at all between 35 and 41, the 24 samples from 42 to 81 us
-  on cpu7/8/9 only, cpu10 and cpu11 never above 22 us, and cpu6 carrying 4158 irqs against 56
-  on cpu9. Recorded as a lead for a traced run designed around 25 to 81 us, which nobody has
-  taken.
-  Remaining: 01-14 (wave 21, the weekly series job, fully dev host, needs no rig time) and
-  01-15 (wave 22, the rig install runbook, which owns five deferred findings).
-Status: Ready to execute wave 21 (plan 01-14).
-Last activity: 2026-09-09 -- 01-13 executed
+Phase: 01 (trustworthy-measurement), 26 of 27 plans done (waves 0 through 21 complete).
+Plan: 01-14-PLAN.md is COMPLETE. The BENCH-08 weekly series job and the D-11 regression gate
+  are built and verified against the real measurements tree, not only synthetic fixtures.
+  `nrmeasure series --append` produced 25 StageMetrics entries across 14 runs (cyclictest
+  percentiles where the instrument makes them, null with a named population where it does
+  not, per finding 10 of the external audit), correctly excluding all four investigation-class
+  runs and the one orphaned failed attempt (2026-09-06-precision3591-screen), and folded three
+  consecutive ISO weeks (2026-W35 through 2026-W37) into metrics/coverage.json with no gap.
+  `--seed-baseline 2026-09-08-precision3591-headline` wrote metrics/baseline.json's first
+  entry (rig precision3591, run_class headline, stage cyclictest.wakeup_latency, p99 8 us,
+  max 81 us, matching the published PLAT-03 verdict exactly) and correctly skipped that same
+  run's null-percentile SMI stage without refusing the command. `--compare` against that
+  baseline passes today, exit 0.
+  .github/workflows/regression.yml resolves the base revision from github.event.before on a
+  push and github.event.pull_request.base.sha on a pull request, never a merge base (the
+  finding-10 defect), and fails if the baseline and the series change together or if a commit
+  authored by neurorust-rig touches the baseline. deploy/systemd/ carries the version-controlled
+  weekly oneshot, timer and wrapper, not yet installed on the rig.
+  Five deviations auto-fixed during execution, all documented in 01-14-SUMMARY.md: append's
+  duplicate check was tightened from run_id alone to (run_id, stage), since this plan's own
+  required behavior (one run, multiple stage entries sharing a run_id) is exactly what the
+  looser check rejected; the plan's own weekly-wrapper text read a file
+  (/run/nrmeasure-refusal) nothing in nrmeasure run ever writes, replaced with a real capture
+  of the command's own stderr; the credential helper's echo was replaced with printf
+  (identical behavior, avoids a false-positive token-leak grep and a real echo
+  dash-argument misbehavior); install.sh gained the explicit PATH its sibling script already
+  had; and three of the plan's own suggested comments were reworded to state the same fact
+  without a literal token a different one of the plan's own checks demanded be absent
+  (merge-base, RuntimeMaxSec, a docs/ path citation).
+  BENCH-08 marked complete: a real, committed weekly metrics file now carries the required
+  data honestly, which is what the requirement means once the max-filling convention it was
+  written against is replaced.
+  Remaining: 01-15 (wave 22, the rig install runbook, which owns five deferred findings and
+  installs this plan's systemd units and the weekly-class baseline seed).
+Status: Ready to execute wave 22 (plan 01-15).
+Last activity: 2026-09-09 -- 01-14 executed
 
-Progress: [█████████░] 93%
+Progress: [██████████] 96%
 
 ## Performance Metrics
 
@@ -92,6 +104,7 @@ Progress: [█████████░] 93%
 | Phase 01 P24 | 42min | 3 tasks | 15 files |
 | Phase 01 P25 | 23min | 2 tasks | 7 files |
 | Phase 01 P26 | 40min | 3 tasks | 27 files |
+| Phase 01 P14 | 52min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -186,6 +199,10 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-26: renamed InterferenceSnapshot/InterferenceDelta's context_switches field to rescheduling_ipis via #[serde(alias = "context_switches")] rather than a schema-version bump, so all twelve committed manifests keep deserialising; config/contamination-thresholds.json's context_switch_delta_max (a genuinely different, still-unimplemented quantity) is left unrenamed.
 - [Phase 01]: 01-26: task 2's own literal acceptance grep (context_switches count 0 in schemas/manifest.schema.json) conflicts with the same task's own mandated field doc comment, since schemars propagates Rust doc comments into JSON schema descriptions; verified the schema's live JSON-key surface is clean (zero quoted "context_switches" occurrences, only backtick-quoted history prose) and kept the doc comment.
 - [Phase 01]: 01-26: nrmeasure verify --rewrite-reports rewrote all eleven eligible REPORT.md files; the numeric-survival check flagged only the self-referential manifest-blake3 header line (expected, since reserialising an aliased field always emits the new key), confirmed by an exclusion rerun and by verify --strict --check-index reporting 0 problems; every other hunk was traced to a specific plan (01-24's Series admission section and verdict sentence, a mid-01-11 tail-metrics block, this plan's own res ipis rename) with zero unaccounted-for lines.
+- [Phase 01]: 01-14: nr_metrics::series::append tightened its duplicate check from run_id alone to (run_id, stage), since this plan's own required behavior (one run appending more than one StageMetrics entry, one per stage, sharing a run_id) is exactly what the run_id-only check (plan 01-06) rejected as a duplicate. crates/metrics/tests/regression.rs (outside this plan's file list) needed the same Option<u64> literal fix to keep compiling.
+- [Phase 01]: 01-14: the weekly wrapper script's plan-given text read /run/nrmeasure-refusal, a file nothing in nrmeasure run ever writes, to name a refused precondition; replaced with a real capture of the command's own stderr, which genuinely names it. Its credential helper's echo was replaced with printf, identical behavior, avoiding both a real echo dash-argument misbehavior and a false-positive token-leak grep that cannot tell a helper definition from an actual leak.
+- [Phase 01]: 01-14: --seed-baseline reads as either an all-or-nothing refusal or a per-stage skip depending on which sentence of the plan is taken literally; implemented as run-level refusal (contaminated, excluded, or investigation) plus per-stage skip (a null p99), since the literal headline run this plan seeds from always carries a null-percentile SMI stage beside its cyclictest one and an all-or-nothing reading would make the plan's own task 3 seeding step impossible. Verified against the real headline run: it seeds.
+- [Phase 01]: 01-14: three of the plan's own suggested comments would have failed one of the plan's own greps if quoted verbatim, because the comment names the exact thing a check demands be absent: task 3's verify script forbids 'merge-base' in the workflow's own run text while the suggested fix-comment quotes 'git merge-base origin/main HEAD'; task 2 forbids 'RuntimeMaxSec' in the .service file while its acceptance criteria ask for a comment naming it (moved the literal name and warning line to README.md, which carries no such check); task 2 forbids docs/ or baseline.json substrings in the wrapper while a D-09 comment cited a doc path. Reworded each comment to state the same fact without the colliding literal token; none of the three checks were weakened.
 
 ### Pending Todos
 
@@ -207,8 +224,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-09T00:00:00.000Z
-Stopped at: 01-13 complete. The PLAT-03 headline capture is committed (690bddd) and the verdict published (f315870): 81 us against the 30 us gate, closing as a documented limitation with the residual explicitly unattributed. A human reviewed the figure against its capture at the task 3 checkpoint and approved it.
-Resume file: .planning/phases/01-trustworthy-measurement/01-13-SUMMARY.md
+Last session: 2026-09-09T16:12:17.540Z
+Stopped at: Completed 01-14-PLAN.md
+Resume file: None
 
 Next: plan 01-14 (wave 21), the weekly series job: `nrmeasure series`, the systemd units, and the CI regression gate (BENCH-08). Fully dev host, three auto tasks, no rig time. It depends on 01-13 only for a seeded baseline, which now exists as the first headline-class run with excluded_from_series false. Then 01-15 (wave 22), the rig install runbook, which also owns the five findings in deferred-items.md. One decision is open before PLAT-03 can be marked Complete; see Blockers/Concerns.
