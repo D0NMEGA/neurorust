@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "weeks": [
+    {
+      "run": {
+        "iso_week": "2026-W35",
+        "run_ids": [
+          "2026-08-28-precision3591"
+        ]
+      }
+    },
+    {
+      "run": {
+        "iso_week": "2026-W36",
+        "run_ids": [
+          "2026-09-01-precision3591-calibration-clean",
+          "2026-09-02-precision3591-calibration-contaminated",
+          "2026-09-03-precision3591-calibration-clean",
+          "2026-09-03-precision3591-calibration-contaminated",
+          "2026-09-05-precision3591-screen",
+          "2026-09-05-precision3591-screen-02",
+          "2026-09-05-precision3591-screen-03",
+          "2026-09-06-precision3591-screen-02",
+          "2026-09-06-precision3591-screen-03",
+          "2026-09-06-precision3591-screen-04"
+        ]
+      }
+    },
+    {
+      "run": {
+        "iso_week": "2026-W37",
+        "run_ids": [
+          "2026-09-07-precision3591-recon",
+          "2026-09-07-precision3591-screen",
+          "2026-09-08-precision3591-headline"
+        ]
+      }
+    }
+  ]
+}

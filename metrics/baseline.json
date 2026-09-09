@@ -1,9 +1,23 @@
 {
   "schema_version": 1,
   "thresholds": {
-    "p99": { "relative_pct": 20.0, "absolute_us": 2 },
-    "max": { "relative_pct": 50.0, "absolute_us": 100 }
+    "p99": {
+      "relative_pct": 20.0,
+      "absolute_us": 2
+    },
+    "max": {
+      "relative_pct": 50.0,
+      "absolute_us": 100
+    }
   },
   "note": "A run fails when the metric exceeds max(baseline * (1 + relative_pct/100), baseline + absolute_us). The absolute floor exists because p99 on this rig is around 9 us, where a 20 percent relative threshold alone is 1.8 us, below the 1 us bin resolution of the instrument, and the check would flap on quantisation. The max threshold is looser in both terms because worst case on a laptop under a firmware floor of 22 to 29 us is genuinely more variable than p99.",
-  "entries": []
+  "entries": [
+    {
+      "rig_slug": "precision3591",
+      "run_class": "headline",
+      "stage": "cyclictest.wakeup_latency",
+      "p99_us": 8,
+      "max_us": 81
+    }
+  ]
 }

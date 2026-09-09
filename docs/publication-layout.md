@@ -95,6 +95,13 @@ is a regression-tracking artifact and auto-commits, while anything that becomes 
 published claim (a histogram, a stated verdict, a README figure) reaches `main` only
 through a reviewed commit.
 
+`metrics/baseline.json` is seeded per run class only once a run of that class exists to
+seed it from: it carries a `headline`-class entry from plan 01-14, seeded from the PLAT-03
+headline run, and the `weekly`-class baseline is seeded after the first weekly run, in its
+own reviewed commit, by plan 01-15. A baseline for a run class that has never been measured
+would be fabricated, and D-10 tags run classes precisely so they are never averaged
+together or judged against a baseline that was never theirs.
+
 ## Provenance tiers
 
 `harness-generated` and `reconstructed`. A `harness-generated` manifest was written by the

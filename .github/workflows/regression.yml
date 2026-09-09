@@ -1,0 +1,81 @@
+name: regression
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The base revision belongs to the event.
+      #
+      # The earlier version of this workflow computed the merge base of origin/main and HEAD
+      # for both events, using git's own tool for that. On a push to main, origin/main and
+      # HEAD name the same commit, their merge base is that same commit, and the diff
+      # against it is empty: the guard below could not see any change and let through
+      # exactly the simultaneous baseline move it exists to prohibit. Finding 10 of
+      # 01-EXTERNAL-AUDIT.md.
+      - name: Resolve the base revision
+        id: base
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+            # A brand new branch reports an all-zero before-sha; fall back to the first
+            # parent of HEAD, which is the previous tip on a fast-forward push.
+            case "$base" in
+              0000000000000000000000000000000000000000|"") base="$(git rev-parse HEAD^)" ;;
+            esac
+          fi
+          git cat-file -e "$base^{commit}" || { echo "base revision $base is not in this clone"; exit 1; }
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
+          echo "base revision: $base"
+
+      # T-1-04: the baseline must not move in the same push as the run being compared
+      # against it.
+      - name: The baseline and the series did not change together
+        run: |
+          changed=$(git diff --name-only "${{ steps.base.outputs.sha }}" HEAD)
+          if echo "$changed" | grep -qx 'metrics/baseline.json' \
+             && echo "$changed" | grep -qx 'metrics/latency-series.json'; then
+            echo "metrics/baseline.json and metrics/latency-series.json changed together."
+            echo "Moving the baseline in the same push as the run it is compared against"
+            echo "defeats the regression gate. Split them into two commits."
+            exit 1
+          fi
+
+      # The baseline is changed only by a human, in a reviewed commit (D-07). The rig's
+      # unattended wrapper never touches it, so a baseline change authored by the rig
+      # identity is either a bug in the wrapper or something worse.
+      - name: The baseline was not moved by the unattended job
+        run: |
+          for c in $(git rev-list "${{ steps.base.outputs.sha }}..HEAD"); do
+            if git show --name-only --format='%an' "$c" | head -1 | grep -qx 'neurorust-rig' \
+               && git show --name-only --format='' "$c" | grep -qx 'metrics/baseline.json'; then
+              echo "commit $c is authored by neurorust-rig and changes metrics/baseline.json"
+              exit 1
+            fi
+          done
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Compare against the reviewed baseline
+        run: |
+          git show "${{ steps.base.outputs.sha }}:metrics/baseline.json" > /tmp/baseline-at-base.json
+          cargo build -p nr-cli --release
+          ./target/release/nrmeasure series --compare --baseline /tmp/baseline-at-base.json
