@@ -6,8 +6,9 @@ controlled and installed onto the rig; it is not machine-local configuration.
 
 ## Installation
 
-From a checkout of this repository at `/opt/neurorust` on the rig (reached via
-`scripts/nr-push-to-rig.sh`, since the rig has no git of its own):
+From a checkout of this repository at `/opt/neurorust` on the rig, created by cloning
+this repository directly from GitHub as root (a separate, root-owned checkout from the
+operator's own `~/neurorust`, which is reached via `scripts/nr-push-to-rig.sh` instead):
 
 ```sh
 sudo ./deploy/systemd/install.sh
