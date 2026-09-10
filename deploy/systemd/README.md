@@ -32,6 +32,52 @@ The token must be scoped to this repository only, contents write only, with an e
 (T-1-01). Rotate it before it expires; the wrapper script has no way to tell you it is about
 to.
 
+## Two checkouts
+
+The rig carries two trees of this repository and they are not the same tree:
+
+| Path | Owner | How it gets there | Used by |
+|------|-------|-------------------|---------|
+| `/opt/neurorust` | root | `git clone` from GitHub, as root | the timer, via `neurorust-measure.service` |
+| `~/neurorust` | the operator | `scripts/nr-push-to-rig.sh` rsync, no `.git` | interactive runs, via `/usr/local/sbin/nr-run-measurement` |
+
+The separation is deliberate. The unattended job should not compete with an interactive
+working tree, and a dirty interactive tree is not what a published figure should be built
+from. It is also what lets `install.sh` refuse a root unit whose `ExecStart` sits in a tree
+anyone but root can write to.
+
+The cost is that the two can drift apart, and a weekly figure and a headline figure built
+from different revisions, with nothing saying so, is a provenance gap in the operating
+procedure rather than in the code. Check them before trusting a comparison across run
+classes:
+
+```sh
+sudo git -C /opt/neurorust rev-parse HEAD
+cat ~/neurorust/.git-sha
+sha256sum /opt/neurorust/target/release/nrmeasure ~/neurorust/target/release/nrmeasure
+```
+
+Two things about that check are easy to get wrong. `~/neurorust` has no `.git`, so
+`git rev-parse` cannot work there at all; its revision is the `sha=` line of the `.git-sha`
+stamp `nr-push-to-rig.sh` writes. And `git` commands against `/opt/neurorust` need root,
+because the `safe.directory` exemption is in root's gitconfig, which is the identity the
+unit runs as.
+
+The two binaries never match by sha256, even at the same revision. `crates/cli/build.rs`
+records where it learned the revision from: `git` when it can read `.git`, `pushed-stamp`
+when it reads the `.git-sha` stamp instead. That string is compiled in, so identical source
+yields two different binaries by design, and every manifest reports which of the two
+measured it. Compare the revisions, not the hashes.
+
+To bring them back into step, run `scripts/nr-push-to-rig.sh` from the dev host and rebuild.
+Cargo is not on the PATH there even in a login shell, so the rebuild needs its environment
+spelled out:
+
+```sh
+cd ~/neurorust && PATH=$HOME/.cargo/bin:$PATH RUSTUP_HOME=$HOME/.rustup \
+    CARGO_HOME=$HOME/.cargo cargo build -p nr-cli --release
+```
+
 ## Triggering a run manually
 
 ```sh
