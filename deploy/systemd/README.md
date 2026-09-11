@@ -20,17 +20,56 @@ but root, for the same reason `deploy/sudoers/install.sh` checks `/usr/local/sbi
 unit whose `ExecStart` lives in a tree anyone but root can write to is a root shell for
 anything running as that anyone.
 
-Create the token before installing, if it does not already exist:
+Create the token before installing, if it does not already exist. Read it from the terminal
+rather than putting it in the command line, so it reaches neither the shell history nor the
+process list:
 
 ```sh
 sudo mkdir -p /etc/neurorust
-sudo sh -c 'printf %s "<the fine-grained token>" > /etc/neurorust/push-token'
-sudo chmod 600 /etc/neurorust/push-token
+read -rsp 'paste token, then Enter: ' T; echo; printf '%s' "$T" | sudo tee /etc/neurorust/push-token >/dev/null; unset T
+sudo chown root:root /etc/neurorust/push-token
+sudo chmod 0600 /etc/neurorust/push-token
+sudo chmod 0700 /etc/neurorust
 ```
 
-The token must be scoped to this repository only, contents write only, with an expiry
-(T-1-01). Rotate it before it expires; the wrapper script has no way to tell you it is about
-to.
+`printf '%s'`, not `echo`: a trailing newline in the token file breaks the credential helper
+with an unhelpful authentication error.
+
+## Credential rotation
+
+What T-1-01 asks for is a fine-grained token whose resource owner is this repository's
+owner, whose repository access is this one repository alone, whose only permission is
+Contents read and write, and which carries an expiry.
+
+What is installed on the rig as of 2026-09-10 is none of those last three. The operator
+chose a token with account-wide read and write permissions and no expiry, and that token was
+pasted into a chat transcript on 2026-09-10, so it should be treated as already disclosed.
+T-1-01 is therefore **accepted, not mitigated**, and this file says so rather than
+describing a control that is not there. The file permissions half of the mitigation does
+hold: the token is root-owned at mode 0600 inside a 0700 directory, is read through a git
+credential helper that resolves it in a subshell, and so appears in neither the unit's
+environment, the process list, nor the journal.
+
+The practical consequences, none of which the harness can detect for you:
+
+- There is no rotation deadline, because there is no expiry. Nothing will ever fail and
+  point at this. The only thing standing between a disclosed credential and the account is
+  somebody deciding to replace it.
+- A token that never expires does not produce the coverage gaps an expiring one would, so
+  the failure mode here is silent rather than visible. That is the opposite of how the rest
+  of this project is built, where D-08 makes a missed week visible on purpose.
+- The blast radius is the whole account, not this repository.
+
+To rotate, revoke the old token in the GitHub UI first, then install the replacement with
+the block above and confirm the loop still closes:
+
+```sh
+sudo systemctl start neurorust-measure.service    # or wait for the next Sunday
+journalctl -u neurorust-measure.service --no-pager | tail -5
+```
+
+A push that fails on authentication is recorded as a coverage gap like any other refusal, so
+a botched rotation shows up in `metrics/coverage.json` rather than passing unnoticed.
 
 ## Two checkouts
 
