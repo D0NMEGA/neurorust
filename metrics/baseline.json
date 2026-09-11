@@ -18,6 +18,13 @@
       "stage": "cyclictest.wakeup_latency",
       "p99_us": 8,
       "max_us": 81
+    },
+    {
+      "rig_slug": "precision3591",
+      "run_class": "weekly",
+      "stage": "cyclictest.wakeup_latency",
+      "p99_us": 9,
+      "max_us": 70
     }
   ]
 }
