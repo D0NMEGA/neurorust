@@ -3,7 +3,7 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-14-PLAN.md
+stopped_at: 01-15 tasks 1-2 complete, task 3 waits for Sun 2026-09-13 03:00 CDT
 last_updated: "2026-09-09T16:12:17.546Z"
 last_activity: 2026-09-09 -- 01-14 executed
 progress:
@@ -26,42 +26,50 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 01 (trustworthy-measurement), 26 of 27 plans done (waves 0 through 21 complete).
-Plan: 01-14-PLAN.md is COMPLETE. The BENCH-08 weekly series job and the D-11 regression gate
-  are built and verified against the real measurements tree, not only synthetic fixtures.
-  `nrmeasure series --append` produced 25 StageMetrics entries across 14 runs (cyclictest
-  percentiles where the instrument makes them, null with a named population where it does
-  not, per finding 10 of the external audit), correctly excluding all four investigation-class
-  runs and the one orphaned failed attempt (2026-09-06-precision3591-screen), and folded three
-  consecutive ISO weeks (2026-W35 through 2026-W37) into metrics/coverage.json with no gap.
-  `--seed-baseline 2026-09-08-precision3591-headline` wrote metrics/baseline.json's first
-  entry (rig precision3591, run_class headline, stage cyclictest.wakeup_latency, p99 8 us,
-  max 81 us, matching the published PLAT-03 verdict exactly) and correctly skipped that same
-  run's null-percentile SMI stage without refusing the command. `--compare` against that
-  baseline passes today, exit 0.
-  .github/workflows/regression.yml resolves the base revision from github.event.before on a
-  push and github.event.pull_request.base.sha on a pull request, never a merge base (the
-  finding-10 defect), and fails if the baseline and the series change together or if a commit
-  authored by neurorust-rig touches the baseline. deploy/systemd/ carries the version-controlled
-  weekly oneshot, timer and wrapper, not yet installed on the rig.
-  Five deviations auto-fixed during execution, all documented in 01-14-SUMMARY.md: append's
-  duplicate check was tightened from run_id alone to (run_id, stage), since this plan's own
-  required behavior (one run, multiple stage entries sharing a run_id) is exactly what the
-  looser check rejected; the plan's own weekly-wrapper text read a file
-  (/run/nrmeasure-refusal) nothing in nrmeasure run ever writes, replaced with a real capture
-  of the command's own stderr; the credential helper's echo was replaced with printf
-  (identical behavior, avoids a false-positive token-leak grep and a real echo
-  dash-argument misbehavior); install.sh gained the explicit PATH its sibling script already
-  had; and three of the plan's own suggested comments were reworded to state the same fact
-  without a literal token a different one of the plan's own checks demanded be absent
-  (merge-base, RuntimeMaxSec, a docs/ path citation).
-  BENCH-08 stays Pending. The executor marked it complete and that was reverted the same day:
-  metrics/latency-series.json is real and carries the required data honestly, but it was
-  produced by a hand-run command on the dev host and committed by hand, and ROADMAP criterion 5
-  says "A CI job commits a weekly metrics JSON". The systemd units have never fired. BENCH-08 is
-  01-15's to close.
-  Remaining: 01-15 (wave 22, the rig install runbook, which owns five deferred findings and
-  installs this plan's systemd units and the weekly-class baseline seed).
-Status: Ready to execute wave 22 (plan 01-15).
+Plan: 01-15-PLAN.md is IN PROGRESS, tasks 1 and 2 complete, task 3 waiting on the clock.
+  The BENCH-08 loop has closed once end to end. On 2026-09-10 the rig produced
+  2026-09-10-precision3591-weekly by itself and pushed it as bc28e5e, authored by
+  neurorust-rig with nobody logged in: 15/15 preconditions pass, run_class weekly,
+  provenance_tier harness-generated, both cyclictest and rtla, one rtla-hwnoise firmware
+  screen over CPUs 6-11, ATTEMPT.json completed, p50 2 us / p95 4 us / p99 9 us / max 70 us
+  over 107,999,994 samples, contamination verdict Clean, SMI 0 on every isolated core, on
+  kernel 7.0.0-31-realtime. The commit touched only measurements/, INDEX.md, coverage.json
+  and latency-series.json: nothing under docs/ and nothing in baseline.json, so D-07 holds.
+  provenance and regression both passed on it; regression resolved its base as a89788c, the
+  branch's previous head rather than a merge base, and reported NoComparableBaseline for the
+  weekly cyclictest stage and SkippedNoStatistic for the two null-percentile stages, all three
+  as designed. The weekly baseline was then seeded in its own operator-authored commit
+  (1f6c89d, p99 9 us / max 70 us, distinct from the headline class's 8/81 per D-10), and
+  regression passed on that too, meaning both of its guards were satisfied rather than evaded.
+  Rig state: /opt/neurorust is a root-owned clone at mode 0600 credential, units installed and
+  byte-identical to the repo, neurorust-measure.timer enabled and active, next fire
+  Sun 2026-09-13 03:00:00 CDT. The machine is resting in measurement mode and must stay there:
+  nr-measure-mode off unmasks ppd, snapd and 17 timers and flips get-default back to
+  graphical.target, which would turn Sunday into a coverage gap. There is no desktop on the rig
+  until that trade is made deliberately.
+  Four deviations from the plan's own text, all verified before being worked around, to be
+  written up in 01-15-SUMMARY.md: the repository is private so the plan's anonymous git clone
+  cannot work (the weekly job's own credential helper was used instead, which also proves the
+  push path); ~/neurorust has no .git so "git -C ~/neurorust rev-parse HEAD" is impossible and
+  the .git-sha stamp is the revision; the dry-run command only works from the repository root
+  because the thresholds path is relative; and most seriously, the plan's "start the service,
+  then log out" ordering cannot pass NoActiveSshSessions, and its failure mode is not a clean
+  error but a committed and pushed false coverage gap, so a delayed systemd-run trigger was
+  used instead.
+  T-1-01 is ACCEPTED, NOT MITIGATED, and deploy/systemd/README.md says so (9451821). The
+  operator chose an account-wide read/write token with no expiry, and it was pasted into a chat
+  transcript on 2026-09-10, so it is already disclosed. Only the file-permission half of the
+  mitigation is real. There is no rotation deadline and nothing will ever fail to point at it.
+  Pre-existing and out of scope: the ci workflow has been red since 2026-09-07 on
+  crates/cli/tests/run_pipeline.rs:299 full_run_report_matches_snapshot, which passes on macOS
+  and fails on ubuntu-latest. This is 01-14's already-recorded unreproduced failure, not
+  something 01-15 caused.
+  BENCH-08 stays Pending until task 3. The loop is proven but the SCHEDULE is not: the
+  2026-09-10 run was manually triggered. The first genuinely scheduled fire is Sun 2026-09-13
+  03:00 CDT, and either outcome closes task 3, a run or a coverage gap naming its real reason.
+  Remaining: 01-15 task 3 only. Verify Sunday's outcome, write the "Observed behaviour" section
+  of deploy/systemd/README.md, then 01-15-SUMMARY.md and phase verification.
+Status: Waiting on the scheduled fire, Sun 2026-09-13 03:00 CDT (01-15 task 3).
 Last activity: 2026-09-09 -- 01-14 executed
 
 Progress: [██████████] 96%
