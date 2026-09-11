@@ -67,9 +67,53 @@ Plan: 01-15-PLAN.md is IN PROGRESS, tasks 1 and 2 complete, task 3 waiting on th
   BENCH-08 stays Pending until task 3. The loop is proven but the SCHEDULE is not: the
   2026-09-10 run was manually triggered. The first genuinely scheduled fire is Sun 2026-09-13
   03:00 CDT, and either outcome closes task 3, a run or a coverage gap naming its real reason.
-  Remaining: 01-15 task 3 only. Verify Sunday's outcome, write the "Observed behaviour" section
-  of deploy/systemd/README.md, then 01-15-SUMMARY.md and phase verification.
-Status: Waiting on the scheduled fire, Sun 2026-09-13 03:00 CDT (01-15 task 3).
+  Out of plan, at the operator's request (2689759): the ci workflow is GREEN again, first time
+  since 2026-09-07. Root cause was not a code fault. crates/cli/tests/run_pipeline.rs asserted
+  on the SMI diagnostic sentence, which differs per host (macOS refuses at the platform check,
+  a Linux runner gets past it and cannot spawn rdmsr), so a snapshot recorded on the dev host
+  was unsatisfiable on ubuntu-latest forever. redact_report now redacts that reason and keeps
+  the verdict. Note this for any future snapshot: ci.yml runs the test matrix on BOTH
+  ubuntu-latest and macos-latest, so a snapshot holding host-specific text can never pass both.
+
+>>> DO NOT TOUCH THE RIG BEFORE Sun 2026-09-13 03:00 CDT <<<
+  No ssh, no console login, no nr-measure-mode off. NoActiveSshSessions expects 0, and
+  nr-measure-mode off unmasks ppd, snapd and 17 timers and flips get-default back to
+  graphical.target. Any of those turns Sunday into a coverage gap. The rig has no desktop
+  until that trade is made on purpose.
+
+  SUNDAY PROCEDURE (task 3, closes phase 01):
+    ssh precision3591-rig 'journalctl -u neurorust-measure.service --no-pager | tail -40'
+    ssh precision3591-rig 'journalctl -u neurorust-measure.service --no-pager | grep -i RuntimeMaxSec'   # want empty
+    git pull --rebase && ./target/release/nrmeasure verify --strict --check-index
+    gh run list --limit 6      # want provenance + regression green on the rig's commit
+    python3 -c "import json;c=json.load(open('metrics/coverage.json'));print(json.dumps(c['weeks'][-2:],indent=2))"
+  Either outcome closes task 3: a second weekly run (regression now has a real weekly baseline
+  to compare against, so read its verdict, not just its exit code, and confirm it resolved the
+  base as the branch's previous head), or a coverage gap naming the precondition that refused
+  it. A week simply ABSENT from coverage.json is the only real defect: it means record_gaps did
+  not run. Then write the "Observed behaviour" section of deploy/systemd/README.md naming the
+  date and the outcome, write 01-15-SUMMARY.md with the four deviations and the T-1-01
+  acceptance, and run phase verification.
+
+  DECISION 2026-09-11: do not block on Sunday. All four failure modes task 3 names are already
+  verified or moot (sleep and suspend masked, multi-user with no desktop, binary present, token
+  never expires), and the timer-vs-manual distinction was already closed on 2026-09-10 by
+  nr-manual-weekly2.timer firing the unit with nobody logged in. systemd-analyze calendar
+  confirms "Sun *-*-* 03:00:00" resolves correctly for three consecutive Sundays. The residual
+  information is one bit: that this OnCalendar fires for real. Worth having, not worth blocking.
+  Phase 2 starts now in parallel; ROADMAP.md:125 says the FSM and the Kani proof need no rig at
+  all and build on the macOS dev host, and only STOP-07 (measured abort latency) needs Phase 1's
+  protocol.
+
+  CONTEXT FOR PHASE 2. 14 days in (first commit 2026-08-28), 221 commits, 23,453 lines of Rust
+  (14,772 src across capture/cli/histogram/manifest/metrics, 8,681 test). All of it is nrmeasure,
+  the measurement and provenance harness. There is no runtime yet: no channel, no node, no graph,
+  no decoder, no pylsl shim, no wire protocol. 8 of 63 requirements done. Phase 2 is the other
+  half of the stated core value and the first code that is actually neurorust.
+
+  Remaining: 01-15 task 3 only, on Sunday. Phase 01 is NOT complete and must not be marked
+  complete until task 3 closes and the verifier runs.
+Status: Phase 01 open on 01-15 task 3 (Sun 2026-09-13 03:00 CDT). Phase 02 planning starts now.
 Last activity: 2026-09-09 -- 01-14 executed
 
 Progress: [██████████] 96%
