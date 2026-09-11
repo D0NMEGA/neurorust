@@ -250,6 +250,21 @@ fn redact_report(report: &str) -> String {
                 "manifest blake3: [redacted]".to_string()
             } else if line.starts_with("| overflow rate |") {
                 "| overflow rate | [redacted]/s |".to_string()
+            } else if line.starts_with("| smi-delta |") && line.ends_with("| unavailable |") {
+                // Why the host cannot read MSR_SMI_COUNT is host-specific, and the CI
+                // matrix runs this on two hosts that fail differently: macOS refuses at
+                // the platform check ("requires Linux"), while a Linux runner gets past
+                // that and fails to spawn rdmsr, which is not installed there. Both are
+                // correct and both are "unavailable"; only the sentence differs. Asserting
+                // on the sentence made this snapshot unsatisfiable on one of the two
+                // platforms no matter which host recorded it, and it was recorded on the
+                // dev host, so ci has been red on ubuntu-latest since 2026-09-07.
+                //
+                // The verdict is kept because it is portable and is what the row means.
+                // Only the `unavailable` case is redacted: a real SMI reading stays
+                // visible, so this cannot hide a regression that turns a count into
+                // something else.
+                "| smi-delta | [redacted: host-specific reason] | unavailable |".to_string()
             } else if let Some(run_id) = line.strip_prefix("run id: ") {
                 format!("run id: {}", redact_leading_date(run_id))
             } else {

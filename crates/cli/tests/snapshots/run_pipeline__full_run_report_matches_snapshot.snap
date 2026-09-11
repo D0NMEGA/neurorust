@@ -68,7 +68,7 @@ decided from evidence upstream of the measured latency; the contamination verdic
 | tool-exit-codes | cyclictest=0 | clean |
 | preconditions | 15 pass, 0 fail, 0 not-applicable, 0 unavailable | clean |
 | interference-counters | cal max 0 on cpu11, tlb max 0 on cpu11, res max 0 on cpu11, irq max 0 on cpu11, over 0s | not-thresholded |
-| smi-delta | reading MSR_SMI_COUNT requires Linux; set NRMEASURE_SMI_FIXTURE to run against a fixture on this host | unavailable |
+| smi-delta | [redacted: host-specific reason] | unavailable |
 | thermal-maximum | 40.0 C | not-thresholded |
 | instrument-class | headline-series | clean |
 
