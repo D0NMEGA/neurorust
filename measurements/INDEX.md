@@ -24,3 +24,4 @@ Every run directory under `measurements/` has a row here, including a contaminat
 | 2026-09-08 | 2026-09-08-precision3591-headline | headline | headline-series | harness-generated | clean | 8 | 81 | yes | - |
 | 2026-09-08 | 2026-09-08-precision3591-investigation | investigation | investigation | harness-generated | clean | 10 | 89 | no | instrument class investigation: a traced run inflates the latency it measures, so its numbers never feed the regression series (the two-instrument rule, docs/measurement-protocol.md) |
 | 2026-09-10 | 2026-09-10-precision3591-weekly | weekly | headline-series | harness-generated | clean | 9 | 70 | yes | - |
+| 2026-09-13 | 2026-09-13-precision3591-weekly | weekly | headline-series | harness-generated | clean | 9 | 81 | yes | - |
