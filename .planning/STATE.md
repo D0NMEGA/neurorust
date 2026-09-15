@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-09-15T05:29:27.055Z"
-last_activity: 2026-09-15 -- Phase 2 planning complete
+stopped_at: Completed 02-01-PLAN.md (crates/stop scaffold; Kani 0.67.0 and cargo-llvm-cov 0.9.1 confirmed in-workspace; scripts/nr-coverage.sh committed)
+last_updated: "2026-09-15T05:48:49.809Z"
+last_activity: 2026-09-15
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 36
-  completed_plans: 26
-  percent: 72
+  completed_plans: 27
+  percent: 75
 ---
 
 # Project State
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-28)
 
 **Core value:** The safety-critical abort path is proven correct rather than tested, and every latency claim is reproducible from published raw captures on a named rig.
-**Current focus:** Phase 01 — trustworthy-measurement
+**Current focus:** Phase 2 — Proven emergency_stop
 
 ## Current Position
 
-Phase: 01 (trustworthy-measurement), 26 of 27 plans done (waves 0 through 21 complete).
-Plan: 01-15-PLAN.md is IN PROGRESS, tasks 1 and 2 complete, task 3 waiting on the clock.
+Phase: 2 (Proven emergency_stop) — EXECUTING
+Plan: 2 of 9
   The BENCH-08 loop has closed once end to end. On 2026-09-10 the rig produced
   2026-09-10-precision3591-weekly by itself and pushed it as bc28e5e, authored by
   neurorust-rig with nobody logged in: 15/15 preconditions pass, run_class weekly,
@@ -114,9 +114,9 @@ Plan: 01-15-PLAN.md is IN PROGRESS, tasks 1 and 2 complete, task 3 waiting on th
   Remaining: 01-15 task 3 only, on Sunday. Phase 01 is NOT complete and must not be marked
   complete until task 3 closes and the verifier runs.
 Status: Ready to execute
-Last activity: 2026-09-15 -- Phase 2 planning complete
+Last activity: 2026-09-15
 
-Progress: [██████████] 96%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
@@ -159,6 +159,7 @@ Progress: [██████████] 96%
 | Phase 01 P25 | 23min | 2 tasks | 7 files |
 | Phase 01 P26 | 40min | 3 tasks | 27 files |
 | Phase 01 P14 | 52min | 3 tasks | 17 files |
+| Phase 02 P01 | 14min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -257,6 +258,9 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-14: the weekly wrapper script's plan-given text read /run/nrmeasure-refusal, a file nothing in nrmeasure run ever writes, to name a refused precondition; replaced with a real capture of the command's own stderr, which genuinely names it. Its credential helper's echo was replaced with printf, identical behavior, avoiding both a real echo dash-argument misbehavior and a false-positive token-leak grep that cannot tell a helper definition from an actual leak.
 - [Phase 01]: 01-14: --seed-baseline reads as either an all-or-nothing refusal or a per-stage skip depending on which sentence of the plan is taken literally; implemented as run-level refusal (contaminated, excluded, or investigation) plus per-stage skip (a null p99), since the literal headline run this plan seeds from always carries a null-percentile SMI stage beside its cyclictest one and an all-or-nothing reading would make the plan's own task 3 seeding step impossible. Verified against the real headline run: it seeds.
 - [Phase 01]: 01-14: three of the plan's own suggested comments would have failed one of the plan's own greps if quoted verbatim, because the comment names the exact thing a check demands be absent: task 3's verify script forbids 'merge-base' in the workflow's own run text while the suggested fix-comment quotes 'git merge-base origin/main HEAD'; task 2 forbids 'RuntimeMaxSec' in the .service file while its acceptance criteria ask for a comment naming it (moved the literal name and warning line to README.md, which carries no such check); task 2 forbids docs/ or baseline.json substrings in the wrapper while a D-09 comment cited a doc path. Reworded each comment to state the same fact without the colliding literal token; none of the three checks were weakened.
+- [Phase 02]: 02-01: Kani 0.67.0 and cargo-llvm-cov 0.9.1 both confirmed working end to end in this exact workspace (edition 2024, resolver 3) on the first attempt, via a spike proved and falsified then deleted; nightly-2026-08-01 pinned for the coverage job and baked into scripts/nr-coverage.sh, the first candidate tried, no rejections needed. — cargo kani --version reads cargo-kani 0.67.0; --output-format offers regular/terse/old (no structured format); no [package.metadata.kani] table needed. cargo-llvm-cov 0.9.1 has no --fail-under-branches flag at all (only functions/lines/file-lines/regions), confirming the gate must read the JSON export rather than a CLI flag. Full tool-fact strings recorded in 02-01-SUMMARY.md for plans 02-03 and 02-04 to consume without re-running anything.
+- [Phase 02]: 02-01: Fixed nr-coverage.sh's missing-file check (Rule 1 - bug) to exclude lib.rs by name, since a function-free file can never appear in an LLVM source-coverage report and the plan's own literal check made the gate permanently red on a fully-covered spike. — crates/stop/src/lib.rs is a doc comment plus pub mod declarations only, matching the existing crates/histogram/src/lib.rs convention. Verified empirically: a two-test spike that was 100 percent branch-covered still made the plan's own script exit 1, citing lib.rs as not instrumented, because LLVM's coverage instrumentation never lists a file with zero coverable regions. Excluded lib.rs by name with a comment flagging that the exclusion needs revisiting if lib.rs ever gains real logic. Verified by re-running both the fully-covered (exit 0) and regressed (exit 1, correct file named) spikes. Committed in 5717b50.
+- [Phase 02]: 02-01: roadmap update-plan-progress silently no-ops on the zero-padded phase arg (02) again, reporting updated:true with no actual table change; the unpadded arg (2) worked. Same recurring class as 01-02's already-documented finding. — ROADMAP.md's own progress table row starts with the unpadded number (2. Proven emergency_stop), so roadmap.cjs's table-row regex found no match against the zero-padded arg while still returning updated:true. Verified by grepping the table row before and after each call. Not patched here (out of scope, the shared CLI lives outside this repository); recorded so the next plan passes the unpadded phase number.
 
 ### Pending Todos
 
@@ -278,8 +282,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-15T03:48:17.775Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-proven-emergency-stop/02-CONTEXT.md
+Last session: 2026-09-15T05:48:23.660Z
+Stopped at: Completed 02-01-PLAN.md (crates/stop scaffold; Kani 0.67.0 and cargo-llvm-cov 0.9.1 confirmed in-workspace; scripts/nr-coverage.sh committed)
+Resume file: 02-02-PLAN.md
 
 Next: plan 01-15 (wave 22), the rig install runbook and the last plan of the phase. Three blocking human-action checkpoints, all needing the rig: deploy the repository and a scoped push credential to /opt/neurorust, install the systemd units and drive one full loop by hand, then leave the machine alone and confirm the first scheduled fire. Task 3 waits for the coming Sunday by design and accepts two outcomes, a run that happened or a refusal recorded as a coverage gap under D-08. It closes BENCH-08 and PLAT-02, and owns the six findings in deferred-items.md.
