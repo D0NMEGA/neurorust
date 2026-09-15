@@ -81,3 +81,26 @@ jobs:
       - if: steps.kani-cache.outputs.cache-hit != 'true'
         run: cargo kani setup
       - run: scripts/nr-proofs.sh
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # STOP-06 asks for branch coverage, which is not available on the toolchain
+      # rust-toolchain.toml pins. D-57 pins a dated nightly for this job alone; every other job
+      # above stays on stable. The date here must match scripts/nr-coverage.sh.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-08-01
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: coverage
+      - id: llvmcov-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-llvm-cov
+          key: cargo-llvm-cov-0.9.1-${{ runner.os }}
+      - if: steps.llvmcov-cache.outputs.cache-hit != 'true'
+        run: cargo install --locked cargo-llvm-cov@0.9.1
+      - run: scripts/nr-coverage.sh
