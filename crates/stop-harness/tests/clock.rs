@@ -1,4 +1,6 @@
-use nr_stop_harness::characterise::{CharacteriseError, current_clocksource, offset_estimate_ns, read_overhead_ns};
+use nr_stop_harness::characterise::{
+    CharacteriseError, current_clocksource, offset_estimate_ns, read_overhead_ns,
+};
 use nr_stop_harness::clock::{FixtureClock, MonotonicRawClock};
 
 #[test]
@@ -15,7 +17,11 @@ fn fixture_clock_is_exhausted_rather_than_wrapping() {
     for _ in 0..3 {
         clock.now_ns();
     }
-    assert_eq!(clock.now_ns(), None, "the fourth call must not restart the sequence");
+    assert_eq!(
+        clock.now_ns(),
+        None,
+        "the fourth call must not restart the sequence"
+    );
     assert_eq!(clock.now_ns(), None, "exhaustion is sticky, not a one-off");
 }
 
@@ -48,9 +54,12 @@ fn offset_estimate_matches_the_textbook_formula() {
 #[test]
 fn clocksource_is_read_from_the_named_sysfs_path() {
     let populated = tempfile::tempdir().expect("tempdir");
-    let clocksource_dir = populated.path().join("devices/system/clocksource/clocksource0");
+    let clocksource_dir = populated
+        .path()
+        .join("devices/system/clocksource/clocksource0");
     std::fs::create_dir_all(&clocksource_dir).expect("mkdir -p");
-    std::fs::write(clocksource_dir.join("current_clocksource"), "tsc\n").expect("write fixture file");
+    std::fs::write(clocksource_dir.join("current_clocksource"), "tsc\n")
+        .expect("write fixture file");
 
     assert_eq!(
         current_clocksource(populated.path()),
