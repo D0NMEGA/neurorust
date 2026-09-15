@@ -21,6 +21,8 @@ const SIGFIG: u8 = 3;
 pub enum PercentileError {
     #[error("cannot compute percentiles over a run with zero samples")]
     EmptyRun,
+    #[error("cannot compute statistics over zero samples")]
+    EmptySamples,
     #[error("failed to create hdrhistogram: {0}")]
     Creation(#[from] hdrhistogram::CreationError),
     #[error("failed to record a sample: {0}")]

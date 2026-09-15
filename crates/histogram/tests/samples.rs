@@ -35,8 +35,7 @@ fn count_is_the_slice_length() {
 
 #[test]
 fn a_single_sample_is_its_own_every_percentile() {
-    let stats =
-        stats_from_samples(&[500], &[0.5, 0.9, 0.99, 0.999]).expect("single-sample slice");
+    let stats = stats_from_samples(&[500], &[0.5, 0.9, 0.99, 0.999]).expect("single-sample slice");
     assert_eq!(stats.min, 500);
     assert_eq!(stats.max, 500);
     for &(_, value) in &stats.values {
