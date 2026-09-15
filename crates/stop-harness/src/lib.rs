@@ -9,7 +9,10 @@
 //! this file, none of this plan's own mandated `cargo test -p nr-stop-harness` commands compile
 //! at all). `main.rs` is this library's only other consumer.
 
+pub mod capture;
 pub mod characterise;
 pub mod clock;
+pub mod report;
+pub mod rundir;
 pub mod sched;
 pub mod trial;
