@@ -207,7 +207,7 @@ roadmap existed and map to no phase; they are listed for completeness.
 | STOP-01 | Phase 2 | Complete |
 | STOP-02 | Phase 2 | Complete |
 | STOP-03 | Phase 2 | Complete |
-| STOP-04 | Phase 2 | Complete |
+| STOP-04 | Phase 2 | Pending |
 | STOP-05 | Phase 2 | Complete |
 | STOP-06 | Phase 2 | Complete |
 | STOP-07 | Phase 2 | Pending |
