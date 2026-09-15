@@ -49,30 +49,67 @@ impl MonotonicRawClock for RawClock {
 /// the two real threads `trial::run_trials` spawns (`C: MonotonicRawClock + Sync`): the
 /// abort-latency trial loop and the D-35 cross-core offset measurement are both exercised by
 /// tests through this same fixture, and both are inherently multi-threaded.
+/// Where a [`FixtureClock`]'s readings come from.
+#[derive(Debug)]
+enum Readings {
+    /// An exact, finite sequence, which exhausts once every reading is claimed. This is what
+    /// a test asserting the refusal path needs, so it stays the behaviour of
+    /// [`FixtureClock::new`].
+    Exact(Vec<u64>),
+    /// Reading `n` computed on demand as `n * step_ns`. Never exhausts, because there is no
+    /// budget to exhaust.
+    Generated { step_ns: u64 },
+}
+
 #[derive(Debug)]
 pub struct FixtureClock {
-    readings: Vec<u64>,
+    readings: Readings,
     next: AtomicUsize,
 }
 
 impl FixtureClock {
-    /// Builds a fixture clock over an exact, ordered sequence of readings.
+    /// Builds a fixture clock over an exact, ordered sequence of readings. Exhausts.
     pub fn new(readings: impl Into<Vec<u64>>) -> Self {
         Self {
-            readings: readings.into(),
+            readings: Readings::Exact(readings.into()),
+            next: AtomicUsize::new(0),
+        }
+    }
+
+    /// Builds a fixture clock that cannot run out: reading `n` is `n * step_ns`.
+    ///
+    /// Why this exists. How many readings a trial consumes depends on how many times the hot
+    /// path polls before it observes the abort, which depends on when the aborting thread gets
+    /// scheduled, which varies by machine. A fixed budget is therefore a bet about the slowest
+    /// machine that will ever run the suite, and `phases_are_uniform_enough_to_state_so` lost
+    /// that bet on a macOS CI runner: it exhausted a 2,000,000-reading budget at trial 3244 of
+    /// 10,000 and never reached its assertion, while the same test passed on Linux and on the
+    /// dev host. That assertion is deterministic (phases come from a seeded PRNG, not from
+    /// timing), so a machine-independent test was failing for a machine-dependent reason.
+    ///
+    /// Use this wherever exhaustion is not the property under test. Use [`FixtureClock::new`]
+    /// where it is.
+    pub fn generated(step_ns: u64) -> Self {
+        Self {
+            readings: Readings::Generated { step_ns },
             next: AtomicUsize::new(0),
         }
     }
 }
 
 impl MonotonicRawClock for FixtureClock {
-    /// Returns the next programmed reading, or `None` once the sequence is exhausted.
+    /// Returns the next programmed reading, or `None` once an exact sequence is exhausted.
     /// Exhausted rather than wrapping, so a test can never accidentally measure a wrapped
     /// interval: once every reading has been claimed, every later call also returns `None`.
+    /// A generated clock keeps the same guarantee by a different route: `checked_mul` returns
+    /// `None` rather than wrapping if the index ever multiplies past `u64`.
     /// `fetch_add` hands out a strictly increasing, never-repeated index to concurrent callers,
     /// so two threads reading the same fixture never observe the same reading twice.
     fn now_ns(&self) -> Option<u64> {
         let index = self.next.fetch_add(1, Ordering::SeqCst);
-        self.readings.get(index).copied()
+        match &self.readings {
+            Readings::Exact(readings) => readings.get(index).copied(),
+            Readings::Generated { step_ns } => (index as u64).checked_mul(*step_ns),
+        }
     }
 }

@@ -12,23 +12,25 @@ use nr_stop_harness::trial::{
 /// `period_ns`/phase used in these tests. A busy-wait's deadline check depends only on which
 /// pre-programmed value comes next, never on real elapsed time, so a large step bounds every
 /// busy-wait in this file to a small, fixed number of reads regardless of real thread-scheduling
-/// timing. `values` just needs to comfortably cover the total reads every thread in a run takes
-/// across all its trials; it is not a measurement of real time.
+/// timing. The readings are an ordering device, not a measurement of real time.
 ///
-/// The margin has to be generous rather than tight: this whole test binary runs its `#[test]`
-/// functions in parallel by default (`cargo test`'s own default harness, which is also exactly
-/// how CI invokes it), so several of these thread-per-trial loops compete for real CPU time at
-/// once. A budget sized for one trial running alone was measured to be too tight once several
-/// tests' threads contend together; 500,000 covers even a single, unlucky, contended trial with
-/// wide headroom, at a construction cost too small to matter (well under a millisecond).
-fn generous_clock(values: usize) -> FixtureClock {
+/// There is deliberately no budget. How many readings a trial consumes depends on how many
+/// times the hot path polls before it observes the abort, which depends on when the aborting
+/// thread is scheduled, which varies by machine and by how many of this binary's parallel
+/// `#[test]` functions are contending at that moment. Every fixed budget is therefore a bet
+/// about the slowest machine that will ever run this suite, and that bet was already raised
+/// once for local contention and still lost on a macOS CI runner: 2,000,000 readings ran dry at
+/// trial 3244 of 10,000, so `phases_are_uniform_enough_to_state_so` never reached its
+/// assertion. The assertion itself is deterministic, since phases come from a seeded PRNG and
+/// not from timing, so the test was machine-independent and only its budget was not.
+///
+/// `FixtureClock::generated` removes the budget instead of resizing it. Exhaustion is still
+/// tested, deliberately, by the tests that construct a short exact sequence with
+/// `FixtureClock::new`.
+fn generous_clock() -> FixtureClock {
     const STEP: u64 = 10_000_000;
-    FixtureClock::new((0..values as u64).map(|i| i * STEP).collect::<Vec<_>>())
+    FixtureClock::generated(STEP)
 }
-
-/// The default budget: generous enough for a single trial under full test-suite contention.
-/// Tests running many trials pass their own, larger budget.
-const AMPLE: usize = 500_000;
 
 fn safe_config(trials: usize, period_ns: u64, seed: u64) -> TrialConfig {
     TrialConfig {
@@ -46,7 +48,7 @@ fn safe_config(trials: usize, period_ns: u64, seed: u64) -> TrialConfig {
 
 #[test]
 fn a_trial_records_the_interval_the_decision_defines() {
-    let clock = generous_clock(AMPLE);
+    let clock = generous_clock();
     let config = safe_config(1, 1_000, 42);
 
     let outcome = run_trials(&clock, &config).expect("fixture provides ample headroom");
@@ -59,7 +61,7 @@ fn a_trial_records_the_interval_the_decision_defines() {
 #[test]
 fn the_hot_thread_acknowledges_exactly_once_per_trial() {
     let stop = EmergencyStop::new();
-    let clock = generous_clock(AMPLE);
+    let clock = generous_clock();
     let barrier = Barrier::new(2);
 
     std::thread::scope(|scope| {
@@ -77,7 +79,7 @@ fn the_hot_thread_acknowledges_exactly_once_per_trial() {
 #[test]
 fn the_abort_record_holds_the_starting_timestamp() {
     let stop = EmergencyStop::new();
-    let clock = generous_clock(AMPLE);
+    let clock = generous_clock();
     let barrier = Barrier::new(2);
 
     let abort_raw_ns = std::thread::scope(|scope| {
@@ -98,7 +100,7 @@ fn the_abort_record_holds_the_starting_timestamp() {
 
 #[test]
 fn phases_are_recorded_per_trial() {
-    let clock = generous_clock(500_000);
+    let clock = generous_clock();
     let config = safe_config(1_000, 1_000, 42);
 
     let outcome = run_trials(&clock, &config).expect("fixture provides ample headroom");
@@ -115,7 +117,7 @@ fn phases_are_recorded_per_trial() {
 
 #[test]
 fn phases_are_uniform_enough_to_state_so() {
-    let clock = generous_clock(2_000_000);
+    let clock = generous_clock();
     let config = safe_config(10_000, 1_000, 12345);
 
     let outcome = run_trials(&clock, &config).expect("fixture provides ample headroom");
@@ -154,7 +156,7 @@ fn a_clock_failure_refuses_rather_than_records_zero() {
 
 #[test]
 fn the_sample_vector_is_preallocated() {
-    let clock = generous_clock(AMPLE);
+    let clock = generous_clock();
     let config = safe_config(7, 1_000, 7);
 
     let outcome = run_trials(&clock, &config).expect("fixture provides ample headroom");
