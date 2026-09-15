@@ -184,6 +184,24 @@ this phase's text cites several of them. Restarting the numbering would make "D-
   a coverage check. It closes on its own track. Phase 1 must still not be marked complete until
   task 3 closes and the phase verifier runs.
 
+### Settled after research (added 2026-09-14)
+
+- **D-57:** STOP-06's 100 percent branch coverage is produced by `cargo-llvm-cov` running under
+  a pinned, dated nightly toolchain, in the coverage job only. The rest of CI stays on the
+  stable toolchain `rust-toolchain.toml` pins. Research surfaced, and the main thread confirmed
+  against primary sources, that neither tool REQUIREMENTS.md names can deliver branch coverage
+  on stable: cargo-llvm-cov's own README states branch coverage "is currently optional and
+  requires nightly", the underlying `-Z coverage-options=branch` is an unstable compiler flag
+  documented in the Rust Unstable Book, and tarpaulin's help text reads
+  `-b, --branch  Branch coverage: NOT IMPLEMENTED`, so tarpaulin cannot do it at any toolchain.
+  The nightly is pinned by date the same way D-51 pins the Kani version, and the objection to
+  nightly is already moot because this phase adopts Kani, which ships and runs its own bundled
+  `nightly-2025-11-21`. STOP-06 is therefore satisfied as literally written and is NOT amended.
+  Amending it would have been this phase's second reworded requirement after D-47, and two bars
+  moved in one phase is the shape of fitting criteria to results that ROADMAP criterion 1 was
+  rewritten on 2026-09-07 to forbid. `cargo-llvm-cov` is Apache-2.0 OR MIT, so
+  `cargo deny check licenses` passes.
+
 ### Claude's Discretion
 
 - The poll period for the D-33 stand-in loop, and whether more than one period is measured
