@@ -11,5 +11,7 @@
 //! stated in `docs/proofs/emergency-stop-proof-scope.md`. Read that before quoting anything
 //! here as verified.
 
+pub mod consumer;
 pub mod event;
+pub mod gate;
 pub mod state;
