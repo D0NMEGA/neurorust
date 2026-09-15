@@ -74,12 +74,14 @@ Completed and measured 2026-08-28. Raw captures and rig manifest in
 - [x] **STOP-01**: `emergency_stop` is a finite state machine with an explicit reachable state space
 - [x] **STOP-02**: From any reachable state, an abort signal drives the system to a defined safe state
 - [x] **STOP-03**: No decoder output is produced for the remainder of a session after a stop
-- [x] **STOP-04**: Kani proves, across the enumerated reachable state space, that the transition
+- [ ] **STOP-04**: Kani proves, across the enumerated reachable state space, that the transition
       function is total, that the latch and output-gate invariants hold, and that no panic or
       arithmetic overflow is reachable. The module forbids `unsafe`, so the undefined-behaviour
       classes a model checker would otherwise carry are excluded by the type system instead;
       the published claim says which properties the proof establishes, which the compiler
       establishes, and which nothing in the phase establishes
+      (proof half done in plan 02-03, eleven harnesses, 132 checks; the published claim is
+      plan 02-05 and this box closes there)
 - [ ] **STOP-05**: `cargo kani` passes in CI as a blocking gate
 - [ ] **STOP-06**: The module has 100 percent branch coverage (tarpaulin or llvm-cov)
 - [ ] **STOP-07**: Abort latency is bounded and measured on the reference rig
