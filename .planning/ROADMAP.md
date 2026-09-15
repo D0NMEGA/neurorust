@@ -126,10 +126,23 @@ recording as a pass.
 **Success Criteria** (what must be TRUE):
   1. `emergency_stop` is a finite state machine with an enumerated reachable state space, and from any reachable state an abort signal drives the system to the defined safe state
   2. Once stopped, no decoder output is produced for the remainder of the session, and the latch is proven rather than assumed
-  3. `cargo kani` proves absence of undefined behaviour across the reachable state space and fails the build in CI when it does not
+  3. `cargo kani` proves, across the enumerated reachable state space, that the transition function is total, that the latch and output-gate invariants hold, and that no panic or arithmetic overflow is reachable, and it fails the build in CI when it does not. The module forbids `unsafe`, so undefined-behaviour classes are excluded by the type system rather than by the model checker, and the published claim states which properties the proof establishes, which the compiler establishes, and which (thread interleavings) nothing in this phase establishes
   4. The module reports 100 percent branch coverage in CI
   5. Abort latency is published as a bounded worst case measured on the reference rig under the Phase 1 protocol
 **Plans**: TBD
+
+**Criteria note (2026-09-14)**: criterion 3 was rewritten during phase 2 discussion, before any
+plan was written, and REQUIREMENTS.md STOP-04 was amended in the same commit. Both previously
+said Kani proves absence of undefined behaviour across the reachable state space. The workspace
+sets `unsafe_code = "forbid"`, so in a crate with no `unsafe` the compiler already excludes most
+UB before Kani runs, and the original sentence credited the model checker with a guarantee the
+type system provides. That left two ways to close the phase: publish a claim broader than the
+evidence, or hold the phase open against a bar nothing could clear as worded. The criterion now
+names the four properties the proof actually establishes and requires the claim to state its own
+limits, including the interleaving gap that CHAN-06 closes with loom in Phase 4. The rewrite
+happened up front rather than at closure, because a criterion amended to fit its own result is
+what criterion 1 was rewritten on 2026-09-07 to forbid. See `02-CONTEXT.md` D-47.
+
 **Notes**: STOP-03 is proven at FSM level against a modelled output gate; the decoder and sink consume that gate in Phase 6. The full functional property is CREU-01, deferred to v2.
 
 ### Phase 3: Deterministic substrate
