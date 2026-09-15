@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-01-PLAN.md (crates/stop scaffold; Kani 0.67.0 and cargo-llvm-cov 0.9.1 confirmed in-workspace; scripts/nr-coverage.sh committed)
-last_updated: "2026-09-15T05:48:49.809Z"
+stopped_at: Completed 02-02-PLAN.md (state machine, capability gate, and atomic latch for nr-stop; 27 tests, all under crates/stop/tests/)
+last_updated: "2026-09-15T06:15:44.272Z"
 last_activity: 2026-09-15
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 36
-  completed_plans: 27
-  percent: 75
+  completed_plans: 28
+  percent: 78
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 2 (Proven emergency_stop) — EXECUTING
-Plan: 2 of 9
+Plan: 3 of 9
   The BENCH-08 loop has closed once end to end. On 2026-09-10 the rig produced
   2026-09-10-precision3591-weekly by itself and pushed it as bc28e5e, authored by
   neurorust-rig with nobody logged in: 15/15 preconditions pass, run_class weekly,
@@ -116,7 +116,7 @@ Plan: 2 of 9
 Status: Ready to execute
 Last activity: 2026-09-15
 
-Progress: [████████░░] 75%
+Progress: [████████░░] 78%
 
 ## Performance Metrics
 
@@ -160,6 +160,7 @@ Progress: [████████░░] 75%
 | Phase 01 P26 | 40min | 3 tasks | 27 files |
 | Phase 01 P14 | 52min | 3 tasks | 17 files |
 | Phase 02 P01 | 20min | 3 tasks | 5 files |
+| Phase 02 P02 | 24min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -261,6 +262,10 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-01: Kani 0.67.0 and cargo-llvm-cov 0.9.1 both confirmed working end to end in this exact workspace (edition 2024, resolver 3) on the first attempt, via a spike proved and falsified then deleted; nightly-2026-08-01 pinned for the coverage job and baked into scripts/nr-coverage.sh, the first candidate tried, no rejections needed. — cargo kani --version reads cargo-kani 0.67.0; --output-format offers regular/terse/old (no structured format); no [package.metadata.kani] table needed. cargo-llvm-cov 0.9.1 has no --fail-under-branches flag at all (only functions/lines/file-lines/regions), confirming the gate must read the JSON export rather than a CLI flag. Full tool-fact strings recorded in 02-01-SUMMARY.md for plans 02-03 and 02-04 to consume without re-running anything.
 - [Phase 02]: 02-01: Fixed nr-coverage.sh's missing-file check (Rule 1 - bug) to exclude lib.rs by name, since a function-free file can never appear in an LLVM source-coverage report and the plan's own literal check made the gate permanently red on a fully-covered spike. — crates/stop/src/lib.rs is a doc comment plus pub mod declarations only, matching the existing crates/histogram/src/lib.rs convention. Verified empirically: a two-test spike that was 100 percent branch-covered still made the plan's own script exit 1, citing lib.rs as not instrumented, because LLVM's coverage instrumentation never lists a file with zero coverable regions. Excluded lib.rs by name with a comment flagging that the exclusion needs revisiting if lib.rs ever gains real logic. Verified by re-running both the fully-covered (exit 0) and regressed (exit 1, correct file named) spikes. Committed in 5717b50.
 - [Phase 02]: 02-01: roadmap update-plan-progress silently no-ops on the zero-padded phase arg (02) again, reporting updated:true with no actual table change; the unpadded arg (2) worked. Same recurring class as 01-02's already-documented finding. — ROADMAP.md's own progress table row starts with the unpadded number (2. Proven emergency_stop), so roadmap.cjs's table-row regex found no match against the zero-padded arg while still returning updated:true. Verified by grepping the table row before and after each call. Not patched here (out of scope, the shared CLI lives outside this repository); recorded so the next plan passes the unpadded phase number.
+- [Phase 02]: 02-02: requirements-completed left empty for STOP-01/02/03 despite appearing in this plan's own frontmatter requirements field, matching this project's established precedent (01-09, 01-18, 01-20 through 01-25, 01-23's PLAT-03 entry) of not checking off a requirement until its full evidentiary bar is met. D-46 says the first three Kani harness families establish STOP-01 through STOP-03 mechanically, and the roadmap calls STOP-03 a proven guarantee; this plan delivers the code and example-based tests those families will be proved over, not the mechanized proof. Plan 02-03 should mark them complete once its Kani harnesses pass.
+- [Phase 02]: 02-02: Added workspace.lints.rust.unexpected_cfgs declaring cfg(kani) to the root Cargo.toml (Rule 3, blocking). The plan's own mandated #[cfg_attr(kani, ...)] annotations on State/Cause/Event otherwise fail rustc's check-cfg lint, which -D warnings promotes to a hard error under the workspace's own clippy gate every task's acceptance criteria requires. Declared workspace-wide since crates/stop/Cargo.toml already has [lints] workspace = true, the only path that reaches it.
+- [Phase 02]: 02-02: consumer.rs's emit() discards the permit with let _ = permit; rather than the plan's literal drop(permit) (Rule 1, bug): OutputPermit has no Drop impl, so an explicit drop() call trips clippy::drop_non_drop, denied workspace-wide via clippy::all. Same by-value consumption, no lint violation.
+- [Phase 02]: 02-02: Reworded one clause of latch.rs's own module doc (Rule 1, bug): the plan's literal prescribed text used the token compare_exchange(AcqRel, Acquire) in prose, a third literal occurrence of compare_exchange in the file, colliding with the plan's own acceptance grep expecting exactly 2 (the two real call sites). Reworded to keep identical technical content without the colliding token, matching this project's own established precedent for the same class of collision (01-14).
 
 ### Pending Todos
 
@@ -282,8 +287,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-15T05:48:23.660Z
-Stopped at: Completed 02-01-PLAN.md (crates/stop scaffold; Kani 0.67.0 and cargo-llvm-cov 0.9.1 confirmed in-workspace; scripts/nr-coverage.sh committed)
-Resume file: 02-02-PLAN.md
+Last session: 2026-09-15T06:15:44.270Z
+Stopped at: Completed 02-02-PLAN.md (state machine, capability gate, and atomic latch for nr-stop; 27 tests, all under crates/stop/tests/)
+Resume file: 02-03-PLAN.md
 
 Next: plan 01-15 (wave 22), the rig install runbook and the last plan of the phase. Three blocking human-action checkpoints, all needing the rig: deploy the repository and a scoped push credential to /opt/neurorust, install the systemd units and drive one full loop by hand, then leave the machine alone and confirm the first scheduled fire. Task 3 waits for the coming Sunday by design and accepts two outcomes, a run that happened or a refusal recorded as a coverage gap under D-08. It closes BENCH-08 and PLAT-02, and owns the six findings in deferred-items.md.

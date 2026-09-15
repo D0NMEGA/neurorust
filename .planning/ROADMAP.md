@@ -133,7 +133,7 @@ recording as a pass.
 
 Plans:
 - [x] 02-01-PLAN.md - Crate scaffold, pinned Kani, pinned coverage nightly, both tools confirmed in this workspace [wave 0]
-- [ ] 02-02-PLAN.md - The state machine, the capability gate, the modelled consumer and the latch [wave 1]
+- [x] 02-02-PLAN.md - The state machine, the capability gate, the modelled consumer and the latch [wave 1]
 - [ ] 02-03-PLAN.md - The four Kani harness families and the committed proof report [wave 2]
 - [ ] 02-04-PLAN.md - The blocking Kani gate and the 100 percent branch coverage gate, both non-vacuous [wave 3]
 - [ ] 02-05-PLAN.md - The published proof-scope claim and the Phase 6 output gate contract [wave 4]
@@ -237,7 +237,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Trustworthy measurement | 26/27 | In Progress|  |
-| 2. Proven emergency_stop | 1/9 | In Progress|  |
+| 2. Proven emergency_stop | 2/9 | In Progress|  |
 | 3. Deterministic substrate | 0/TBD | Not started | - |
 | 4. Lock-free transport | 0/TBD | Not started | - |
 | 5. Instrumented pipeline | 0/TBD | Not started | - |
