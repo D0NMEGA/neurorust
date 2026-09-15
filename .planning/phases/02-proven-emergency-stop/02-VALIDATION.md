@@ -1,8 +1,8 @@
 ---
 phase: 2
 slug: proven-emergency-stop
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-09-14
 ---
@@ -90,11 +90,20 @@ STOP-06, but running them the other way round lets coverage gaps hide behind rig
 
 ## Validation Sign-Off
 
-- [ ] All tasks have an automated verify or a Wave 0 dependency
-- [ ] Sampling continuity: no 3 consecutive tasks without an automated verify
-- [ ] Wave 0 covers every MISSING reference above
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+Signed off 2026-09-15 against the nine plans (02-01 through 02-09, 25 tasks), after
+`donny-plan-checker` verified each item. `wave_0_complete` stays false until wave 0 actually
+runs.
 
-**Approval:** pending
+- [x] All tasks have an automated verify or a Wave 0 dependency
+- [x] Sampling continuity: no 3 consecutive tasks without an automated verify.
+      One reviewed exception: plan 02-08 (wave 7) has one automated verify across three tasks,
+      because all three are `checkpoint:human-action` on the physical rig. A human is blocking
+      at every task boundary there, which is stronger than the automated sampling this rule
+      approximates, and this requirement was already designated manual-only in the
+      Manual-Only Verifications table above, written before any plan existed.
+- [x] Wave 0 covers every MISSING reference above (plan 02-01)
+- [x] No watch-mode flags
+- [x] Feedback latency < 60s
+- [x] `nyquist_compliant: true` set in frontmatter
+
+**Approval:** approved 2026-09-15
