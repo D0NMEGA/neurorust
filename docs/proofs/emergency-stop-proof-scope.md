@@ -123,8 +123,14 @@ every harness named above still appears and the successful-verification count st
 
 `crates/stop` reports 100 percent branch coverage, 6 of 6 branches, under `cargo-llvm-cov` on
 the pinned dated nightly, scoped to this crate alone (D-53); the rest of the workspace carries no
-coverage gate. Branch coverage says that every branch in `crates/stop` was taken by some test in
-the existing suite. It does not say that every behaviour of the crate is correct: coverage is a
+coverage gate. Function, region and line coverage are not 100 percent: 16 of 17 functions
+(94.1 percent), 134 of 137 regions (97.8 percent), 108 of 111 lines (97.3 percent). The entire
+gap is one function, `EmergencyStop::default()` in `latch.rs`, a one-line delegation to
+`Self::new()` that no test calls; it has no branches of its own, so it does not affect the metric
+this gate enforces. STOP-06 and D-53 both scope the gate to branches, and neither
+`cargo-llvm-cov` 0.9.1 nor this script gates on the other three figures. Branch coverage says
+that every branch in `crates/stop` was taken by some test in the existing suite. It does not say
+that every behaviour of the crate is correct: coverage is a
 completeness measure on the tests that ran, not a correctness measure on the code they exercised.
 The eleven Kani harnesses above are the correctness claim; this figure only says the branches
 they and the ordinary test suite exercise were not skipped by accident.
