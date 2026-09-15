@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-05-PLAN.md (the D-48 proof-scope note and D-45 Phase 6 output gate contract, human-reviewed and approved with one required coverage addition; STOP-04 closed)
-last_updated: "2026-09-15T16:07:18.500Z"
+stopped_at: "Completed 02-06-PLAN.md (the nr-stop-harness measurement core: clock, scheduling, stand-in loop, D-35 characterisation)"
+last_updated: "2026-09-15T17:57:14.236Z"
 last_activity: 2026-09-15
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 36
-  completed_plans: 31
-  percent: 86
+  completed_plans: 32
+  percent: 89
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 2 (Proven emergency_stop) — EXECUTING
-Plan: 6 of 9
+Plan: 7 of 9
   The BENCH-08 loop has closed once end to end. On 2026-09-10 the rig produced
   2026-09-10-precision3591-weekly by itself and pushed it as bc28e5e, authored by
   neurorust-rig with nobody logged in: 15/15 preconditions pass, run_class weekly,
@@ -116,7 +116,7 @@ Plan: 6 of 9
 Status: Ready to execute
 Last activity: 2026-09-15
 
-Progress: [█████████░] 86%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
@@ -164,6 +164,7 @@ Progress: [█████████░] 86%
 | Phase 02 P03 | 21min | 2 tasks | 4 files |
 | Phase 02 P04 | 17min | 2 tasks | 3 files |
 | Phase 02 P05 | 15min | 3 tasks | 7 files |
+| Phase 02 P06 | 52min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -278,6 +279,12 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-05: D-07 precedent recorded: 'reaches main' means reaching the shared remote, not local main, so tasks 1 and 2's commits (080c099, 617c2da) made before task 3's human review stay unamended and unsquashed after approval, since origin/main never received them in the meantime. Plan 01-03 already worked this way in practice; this plan writes the reading down for every future checkpoint reviewing a published claim.
 - [Phase 02]: 02-05: human review of the D-48 scope note required one addition before approval: the Coverage section named only the 100 percent branch figure; added function (16/17, 94.1 percent), region (134/137, 97.8 percent) and line (108/111, 97.3 percent), naming EmergencyStop::default() as the sole, branch-free gap. Re-derived from a fresh scripts/nr-coverage.sh run rather than copied from 02-04-SUMMARY.md, though the numbers agree exactly. Landed as its own commit, 017a02b.
 - [Phase 02]: 02-05: STOP-04 closed in REQUIREMENTS.md (checkbox and traceability row both flipped to Complete, orchestrator pointer note removed); STOP-03 stays out of this plan's requirements-completed since plan 02-03 already closed it and this plan's contract only states what Phase 6 must do to keep that guarantee, not complete it a second time.
+- [Phase 02]: 02-06: crates/stop-harness/src/lib.rs added outside every task's own declared file list (Rule 3, blocking) -- the plan's own Cargo.toml text declares only a [[bin]] target, but the plan's own required tests import clock/sched/characterise/trial directly from crates/stop-harness/tests/, which is impossible without a library target. Cargo infers one purely from this file's presence; no Cargo.toml edit was needed.
+- [Phase 02]: 02-06: FixtureClock rebuilt from Cell<usize> (task 2) to AtomicUsize (task 3, Rule 3, blocking) -- run_trials's C: MonotonicRawClock + Sync bound cannot be satisfied by a Cell-backed type, and task 3's own behavior list requires exercising run_trials with a fixture clock across two real threads. External behaviour (programmed sequence, exhausts rather than wraps) is unchanged; task 2's own six tests still pass unmodified.
+- [Phase 02]: 02-06: TrialConfig.require_fifo renamed and broadened to require_realtime_scheduling, now also gating pin_current_thread failures, not only request_fifo as the plan's own text specified (Rule 3, blocking) -- measured directly on this dev host (Apple Silicon, aarch64 macOS): core_affinity::set_for_current returns false unconditionally, for every cpu id, single-threaded or not, contradicting 02-RESEARCH.md's own unverified, medium-confidence claim that macOS gracefully requests highest performance instead of failing. The flag still defaults to fatal on every real code path (main.rs hardcodes true, reachable from no CLI flag); the reference rig runs Linux, where both wrappers call the real syscalls, so D-36's actual guarantee is unaffected.
+- [Phase 02]: 02-06: offset_estimate_ns (characterise.rs) and hot_side_trial/abort_side_trial (trial.rs) introduced as pub functions not literally named in the plan's own action text -- needed because cross_core_offset_ns requires a Sync clock and two real pinned threads that a single-threaded fixture test cannot drive meaningfully, and because TrialOutcome only ever exposes rows, never the EmergencyStop instances a multi-trial run constructs internally, which several of the plan's own named test behaviors need to inspect directly.
+- [Phase 02]: 02-06: sched.rs's own doc comment (not plan text) originally used the literal word unsafe while explaining no unsafe code is used, tripping this plan's own top-level verification grep; reworded to reaches for anything unchecked with identical meaning before it was ever committed. Same class of self-collision already documented at 02-02 deviation 3 and STATE.md 01-14.
+- [Phase 02]: 02-06: requirements-completed left empty for STOP-07 despite appearing in this plan's own requirements frontmatter field, per this plan's own explicit requirements_bookkeeping instruction -- STOP-07 needs an actual measurement on the reference rig, which is plan 02-08. This plan builds the instrument; it does not take the measurement.
 
 ### Pending Todos
 
@@ -299,9 +306,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-15T16:07:18.498Z
-Stopped at: Completed 02-05-PLAN.md (the D-48 proof-scope note and D-45 Phase 6 output gate contract, human-reviewed and approved with one required coverage addition; STOP-04 closed)
-Resume file: None
+Last session: 2026-09-15T17:57:14.232Z
+Stopped at: Completed 02-06-PLAN.md (the nr-stop-harness measurement core: clock, scheduling, stand-in loop, D-35 characterisation)
+Resume file: .planning/phases/02-proven-emergency-stop/02-07-PLAN.md
 
 Next: plan 02-06 (wave 5), the STOP-07 harness's measuring components (clock, scheduling setup,
 stand-in hot path, percentile computation). Autonomous, depends only on 02-04, and runs entirely
