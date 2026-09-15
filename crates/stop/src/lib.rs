@@ -15,4 +15,6 @@ pub mod consumer;
 pub mod event;
 pub mod gate;
 pub mod latch;
+#[cfg(kani)]
+mod proofs;
 pub mod state;
