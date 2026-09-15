@@ -1,13 +1,13 @@
 //! Tests for the output gate capability and the modelled consumer.
 //!
-//! `OutputPermit` has no public constructor by design (D-42, T-2-09), so any test that needs a
-//! real one obtains it through `EmergencyStop::try_permit`, which task 3 adds. Until then, only
-//! the tests that need no permit live here; task 3 appends the permit-consuming tests to this
-//! same file rather than this file inventing a test-only constructor.
+//! `OutputPermit` has no public constructor by design (D-42, T-2-09). The two permit-consuming
+//! tests below obtain real permits through `EmergencyStop::try_permit`, added by task 3, rather
+//! than this file inventing a test-only constructor.
 
 use nr_stop::consumer::ModelledConsumer;
 use nr_stop::event::{Cause, Event};
 use nr_stop::gate::would_issue_permit;
+use nr_stop::latch::EmergencyStop;
 use nr_stop::state::{State, step};
 
 #[test]
@@ -35,4 +35,28 @@ fn permit_supply_closes_on_the_abort_edge() {
 fn consumer_starts_at_zero() {
     let consumer = ModelledConsumer::new();
     assert_eq!(consumer.emitted(), 0);
+}
+
+#[test]
+fn consumer_counts_one_emission_per_permit() {
+    let stop = EmergencyStop::new();
+    let mut consumer = ModelledConsumer::new();
+
+    let first = stop.try_permit().expect("a fresh machine issues permits");
+    consumer.emit(first);
+    let second = stop.try_permit().expect("still running after one emission");
+    consumer.emit(second);
+
+    assert_eq!(consumer.emitted(), 2);
+}
+
+#[test]
+fn consumer_saturates_rather_than_overflowing() {
+    let stop = EmergencyStop::new();
+    let mut consumer = ModelledConsumer::with_emitted(u64::MAX);
+
+    let permit = stop.try_permit().expect("a fresh machine issues permits");
+    consumer.emit(permit);
+
+    assert_eq!(consumer.emitted(), u64::MAX);
 }

@@ -14,4 +14,5 @@
 pub mod consumer;
 pub mod event;
 pub mod gate;
+pub mod latch;
 pub mod state;
