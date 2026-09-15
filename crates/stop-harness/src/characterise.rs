@@ -78,9 +78,16 @@ pub fn offset_estimate_ns(t1: u64, t2: u64, t3: u64) -> Result<i64, Characterise
 }
 
 /// Runs `rounds` ping-pong exchanges between a thread pinned to `cpu_a` and a thread pinned to
-/// `cpu_b`, and returns one [`offset_estimate_ns`] per round. Pinning failures are fatal here,
-/// not best-effort: a cross-core skew measurement that silently ran on the wrong cores would
-/// look measured and would not be (the same concern D-36 names for the abort-latency run).
+/// `cpu_b`, and returns one [`offset_estimate_ns`] per round.
+///
+/// `require_pinning` governs whether a pin failure is fatal, matching
+/// `TrialConfig::require_realtime_scheduling`'s own split (`crate::trial`): `true` on a real run,
+/// where a cross-core skew measurement that silently ran on the wrong cores would look measured
+/// and would not be (the same concern D-36 names for the abort-latency run), and `false` under
+/// this harness's fixture mode, where `core_affinity::set_for_current` returns `false`
+/// unconditionally on the macOS dev host regardless of which cpu id is requested. Without this
+/// bypass, `run_characterise`'s fixture path could never complete on macOS at all, which is
+/// exactly the integration gap plan 02-07's own dry run exists to catch.
 ///
 /// `rounds` and `cpu_a`/`cpu_b` are not validated against the rig's isolated set here; the
 /// caller (plan 02-08's rig invocation) is responsible for passing the isolated cores.
@@ -89,6 +96,7 @@ pub fn cross_core_offset_ns<C: MonotonicRawClock + Sync>(
     cpu_a: usize,
     cpu_b: usize,
     rounds: usize,
+    require_pinning: bool,
 ) -> Result<Vec<i64>, CharacteriseError> {
     let ping = AtomicU64::new(0);
     let pong = AtomicU64::new(0);
@@ -98,7 +106,7 @@ pub fn cross_core_offset_ns<C: MonotonicRawClock + Sync>(
 
     std::thread::scope(|scope| -> Result<Vec<i64>, CharacteriseError> {
         let b_thread = scope.spawn(|| -> Result<Vec<u64>, CharacteriseError> {
-            pin_current_thread(cpu_b)?;
+            pin_for_characterisation(cpu_b, require_pinning)?;
             ready.wait();
             let mut readings = Vec::with_capacity(rounds);
             for round in 1..=rounds as u64 {
@@ -114,7 +122,7 @@ pub fn cross_core_offset_ns<C: MonotonicRawClock + Sync>(
             Ok(readings)
         });
 
-        pin_current_thread(cpu_a)?;
+        pin_for_characterisation(cpu_a, require_pinning)?;
         ready.wait();
         let mut a_readings = Vec::with_capacity(rounds);
         for round in 1..=rounds as u64 {
@@ -141,6 +149,18 @@ pub fn cross_core_offset_ns<C: MonotonicRawClock + Sync>(
             .map(|((t1, t3), t2)| offset_estimate_ns(t1, t2, t3))
             .collect()
     })
+}
+
+/// Pins the calling thread to `cpu`, honouring `require_pinning`: fatal when `true`, tolerated
+/// when `false`. Mirrors `crate::trial::setup_realtime_scheduling`'s own split, scoped to pinning
+/// only, since this function requests no scheduling policy.
+fn pin_for_characterisation(cpu: usize, require_pinning: bool) -> Result<(), CharacteriseError> {
+    if require_pinning {
+        pin_current_thread(cpu)?;
+    } else {
+        let _ = pin_current_thread(cpu);
+    }
+    Ok(())
 }
 
 /// Reads `<sys_root>/devices/system/clocksource/clocksource0/current_clocksource`, trimmed.

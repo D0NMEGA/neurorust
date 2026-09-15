@@ -293,12 +293,13 @@ fn run_characterise(
         &target_cpus,
     )?;
 
+    let require_pinning = !admission.fixture_mode;
     let (overhead_ns, offset_ns) = if admission.fixture_mode {
         let clock = FixtureClock::generated(1_000);
-        measure_characterisation(&clock, iterations, cpu_a, cpu_b, rounds)?
+        measure_characterisation(&clock, iterations, cpu_a, cpu_b, rounds, require_pinning)?
     } else {
         let clock = RawClock;
-        measure_characterisation(&clock, iterations, cpu_a, cpu_b, rounds)?
+        measure_characterisation(&clock, iterations, cpu_a, cpu_b, rounds, require_pinning)?
     };
     let clocksource = current_clocksource(sys_root);
 
@@ -372,16 +373,18 @@ fn run_characterise(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn measure_characterisation<C: MonotonicRawClock + Sync>(
     clock: &C,
     iterations: usize,
     cpu_a: usize,
     cpu_b: usize,
     rounds: usize,
+    require_pinning: bool,
 ) -> anyhow::Result<(Vec<u64>, Vec<i64>)> {
     let overhead = read_overhead_ns(clock, iterations).context("measuring clock read overhead")?;
-    let offsets =
-        cross_core_offset_ns(clock, cpu_a, cpu_b, rounds).context("measuring cross-core offset")?;
+    let offsets = cross_core_offset_ns(clock, cpu_a, cpu_b, rounds, require_pinning)
+        .context("measuring cross-core offset")?;
     Ok((overhead, offsets))
 }
 

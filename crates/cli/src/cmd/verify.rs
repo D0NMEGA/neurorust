@@ -97,6 +97,8 @@ const CAPTURE_GLOBS: &[&str] = &[
     "osnoise*.txt",
     "hwnoise*.txt",
     "rtla-hwnoise*.txt",
+    "abort-latency*.tsv",
+    "clock-characterisation*.tsv",
 ];
 
 /// Exempt tree (b): `crates/*/tests/fixtures/`. Test input, not a published figure.
@@ -1507,6 +1509,8 @@ mod tests {
             "osnoise-top.txt",
             "hwnoise-top.txt",
             "rtla-hwnoise-probe.txt",
+            "abort-latency-33000ns.tsv",
+            "clock-characterisation.tsv",
         ] {
             assert!(is_capture_shaped(name), "{name} should be capture-shaped");
         }

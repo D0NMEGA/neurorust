@@ -36,3 +36,4 @@ nix = { version = "0.31.3", features = ["time"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+assert_cmd = { workspace = true }

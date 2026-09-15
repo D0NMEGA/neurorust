@@ -1202,3 +1202,136 @@ fn rewrite_reports_skips_a_reconstructed_run() {
     );
     assert!(stdout.contains("0 written"), "stdout: {stdout}");
 }
+
+// ---------------------------------------------------------------------------------
+// Plan 02-07, task 3: the stray-capture scan learns the two STOP-07 capture filename
+// shapes, and a stop-harness-generated manifest (no cyclictest tool invocation at
+// all) lands in check_derived_figures' not-re-derivable bucket as a note, never a
+// --strict problem.
+// ---------------------------------------------------------------------------------
+
+/// Writes a run directory shaped like a `nr-stop-harness abort-latency` run: the one tool
+/// invocation is named `nr-stop-harness`, never `cyclictest`, and the one artifact is
+/// `kind: "other"`, naming an `abort-latency*.tsv` file rather than a `.hist`. Derived from
+/// [`MINIMAL_MANIFEST`] by mutation, matching every other manifest-shaping helper in this file,
+/// rather than a second fixture file for one narrow shape.
+fn write_stop_harness_run(measurements_root: &Path, run_id: &str) -> Vec<u8> {
+    let run_dir = measurements_root.join(run_id);
+    fs::create_dir_all(&run_dir).expect("mkdir run dir");
+
+    let capture_bytes = b"trial\tphase_ns\tabort_raw_ns\tobserved_raw_ns\tlatency_ns\n\
+                           0\t100\t1000\t1030\t30\n"
+        .to_vec();
+    let capture_path = run_dir.join("abort-latency-33000ns.tsv");
+    fs::write(&capture_path, &capture_bytes).expect("write raw capture");
+    let blake3 = nr_manifest::blake3_file(&capture_path).expect("hash raw capture");
+
+    let mut manifest: Value = serde_json::from_str(MINIMAL_MANIFEST).expect("fixture parses");
+    manifest["run_id"] = Value::String(run_id.to_string());
+    manifest["run_class"] = Value::String("headline".to_string());
+    manifest["tools"] = serde_json::json!([{
+        "name": "nr-stop-harness",
+        "version": "0.1.0",
+        "argv": ["nr-stop-harness", "abort-latency", "--period-ns", "33000"],
+        "exit_code": 0,
+        "artifact_paths": []
+    }]);
+    manifest["artifacts"] = serde_json::json!([{
+        "path": "abort-latency-33000ns.tsv",
+        "bytes": capture_bytes.len(),
+        "blake3": blake3,
+        "kind": "other",
+        "stored": "in-repo"
+    }]);
+    manifest["excluded_from_series"] = Value::Bool(true);
+    manifest["exclusion_reason"] = Value::String("excluded_from_series: true per D-37".to_string());
+    fs::write(
+        run_dir.join("manifest.json"),
+        serde_json::to_string_pretty(&manifest).expect("serialise manifest"),
+    )
+    .expect("write manifest.json");
+
+    capture_bytes
+}
+
+/// Behavior: a_stray_capture_outside_a_run_directory_is_caught, for the `abort-latency*.tsv`
+/// shape specifically (the existing `verify_rejects_stray_capture_outside_measurements` already
+/// covers `*.hist`; the two new glob entries are the actual change under test here).
+#[test]
+fn verify_rejects_a_stray_stop_harness_capture() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    fs::write(
+        temp.path().join("abort-latency-33000ns.tsv"),
+        b"trial\tphase_ns\tabort_raw_ns\tobserved_raw_ns\tlatency_ns\n",
+    )
+    .expect("write stray capture");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .output()
+        .expect("run verify");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("abort-latency-33000ns.tsv"),
+        "stdout should name the stray file: {stdout}"
+    );
+}
+
+/// Behavior: a_capture_listed_as_an_artifact_is_not_a_stray. The same filename shape, this time
+/// inside a run directory whose manifest lists it with a matching checksum, produces no problem.
+#[test]
+fn a_listed_stop_harness_capture_is_not_a_stray() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    write_stop_harness_run(&measurements, "2026-09-20-precision3591-headline");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .output()
+        .expect("run verify");
+
+    assert!(
+        output.status.success(),
+        "a listed abort-latency*.tsv must not be flagged as a stray: stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// Confirms, empirically rather than by reading `recorded_histogram_bound`'s code alone, what
+/// `check_derived_figures` does with a stop-harness-generated manifest: its one tool invocation
+/// is named `nr-stop-harness`, never `cyclictest`, so `recorded_histogram_bound` finds no
+/// `--histogram=` argument to parse and the run lands in the not-re-derivable bucket as a note,
+/// the same bucket `strict_refuses_to_guess_a_missing_histogram_bound` already exercises for a
+/// cyclictest-shaped manifest with its tools array emptied. `verify.rs` needed no code change for
+/// this: `check_derived_figures` already asks "was a --histogram bound recorded" before it asks
+/// "is there a CyclictestHist artifact", and a stop-harness manifest fails the first, cleaner
+/// question before the second ever matters.
+#[test]
+fn strict_records_a_stop_harness_run_as_not_rederivable() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let measurements = temp.path().join("measurements");
+    fs::create_dir_all(&measurements).expect("mkdir measurements");
+    write_stop_harness_run(&measurements, "2026-09-20-precision3591-headline");
+
+    let output = base_cmd(temp.path(), &measurements)
+        .arg("--strict")
+        .output()
+        .expect("run verify --strict");
+
+    assert!(
+        output.status.success(),
+        "a stop-harness manifest must pass --strict, not-re-derivable is not a problem: \
+         stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("not re-derivable: no recorded --histogram bound"),
+        "stdout: {stdout}"
+    );
+}

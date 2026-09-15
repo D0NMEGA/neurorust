@@ -1,9 +1,20 @@
 #!/bin/bash
 # nr-run-measurement run [nrmeasure run flags...]
+# nr-run-measurement stop-harness characterise [nr-stop-harness characterise flags...]
+# nr-run-measurement stop-harness abort-latency [nr-stop-harness abort-latency flags...]
 #
 # The narrow root entry point for a measurement capture. Installed on the rig at
 # /usr/local/sbin/nr-run-measurement and granted NOPASSWD sudo, the same pattern
 # already used for nr-recon, nr-probe and nr-measure-mode.
+#
+# stop-harness (plan 02-07) extends this script rather than duplicating it: the
+# NOPASSWD grant, the group-writable binary refusal, the sha256 record, the
+# concurrent-run refusal and the TimeoutStartSec backstop all apply exactly as much
+# to a STOP-07 abort-latency run holding SCHED_FIFO on the isolated cores as they do
+# to a cyclictest run holding them. A second script would either duplicate all of
+# that or quietly do without it. "stop-harness" is a wrapper-level token only; it is
+# shifted off below before the real nr-stop-harness subcommand (characterise or
+# abort-latency) is ever forwarded.
 #
 # Why this exists: cyclictest needs SCHED_FIFO, which needs root or CAP_SYS_NICE,
 # and `ulimit -r` is 0 for the operator account with no capability bits on either
@@ -35,14 +46,36 @@ PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 
 BIN=/home/d0nmega/neurorust/target/release/nrmeasure
+STOP_HARNESS_BIN=/home/d0nmega/neurorust/target/release/nr-stop-harness
 MEASUREMENTS_ROOT=/home/d0nmega/neurorust/measurements
 THRESHOLDS=/home/d0nmega/neurorust/config/contamination-thresholds.json
+# One unit name for both subcommands, deliberately not two. A stop-harness abort-latency or
+# characterise run and an nrmeasure run both pin the same isolated cores (6-11), so a second
+# concurrent capture of either kind would contaminate the first exactly the same way two
+# concurrent `run` invocations would; splitting the concurrency check by subcommand would let
+# the two contend with each other invisibly.
 UNIT=nr-measurement
 
-if [ "${1:-}" != "run" ]; then
-    echo "nr-run-measurement: first argument must be 'run', got '${1:-}'" >&2
-    exit 2
-fi
+SUBCOMMAND="${1:-}"
+case "$SUBCOMMAND" in
+    run)
+        RUN_BIN="$BIN"
+        BUILD_HINT="cargo build -p nr-cli --release"
+        ;;
+    stop-harness)
+        RUN_BIN="$STOP_HARNESS_BIN"
+        BUILD_HINT="cargo build -p nr-stop-harness --release"
+        # Drops the wrapper-level "stop-harness" token; "$@" now starts with nr-stop-harness's
+        # own subcommand (characterise or abort-latency), which the binary needs literally.
+        # Always safe: reaching this branch means $1 held "stop-harness", so at least one
+        # positional parameter exists for the default single-count shift to consume.
+        shift
+        ;;
+    *)
+        echo "nr-run-measurement: first argument must be 'run' or 'stop-harness', got '${1:-}'" >&2
+        exit 2
+        ;;
+esac
 
 for arg in "$@"; do
     case "$arg" in
@@ -53,29 +86,29 @@ for arg in "$@"; do
     esac
 done
 
-if [ ! -x "$BIN" ]; then
-    echo "nr-run-measurement: $BIN is missing or not executable." >&2
-    echo "  Build it on the rig: cargo build -p nr-cli --release" >&2
+if [ ! -x "$RUN_BIN" ]; then
+    echo "nr-run-measurement: $RUN_BIN is missing or not executable." >&2
+    echo "  Build it on the rig: $BUILD_HINT" >&2
     exit 2
 fi
 
 # Refuse to exec a binary anyone but root can write. This script runs as root
 # under NOPASSWD sudo, so a group- or world-writable build directory would
 # otherwise turn "permission to take a measurement" into a root shell for any
-# process on the machine that can write to $BIN. This does not stop the
+# process on the machine that can write to $RUN_BIN. This does not stop the
 # operator from replacing their own build output, and it is not meant to.
-BIN_MODE=$(stat -c '%a' "$BIN")
+BIN_MODE=$(stat -c '%a' "$RUN_BIN")
 if [ $(( (8#$BIN_MODE) & 8#022 )) -ne 0 ]; then
-    echo "nr-run-measurement: refusing to exec $BIN: mode $BIN_MODE is group- or world-writable" >&2
-    echo "  fix: chmod go-w $BIN" >&2
+    echo "nr-run-measurement: refusing to exec $RUN_BIN: mode $BIN_MODE is group- or world-writable" >&2
+    echo "  fix: chmod go-w $RUN_BIN" >&2
     exit 2
 fi
 
 # Record which build actually ran. This does not prevent a substitution, but it
 # makes one visible after the fact in the journal.
-echo "nr-run-measurement: exec $BIN"
-echo "  sha256: $(sha256sum "$BIN" | cut -d' ' -f1)"
-echo "  mode:   $(stat -c '%a %U:%G' "$BIN")"
+echo "nr-run-measurement: exec $RUN_BIN"
+echo "  sha256: $(sha256sum "$RUN_BIN" | cut -d' ' -f1)"
+echo "  mode:   $(stat -c '%a %U:%G' "$RUN_BIN")"
 
 # A second concurrent capture would contaminate the first, so a live unit of this
 # name is a refusal rather than something to work around. --collect reaps the
@@ -117,40 +150,84 @@ fi
 # operation timed out. Terminating." A new instrument flag needs a line here or its
 # run is silently truncated. --with-hwnoise and --with-hwlatdetect are mutually
 # exclusive, so summing both is safe; the unused one stays 0.
+#
+# --trials/--period-ns (stop-harness abort-latency, plan 02-07) extend the same rule: neither
+# `run` nor `stop-harness characterise` ever passes them, so TRIALS/PERIOD_NS stay 0 and drop
+# out of the sum for those two.
 DURATION=0
 HWLAT_DURATION=0
 HWNOISE_DURATION=0
+TRIALS=0
+PERIOD_NS=0
 prev=""
 for arg in "$@"; do
     case "$prev" in
         --duration) DURATION="$arg" ;;
         --hwlatdetect-duration) HWLAT_DURATION="$arg" ;;
         --hwnoise-duration) HWNOISE_DURATION="$arg" ;;
+        --trials) TRIALS="$arg" ;;
+        --period-ns) PERIOD_NS="$arg" ;;
     esac
     case "$arg" in
         --duration=*) DURATION="${arg#*=}" ;;
         --hwlatdetect-duration=*) HWLAT_DURATION="${arg#*=}" ;;
         --hwnoise-duration=*) HWNOISE_DURATION="${arg#*=}" ;;
+        --trials=*) TRIALS="${arg#*=}" ;;
+        --period-ns=*) PERIOD_NS="${arg#*=}" ;;
     esac
     prev="$arg"
 done
-case "$DURATION$HWLAT_DURATION$HWNOISE_DURATION" in
+case "$DURATION$HWLAT_DURATION$HWNOISE_DURATION$TRIALS$PERIOD_NS" in
     *[!0-9]*) echo "nr-run-measurement: non-numeric duration" >&2; exit 2 ;;
 esac
-RUNTIME_MAX=$(( DURATION + HWLAT_DURATION + HWNOISE_DURATION + 600 ))
+
+# The bound itself, per subcommand. `run`'s formula is unchanged. stop-harness abort-latency's
+# own real bound is roughly trials * period_ns (one poll period per trial, worst case): the same
+# estimate main.rs itself records into RequestedRun.duration_seconds. stop-harness characterise
+# passes neither --trials nor --period-ns, so MEASURED_SECONDS is 0 and this reduces to the fixed
+# margin alone, which is generous: characterise's own knobs (--iterations, --rounds) are bounded
+# by clock reads and cross-core pings, not wall-clock sleeps, so its real runtime is far under it.
+case "$SUBCOMMAND" in
+    run)
+        RUNTIME_MAX=$(( DURATION + HWLAT_DURATION + HWNOISE_DURATION + 600 ))
+        RUNTIME_DESC="measurement ${DURATION}s + hwlatdetect ${HWLAT_DURATION}s + hwnoise ${HWNOISE_DURATION}s + 600s margin"
+        ;;
+    stop-harness)
+        MEASURED_SECONDS=$(( TRIALS * PERIOD_NS / 1000000000 ))
+        RUNTIME_MAX=$(( MEASURED_SECONDS + 600 ))
+        RUNTIME_DESC="trials*period_ns ${MEASURED_SECONDS}s + 600s margin"
+        ;;
+esac
 
 echo "nr-run-measurement: starting $UNIT.service"
-echo "  runtime bound: ${RUNTIME_MAX}s (measurement ${DURATION}s + hwlatdetect ${HWLAT_DURATION}s + hwnoise ${HWNOISE_DURATION}s + 600s margin)"
+echo "  runtime bound: ${RUNTIME_MAX}s (${RUNTIME_DESC})"
 echo "  watch:  journalctl -fu $UNIT"
 echo "  status: systemctl status $UNIT"
 
-exec /usr/bin/systemd-run \
-    --unit="$UNIT" \
-    --collect \
-    --property=Type=oneshot \
-    --property=TimeoutStartSec="$RUNTIME_MAX" \
-    --property=StandardOutput=journal \
-    --property=StandardError=journal \
-    "$BIN" "$@" \
-    --measurements-root "$MEASUREMENTS_ROOT" \
-    --thresholds "$THRESHOLDS"
+case "$SUBCOMMAND" in
+    run)
+        exec /usr/bin/systemd-run \
+            --unit="$UNIT" \
+            --collect \
+            --property=Type=oneshot \
+            --property=TimeoutStartSec="$RUNTIME_MAX" \
+            --property=StandardOutput=journal \
+            --property=StandardError=journal \
+            "$RUN_BIN" "$@" \
+            --measurements-root "$MEASUREMENTS_ROOT" \
+            --thresholds "$THRESHOLDS"
+        ;;
+    stop-harness)
+        # No --thresholds: nr-stop-harness has no such flag. D-37 excludes this stage from the
+        # contamination-threshold-gated series entirely; there is nothing here to pin.
+        exec /usr/bin/systemd-run \
+            --unit="$UNIT" \
+            --collect \
+            --property=Type=oneshot \
+            --property=TimeoutStartSec="$RUNTIME_MAX" \
+            --property=StandardOutput=journal \
+            --property=StandardError=journal \
+            "$RUN_BIN" "$@" \
+            --measurements-root "$MEASUREMENTS_ROOT"
+        ;;
+esac

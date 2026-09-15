@@ -159,6 +159,64 @@ makes this true: a `Persistent=true` timer would fire a catch-up run at the next
 instead, in conditions that differ from the missed week's, and would silently fill the hole
 that is supposed to stay visible.
 
+## The stop-harness subcommand (plan 02-07)
+
+`nr-run-measurement` accepts a second subcommand, `stop-harness`, which launches
+`nr-stop-harness` (STOP-07 abort latency) instead of `nrmeasure`. It inherits every guard the
+`run` subcommand has: the same NOPASSWD grant (no sudoers change was needed; see below), a pinned
+binary path checked for existence, executability and a non-group-writable mode with its sha256
+and mode printed into the journal, `--measurements-root` pinned and refused if a caller passes it,
+launch through the same `systemd-run` transient unit for the same disconnect-immediately reason
+`run` uses, and a `TimeoutStartSec` backstop derived from what was actually requested rather than
+hard-coded.
+
+`stop-harness` shares `run`'s own unit name (`nr-measurement`), not a second one: both subcommands
+pin the same isolated cores (6-11 on the rig), so a concurrent capture of either kind would
+contaminate the other exactly as two concurrent `run` invocations would. Only one of `run` or
+`stop-harness` can be in flight at a time.
+
+Unlike `run`, `stop-harness` takes no `--thresholds`: `nr-stop-harness` has no such flag, and
+D-37 excludes the `emergency_stop.abort_latency` stage from the contamination-threshold-gated
+series in this phase, so there is nothing to pin.
+
+Two invocations, one per published period:
+
+```sh
+sudo /usr/local/sbin/nr-run-measurement stop-harness characterise \
+    --rig-slug precision3591
+
+sudo /usr/local/sbin/nr-run-measurement stop-harness abort-latency \
+    --period-ns 33000 --trials 200000 --rig-slug precision3591 \
+    --characterisation-tsv /home/d0nmega/neurorust/measurements/<characterise-run-id>/clock-characterisation.tsv
+
+sudo /usr/local/sbin/nr-run-measurement stop-harness abort-latency \
+    --period-ns 1000000 --trials 200000 --rig-slug precision3591 \
+    --characterisation-tsv /home/d0nmega/neurorust/measurements/<characterise-run-id>/clock-characterisation.tsv
+```
+
+`--hot-cpu`, `--abort-cpu`, `--cpu-a`, `--cpu-b` and `--priority` all default to the rig's real
+isolated-core placement (7, 8, 7, 8, 80) and do not need to be passed; `--characterisation-tsv` is
+optional but should point at the characterise run's own output, so the published abort-latency
+report carries the D-35 decomposition figures rather than stating them unavailable.
+
+A refusal looks exactly like a `run` refusal: a diagnostic on stderr and a non-zero exit before
+`systemd-run` is ever invoked (an unknown subcommand, a pinned path passed on the command line, a
+missing or group-writable binary), or, once the unit starts, an `ATTEMPT.json` in what would have
+been the run directory naming the precondition that refused it (the rig boots untuned, so a
+`characterise` or `abort-latency` run taken before `rt-tuning.service` has been applied refuses on
+the governor check; this is the mechanism working, not a defect to route around).
+
+Output lands under `$MEASUREMENTS_ROOT` (`/home/d0nmega/neurorust/measurements`), one directory
+per run, named by the same `<date>-<rig-slug>-<run-class>[-NN]` convention `run` already uses:
+`recon` for `characterise`, `headline` for `abort-latency`. Watch and read the result the same way
+as `run`'s own section above (`journalctl -fu nr-measurement`).
+
+No sudoers change was needed for this subcommand. `deploy/sudoers/nr-measurement` grants
+`/usr/local/sbin/nr-run-measurement` by script path with no argument restriction in the sudoers
+line itself; the script is what restricts arguments (the `--measurements-root`/`--thresholds` pin
+loop), and that loop already covers whatever `"$@"` holds regardless of which subcommand token
+leads it.
+
 ## Why `TimeoutStartSec`, not its sibling
 
 `neurorust-measure.service` is `Type=oneshot`, and for a oneshot unit the whole run is the
