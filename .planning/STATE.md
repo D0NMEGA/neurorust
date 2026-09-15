@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-02-PLAN.md (state machine, capability gate, and atomic latch for nr-stop; 27 tests, all under crates/stop/tests/)
-last_updated: "2026-09-15T06:15:44.272Z"
+stopped_at: Completed 02-03-PLAN.md (eleven Kani harnesses across D-46's four families, all verifying; docs/proofs/ and the generated D-54 proof report)
+last_updated: "2026-09-15T06:35:16.893Z"
 last_activity: 2026-09-15
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 36
-  completed_plans: 28
-  percent: 78
+  completed_plans: 29
+  percent: 81
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 2 (Proven emergency_stop) — EXECUTING
-Plan: 3 of 9
+Plan: 4 of 9
   The BENCH-08 loop has closed once end to end. On 2026-09-10 the rig produced
   2026-09-10-precision3591-weekly by itself and pushed it as bc28e5e, authored by
   neurorust-rig with nobody logged in: 15/15 preconditions pass, run_class weekly,
@@ -116,7 +116,7 @@ Plan: 3 of 9
 Status: Ready to execute
 Last activity: 2026-09-15
 
-Progress: [████████░░] 78%
+Progress: [████████░░] 81%
 
 ## Performance Metrics
 
@@ -161,6 +161,7 @@ Progress: [████████░░] 78%
 | Phase 01 P14 | 52min | 3 tasks | 17 files |
 | Phase 02 P01 | 20min | 3 tasks | 5 files |
 | Phase 02 P02 | 24min | 3 tasks | 10 files |
+| Phase 02 P03 | 21min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -266,6 +267,8 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-02: Added workspace.lints.rust.unexpected_cfgs declaring cfg(kani) to the root Cargo.toml (Rule 3, blocking). The plan's own mandated #[cfg_attr(kani, ...)] annotations on State/Cause/Event otherwise fail rustc's check-cfg lint, which -D warnings promotes to a hard error under the workspace's own clippy gate every task's acceptance criteria requires. Declared workspace-wide since crates/stop/Cargo.toml already has [lints] workspace = true, the only path that reaches it.
 - [Phase 02]: 02-02: consumer.rs's emit() discards the permit with let _ = permit; rather than the plan's literal drop(permit) (Rule 1, bug): OutputPermit has no Drop impl, so an explicit drop() call trips clippy::drop_non_drop, denied workspace-wide via clippy::all. Same by-value consumption, no lint violation.
 - [Phase 02]: 02-02: Reworded one clause of latch.rs's own module doc (Rule 1, bug): the plan's literal prescribed text used the token compare_exchange(AcqRel, Acquire) in prose, a third literal occurrence of compare_exchange in the file, colliding with the plan's own acceptance grep expecting exactly 2 (the two real call sites). Reworded to keep identical technical content without the colliding token, matching this project's own established precedent for the same class of collision (01-14).
+- [Phase 02]: 02-03: Wrote eleven Kani proof harnesses, not ten. The plan's own action text spells out ten named harnesses across families 1-3 plus a separately-boxed eleventh (consumer_emit_never_overflows) for family 4, and its own acceptance criteria pre-authorize this exact outcome (if the executor lands a different final count, the SUMMARY must state the exact final list). Documented, not a deviation. requirements-completed now covers STOP-01 through STOP-04, closing the gap 02-02 left open pending this plan's proof.
+- [Phase 02]: 02-03: Fixed a self-collision (Rule 1 - Bug) between the plan's own module-doc action text and the plan's own acceptance grep: incorporating the plan's literal sentence about a Kani compare_exchange modelling report put the literal token compare_exchange into proofs.rs, colliding with the same task's own forbidden-token grep. Reworded to compare-exchange, preserving identical technical content, matching this project's own established precedent (02-02's latch.rs collision, STATE.md 01-14).
 
 ### Pending Todos
 
@@ -287,8 +290,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-15T06:15:44.270Z
-Stopped at: Completed 02-02-PLAN.md (state machine, capability gate, and atomic latch for nr-stop; 27 tests, all under crates/stop/tests/)
-Resume file: 02-03-PLAN.md
+Last session: 2026-09-15T06:35:16.891Z
+Stopped at: Completed 02-03-PLAN.md (eleven Kani harnesses across D-46's four families, all verifying; docs/proofs/ and the generated D-54 proof report)
+Resume file: None
 
 Next: plan 01-15 (wave 22), the rig install runbook and the last plan of the phase. Three blocking human-action checkpoints, all needing the rig: deploy the repository and a scoped push credential to /opt/neurorust, install the systemd units and drive one full loop by hand, then leave the machine alone and confirm the first scheduled fire. Task 3 waits for the coming Sunday by design and accepts two outcomes, a run that happened or a refusal recorded as a coverage gap under D-08. It closes BENCH-08 and PLAT-02, and owns the six findings in deferred-items.md.

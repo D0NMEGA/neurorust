@@ -71,10 +71,10 @@ Completed and measured 2026-08-28. Raw captures and rig manifest in
 
 ### emergency_stop
 
-- [ ] **STOP-01**: `emergency_stop` is a finite state machine with an explicit reachable state space
-- [ ] **STOP-02**: From any reachable state, an abort signal drives the system to a defined safe state
-- [ ] **STOP-03**: No decoder output is produced for the remainder of a session after a stop
-- [ ] **STOP-04**: Kani proves, across the enumerated reachable state space, that the transition
+- [x] **STOP-01**: `emergency_stop` is a finite state machine with an explicit reachable state space
+- [x] **STOP-02**: From any reachable state, an abort signal drives the system to a defined safe state
+- [x] **STOP-03**: No decoder output is produced for the remainder of a session after a stop
+- [x] **STOP-04**: Kani proves, across the enumerated reachable state space, that the transition
       function is total, that the latch and output-gate invariants hold, and that no panic or
       arithmetic overflow is reachable. The module forbids `unsafe`, so the undefined-behaviour
       classes a model checker would otherwise carry are excluded by the type system instead;
@@ -202,10 +202,10 @@ roadmap existed and map to no phase; they are listed for completeness.
 | CHAN-05 | Phase 4 | Pending |
 | CHAN-06 | Phase 4 | Pending |
 | CHAN-07 | Phase 4 | Pending |
-| STOP-01 | Phase 2 | Pending |
-| STOP-02 | Phase 2 | Pending |
-| STOP-03 | Phase 2 | Pending |
-| STOP-04 | Phase 2 | Pending |
+| STOP-01 | Phase 2 | Complete |
+| STOP-02 | Phase 2 | Complete |
+| STOP-03 | Phase 2 | Complete |
+| STOP-04 | Phase 2 | Complete |
 | STOP-05 | Phase 2 | Pending |
 | STOP-06 | Phase 2 | Pending |
 | STOP-07 | Phase 2 | Pending |
