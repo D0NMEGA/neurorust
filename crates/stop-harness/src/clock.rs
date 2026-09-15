@@ -7,7 +7,7 @@
 //! chosen clock for WIRE-03's frame header, so the two sides of the system agree on what time
 //! means. That requires an explicit `clock_gettime` call.
 
-use std::cell::Cell;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Reads a monotonic raw clock. `None` means the clock could not be read at all; every caller
 /// must treat that as a refusal to produce a figure, never as a zero.
@@ -44,10 +44,15 @@ impl MonotonicRawClock for RawClock {
 
 /// A programmed sequence of readings, for tests. Available on every platform, which is what
 /// lets this crate's platform-independent behaviour be exercised by `cargo test` on macOS.
-#[derive(Debug, Clone)]
+///
+/// Backed by an atomic index, not a `Cell`, so one instance can be shared by reference across
+/// the two real threads `trial::run_trials` spawns (`C: MonotonicRawClock + Sync`): the
+/// abort-latency trial loop and the D-35 cross-core offset measurement are both exercised by
+/// tests through this same fixture, and both are inherently multi-threaded.
+#[derive(Debug)]
 pub struct FixtureClock {
     readings: Vec<u64>,
-    next: Cell<usize>,
+    next: AtomicUsize,
 }
 
 impl FixtureClock {
@@ -55,7 +60,7 @@ impl FixtureClock {
     pub fn new(readings: impl Into<Vec<u64>>) -> Self {
         Self {
             readings: readings.into(),
-            next: Cell::new(0),
+            next: AtomicUsize::new(0),
         }
     }
 }
@@ -63,13 +68,11 @@ impl FixtureClock {
 impl MonotonicRawClock for FixtureClock {
     /// Returns the next programmed reading, or `None` once the sequence is exhausted.
     /// Exhausted rather than wrapping, so a test can never accidentally measure a wrapped
-    /// interval: once `None` is returned, every later call also returns `None`.
+    /// interval: once every reading has been claimed, every later call also returns `None`.
+    /// `fetch_add` hands out a strictly increasing, never-repeated index to concurrent callers,
+    /// so two threads reading the same fixture never observe the same reading twice.
     fn now_ns(&self) -> Option<u64> {
-        let index = self.next.get();
-        let value = self.readings.get(index).copied();
-        if value.is_some() {
-            self.next.set(index + 1);
-        }
-        value
+        let index = self.next.fetch_add(1, Ordering::SeqCst);
+        self.readings.get(index).copied()
     }
 }
