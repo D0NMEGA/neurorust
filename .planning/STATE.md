@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Completed 02-06-PLAN.md (the nr-stop-harness measurement core: clock, scheduling, stand-in loop, D-35 characterisation)"
-last_updated: "2026-09-15T17:57:14.236Z"
+stopped_at: "Completed 02-07-PLAN.md (the STOP-07 evidence pipeline: preconditions, manifest, metrics entry, D-34 rendering, end-to-end fixture dry run, rig entry point)"
+last_updated: "2026-09-15T20:45:31.610Z"
 last_activity: 2026-09-15
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 36
-  completed_plans: 32
-  percent: 89
+  completed_plans: 33
+  percent: 92
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 2 (Proven emergency_stop) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
   The BENCH-08 loop has closed once end to end. On 2026-09-10 the rig produced
   2026-09-10-precision3591-weekly by itself and pushed it as bc28e5e, authored by
   neurorust-rig with nobody logged in: 15/15 preconditions pass, run_class weekly,
@@ -116,7 +116,7 @@ Plan: 7 of 9
 Status: Ready to execute
 Last activity: 2026-09-15
 
-Progress: [█████████░] 89%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -165,6 +165,7 @@ Progress: [█████████░] 89%
 | Phase 02 P04 | 17min | 2 tasks | 3 files |
 | Phase 02 P05 | 15min | 3 tasks | 7 files |
 | Phase 02 P06 | 52min | 3 tasks | 16 files |
+| Phase 02 P07 | 63min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -285,6 +286,10 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-06: offset_estimate_ns (characterise.rs) and hot_side_trial/abort_side_trial (trial.rs) introduced as pub functions not literally named in the plan's own action text -- needed because cross_core_offset_ns requires a Sync clock and two real pinned threads that a single-threaded fixture test cannot drive meaningfully, and because TrialOutcome only ever exposes rows, never the EmergencyStop instances a multi-trial run constructs internally, which several of the plan's own named test behaviors need to inspect directly.
 - [Phase 02]: 02-06: sched.rs's own doc comment (not plan text) originally used the literal word unsafe while explaining no unsafe code is used, tripping this plan's own top-level verification grep; reworded to reaches for anything unchecked with identical meaning before it was ever committed. Same class of self-collision already documented at 02-02 deviation 3 and STATE.md 01-14.
 - [Phase 02]: 02-06: requirements-completed left empty for STOP-07 despite appearing in this plan's own requirements frontmatter field, per this plan's own explicit requirements_bookkeeping instruction -- STOP-07 needs an actual measurement on the reference rig, which is plan 02-08. This plan builds the instrument; it does not take the measurement.
+- [Phase 02]: NR_STOP_FACTS_FIXTURE unified into one fixture-mode switch (facts/clock/interference/scheduling together), not a per-RunClass allow-list, so a fixture-backed Headline run can produce a metrics entry as task 3 requires
+- [Phase 02]: Fixed a pre-existing bug in characterise.rs: cross_core_offset_ns pinned unconditionally with no fixture bypass, so the characterise subcommand could never succeed on macOS; added require_pinning, mirroring trial.rs's existing require_realtime_scheduling split
+- [Phase 02]: record_artifact's kind parameter dropped in favor of hardcoding ArtifactKind::Other internally: every artifact this harness produces genuinely is one
+- [Phase 02]: Both nr-run-measurement subcommands (run, stop-harness) share one systemd concurrency unit name rather than two, since both pin the same isolated core set on the rig
 
 ### Pending Todos
 
@@ -306,9 +311,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-15T17:57:14.232Z
-Stopped at: Completed 02-06-PLAN.md (the nr-stop-harness measurement core: clock, scheduling, stand-in loop, D-35 characterisation)
-Resume file: .planning/phases/02-proven-emergency-stop/02-07-PLAN.md
+Last session: 2026-09-15T20:45:31.607Z
+Stopped at: Completed 02-07-PLAN.md (the STOP-07 evidence pipeline: preconditions, manifest, metrics entry, D-34 rendering, end-to-end fixture dry run, rig entry point)
+Resume file: None
 
 Next: plan 02-06 (wave 5), the STOP-07 harness's measuring components (clock, scheduling setup,
 stand-in hot path, percentile computation). Autonomous, depends only on 02-04, and runs entirely
