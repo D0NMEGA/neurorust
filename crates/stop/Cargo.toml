@@ -1,0 +1,12 @@
+[package]
+name = "nr-stop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The neurorust emergency_stop state machine and output gate"
+publish = false
+
+[lints]
+workspace = true
