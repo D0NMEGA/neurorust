@@ -1,0 +1,38 @@
+[package]
+name = "nr-stop-harness"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "STOP-07 abort latency harness for the neurorust reference rig"
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "nr-stop-harness"
+path = "src/main.rs"
+
+[dependencies]
+nr-stop = { workspace = true }
+nr-histogram = { workspace = true }
+nr-metrics = { workspace = true }
+nr-capture = { workspace = true }
+nr-manifest = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+time = { workspace = true }
+blake3 = { workspace = true }
+thread-priority = { workspace = true }
+core_affinity = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { version = "0.31.3", features = ["time"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
