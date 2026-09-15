@@ -4,7 +4,9 @@ use nr_stop::latch::EmergencyStop;
 use nr_stop::state::State;
 
 use nr_stop_harness::clock::FixtureClock;
-use nr_stop_harness::trial::{TrialConfig, TrialError, abort_side_trial, hot_side_trial, run_trials};
+use nr_stop_harness::trial::{
+    TrialConfig, TrialError, abort_side_trial, hot_side_trial, run_trials,
+};
 
 /// Builds a fixture clock whose consecutive values jump by a step far larger than any
 /// `period_ns`/phase used in these tests. A busy-wait's deadline check depends only on which
@@ -12,10 +14,21 @@ use nr_stop_harness::trial::{TrialConfig, TrialError, abort_side_trial, hot_side
 /// busy-wait in this file to a small, fixed number of reads regardless of real thread-scheduling
 /// timing. `values` just needs to comfortably cover the total reads every thread in a run takes
 /// across all its trials; it is not a measurement of real time.
+///
+/// The margin has to be generous rather than tight: this whole test binary runs its `#[test]`
+/// functions in parallel by default (`cargo test`'s own default harness, which is also exactly
+/// how CI invokes it), so several of these thread-per-trial loops compete for real CPU time at
+/// once. A budget sized for one trial running alone was measured to be too tight once several
+/// tests' threads contend together; 500,000 covers even a single, unlucky, contended trial with
+/// wide headroom, at a construction cost too small to matter (well under a millisecond).
 fn generous_clock(values: usize) -> FixtureClock {
     const STEP: u64 = 10_000_000;
     FixtureClock::new((0..values as u64).map(|i| i * STEP).collect::<Vec<_>>())
 }
+
+/// The default budget: generous enough for a single trial under full test-suite contention.
+/// Tests running many trials pass their own, larger budget.
+const AMPLE: usize = 500_000;
 
 fn safe_config(trials: usize, period_ns: u64, seed: u64) -> TrialConfig {
     TrialConfig {
@@ -27,13 +40,13 @@ fn safe_config(trials: usize, period_ns: u64, seed: u64) -> TrialConfig {
         abort_cpu: 1,
         priority: 10,
         seed,
-        require_fifo: false,
+        require_realtime_scheduling: false,
     }
 }
 
 #[test]
 fn a_trial_records_the_interval_the_decision_defines() {
-    let clock = generous_clock(2_000);
+    let clock = generous_clock(AMPLE);
     let config = safe_config(1, 1_000, 42);
 
     let outcome = run_trials(&clock, &config).expect("fixture provides ample headroom");
@@ -46,7 +59,7 @@ fn a_trial_records_the_interval_the_decision_defines() {
 #[test]
 fn the_hot_thread_acknowledges_exactly_once_per_trial() {
     let stop = EmergencyStop::new();
-    let clock = generous_clock(2_000);
+    let clock = generous_clock(AMPLE);
     let barrier = Barrier::new(2);
 
     std::thread::scope(|scope| {
@@ -64,7 +77,7 @@ fn the_hot_thread_acknowledges_exactly_once_per_trial() {
 #[test]
 fn the_abort_record_holds_the_starting_timestamp() {
     let stop = EmergencyStop::new();
-    let clock = generous_clock(2_000);
+    let clock = generous_clock(AMPLE);
     let barrier = Barrier::new(2);
 
     let abort_raw_ns = std::thread::scope(|scope| {
@@ -77,7 +90,9 @@ fn the_abort_record_holds_the_starting_timestamp() {
         abort_raw_ns
     });
 
-    let record = stop.abort_record().expect("the winning abort publishes a record");
+    let record = stop
+        .abort_record()
+        .expect("the winning abort publishes a record");
     assert_eq!(record.at_raw_ns, abort_raw_ns);
 }
 
@@ -139,7 +154,7 @@ fn a_clock_failure_refuses_rather_than_records_zero() {
 
 #[test]
 fn the_sample_vector_is_preallocated() {
-    let clock = generous_clock(50_000);
+    let clock = generous_clock(AMPLE);
     let config = safe_config(7, 1_000, 7);
 
     let outcome = run_trials(&clock, &config).expect("fixture provides ample headroom");

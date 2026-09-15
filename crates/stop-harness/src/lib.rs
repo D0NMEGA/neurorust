@@ -12,3 +12,4 @@
 pub mod characterise;
 pub mod clock;
 pub mod sched;
+pub mod trial;
