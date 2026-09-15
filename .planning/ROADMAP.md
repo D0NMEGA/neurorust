@@ -136,7 +136,7 @@ Plans:
 - [x] 02-02-PLAN.md - The state machine, the capability gate, the modelled consumer and the latch [wave 1]
 - [x] 02-03-PLAN.md - The four Kani harness families and the committed proof report [wave 2]
 - [x] 02-04-PLAN.md - The blocking Kani gate and the 100 percent branch coverage gate, both non-vacuous [wave 3]
-- [ ] 02-05-PLAN.md - The published proof-scope claim and the Phase 6 output gate contract [wave 4]
+- [x] 02-05-PLAN.md - The published proof-scope claim and the Phase 6 output gate contract [wave 4]
 - [ ] 02-06-PLAN.md - nr-stop-harness: the clock, the scheduling setup, the stand-in loop, the instrument characterisation [wave 5]
 - [ ] 02-07-PLAN.md - nr-stop-harness: preconditions, manifest, metrics entry and the report-both rendering [wave 6]
 - [ ] 02-08-PLAN.md - The two rig captures on the Precision 3591 under the Phase 1 protocol [wave 7]
@@ -237,7 +237,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Trustworthy measurement | 26/27 | In Progress|  |
-| 2. Proven emergency_stop | 4/9 | In Progress|  |
+| 2. Proven emergency_stop | 5/9 | In Progress | - |
 | 3. Deterministic substrate | 0/TBD | Not started | - |
 | 4. Lock-free transport | 0/TBD | Not started | - |
 | 5. Instrumented pipeline | 0/TBD | Not started | - |

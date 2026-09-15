@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-04-PLAN.md (blocking kani and coverage CI gates, both proven to catch a real regression; crates/stop confirmed at 100 percent branch coverage; STOP-05 and STOP-06 closed)
-last_updated: "2026-09-15T06:55:00.635Z"
+stopped_at: Completed 02-05-PLAN.md (the D-48 proof-scope note and D-45 Phase 6 output gate contract, human-reviewed and approved with one required coverage addition; STOP-04 closed)
+last_updated: "2026-09-15T16:07:18.500Z"
 last_activity: 2026-09-15
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 36
-  completed_plans: 30
-  percent: 83
+  completed_plans: 31
+  percent: 86
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 2 (Proven emergency_stop) — EXECUTING
-Plan: 5 of 9
+Plan: 6 of 9
   The BENCH-08 loop has closed once end to end. On 2026-09-10 the rig produced
   2026-09-10-precision3591-weekly by itself and pushed it as bc28e5e, authored by
   neurorust-rig with nobody logged in: 15/15 preconditions pass, run_class weekly,
@@ -116,7 +116,7 @@ Plan: 5 of 9
 Status: Ready to execute
 Last activity: 2026-09-15
 
-Progress: [████████░░] 83%
+Progress: [█████████░] 86%
 
 ## Performance Metrics
 
@@ -163,6 +163,7 @@ Progress: [████████░░] 83%
 | Phase 02 P02 | 24min | 3 tasks | 10 files |
 | Phase 02 P03 | 21min | 2 tasks | 4 files |
 | Phase 02 P04 | 17min | 2 tasks | 3 files |
+| Phase 02 P05 | 15min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -274,6 +275,9 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-04: Fixed nr-coverage.sh missing-file check to also exclude proofs.rs (Rule 1 bug), mirroring 02-01's lib.rs fix -- proofs.rs is cfg(kani)-gated and a normal llvm-cov build, even on the pinned nightly, never compiles it, so it can never appear in the report regardless of test coverage.
 - [Phase 02]: 02-04: Task 2's tdd=true was interpreted as empirical-verification discipline rather than a literal RED/GREEN commit pair, since the production code already existed and was already correct (coverage backfill, not new-feature TDD); executed as one task commit per this project's established one-commit-per-task convention.
 - [Phase 02]: 02-04: Left EmergencyStop::default() untested (94.1 percent function coverage, not 100) -- it has zero branches of its own, D-53 scopes the gate to branches only, and the plan's own text forbids writing tests speculatively beyond the branches a coverage run actually names.
+- [Phase 02]: 02-05: D-07 precedent recorded: 'reaches main' means reaching the shared remote, not local main, so tasks 1 and 2's commits (080c099, 617c2da) made before task 3's human review stay unamended and unsquashed after approval, since origin/main never received them in the meantime. Plan 01-03 already worked this way in practice; this plan writes the reading down for every future checkpoint reviewing a published claim.
+- [Phase 02]: 02-05: human review of the D-48 scope note required one addition before approval: the Coverage section named only the 100 percent branch figure; added function (16/17, 94.1 percent), region (134/137, 97.8 percent) and line (108/111, 97.3 percent), naming EmergencyStop::default() as the sole, branch-free gap. Re-derived from a fresh scripts/nr-coverage.sh run rather than copied from 02-04-SUMMARY.md, though the numbers agree exactly. Landed as its own commit, 017a02b.
+- [Phase 02]: 02-05: STOP-04 closed in REQUIREMENTS.md (checkbox and traceability row both flipped to Complete, orchestrator pointer note removed); STOP-03 stays out of this plan's requirements-completed since plan 02-03 already closed it and this plan's contract only states what Phase 6 must do to keep that guarantee, not complete it a second time.
 
 ### Pending Todos
 
@@ -295,8 +299,21 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-15T06:55:00.633Z
-Stopped at: Completed 02-04-PLAN.md (blocking kani and coverage CI gates, both proven to catch a real regression; crates/stop confirmed at 100 percent branch coverage; STOP-05 and STOP-06 closed)
+Last session: 2026-09-15T16:07:18.498Z
+Stopped at: Completed 02-05-PLAN.md (the D-48 proof-scope note and D-45 Phase 6 output gate contract, human-reviewed and approved with one required coverage addition; STOP-04 closed)
 Resume file: None
 
-Next: plan 01-15 (wave 22), the rig install runbook and the last plan of the phase. Three blocking human-action checkpoints, all needing the rig: deploy the repository and a scoped push credential to /opt/neurorust, install the systemd units and drive one full loop by hand, then leave the machine alone and confirm the first scheduled fire. Task 3 waits for the coming Sunday by design and accepts two outcomes, a run that happened or a refusal recorded as a coverage gap under D-08. It closes BENCH-08 and PLAT-02, and owns the six findings in deferred-items.md.
+Next: plan 02-06 (wave 5), the STOP-07 harness's measuring components (clock, scheduling setup,
+stand-in hot path, percentile computation). Autonomous, depends only on 02-04, and runs entirely
+on the macOS dev host per its own objective; the rig comes later in this same phase (02-08/02-09).
+
+Also still open, in parallel, Phase 1: plan 01-15 (wave 22), the rig install runbook and the last
+plan of the phase. Three blocking human-action checkpoints, all needing the rig: deploy the
+repository and a scoped push credential to /opt/neurorust, install the systemd units and drive one
+full loop by hand, then leave the machine alone and confirm the first scheduled fire. Task 3 waits
+for the coming Sunday by design and accepts two outcomes, a run that happened or a refusal
+recorded as a coverage gap under D-08. It closes BENCH-08 and PLAT-02, and owns the six findings
+in deferred-items.md. Note for whoever picks this up: the "coming Sunday" this text names is
+2026-09-13, which has already passed as of this plan's own completion date (2026-09-15); this plan
+did not check the rig or touch measurements/ or the Phase 1 planning directory, so whether that
+Sunday's fire happened is unverified here and stated only as an open question, not an outcome.
