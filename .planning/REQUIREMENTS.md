@@ -82,8 +82,8 @@ Completed and measured 2026-08-28. Raw captures and rig manifest in
       establishes, and which nothing in the phase establishes
       (proof half done in plan 02-03, eleven harnesses, 132 checks; the published claim is
       plan 02-05 and this box closes there)
-- [ ] **STOP-05**: `cargo kani` passes in CI as a blocking gate
-- [ ] **STOP-06**: The module has 100 percent branch coverage (tarpaulin or llvm-cov)
+- [x] **STOP-05**: `cargo kani` passes in CI as a blocking gate
+- [x] **STOP-06**: The module has 100 percent branch coverage (tarpaulin or llvm-cov)
 - [ ] **STOP-07**: Abort latency is bounded and measured on the reference rig
 
 ### Filter node
@@ -208,8 +208,8 @@ roadmap existed and map to no phase; they are listed for completeness.
 | STOP-02 | Phase 2 | Complete |
 | STOP-03 | Phase 2 | Complete |
 | STOP-04 | Phase 2 | Complete |
-| STOP-05 | Phase 2 | Pending |
-| STOP-06 | Phase 2 | Pending |
+| STOP-05 | Phase 2 | Complete |
+| STOP-06 | Phase 2 | Complete |
 | STOP-07 | Phase 2 | Pending |
 | FILT-01 | Phase 5 | Pending |
 | FILT-02 | Phase 5 | Pending |

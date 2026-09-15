@@ -3,15 +3,15 @@ donny_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-03-PLAN.md (eleven Kani harnesses across D-46's four families, all verifying; docs/proofs/ and the generated D-54 proof report)
-last_updated: "2026-09-15T06:35:16.893Z"
+stopped_at: Completed 02-04-PLAN.md (blocking kani and coverage CI gates, both proven to catch a real regression; crates/stop confirmed at 100 percent branch coverage; STOP-05 and STOP-06 closed)
+last_updated: "2026-09-15T06:55:00.635Z"
 last_activity: 2026-09-15
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 36
-  completed_plans: 29
-  percent: 81
+  completed_plans: 30
+  percent: 83
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 ## Current Position
 
 Phase: 2 (Proven emergency_stop) — EXECUTING
-Plan: 4 of 9
+Plan: 5 of 9
   The BENCH-08 loop has closed once end to end. On 2026-09-10 the rig produced
   2026-09-10-precision3591-weekly by itself and pushed it as bc28e5e, authored by
   neurorust-rig with nobody logged in: 15/15 preconditions pass, run_class weekly,
@@ -116,7 +116,7 @@ Plan: 4 of 9
 Status: Ready to execute
 Last activity: 2026-09-15
 
-Progress: [████████░░] 81%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
@@ -162,6 +162,7 @@ Progress: [████████░░] 81%
 | Phase 02 P01 | 20min | 3 tasks | 5 files |
 | Phase 02 P02 | 24min | 3 tasks | 10 files |
 | Phase 02 P03 | 21min | 2 tasks | 4 files |
+| Phase 02 P04 | 17min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -269,6 +270,10 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-02: Reworded one clause of latch.rs's own module doc (Rule 1, bug): the plan's literal prescribed text used the token compare_exchange(AcqRel, Acquire) in prose, a third literal occurrence of compare_exchange in the file, colliding with the plan's own acceptance grep expecting exactly 2 (the two real call sites). Reworded to keep identical technical content without the colliding token, matching this project's own established precedent for the same class of collision (01-14).
 - [Phase 02]: 02-03: Wrote eleven Kani proof harnesses, not ten. The plan's own action text spells out ten named harnesses across families 1-3 plus a separately-boxed eleventh (consumer_emit_never_overflows) for family 4, and its own acceptance criteria pre-authorize this exact outcome (if the executor lands a different final count, the SUMMARY must state the exact final list). Documented, not a deviation. requirements-completed now covers STOP-01 through STOP-04, closing the gap 02-02 left open pending this plan's proof.
 - [Phase 02]: 02-03: Fixed a self-collision (Rule 1 - Bug) between the plan's own module-doc action text and the plan's own acceptance grep: incorporating the plan's literal sentence about a Kani compare_exchange modelling report put the literal token compare_exchange into proofs.rs, colliding with the same task's own forbidden-token grep. Reworded to compare-exchange, preserving identical technical content, matching this project's own established precedent (02-02's latch.rs collision, STATE.md 01-14).
+- [Phase 02]: 02-04: crates/stop needed zero new tests for STOP-06 -- 02-02/02-03's existing suite already covered all 6 real branches (all in latch.rs; every other file's exhaustive matches compile to jump tables with 0 LLVM branch regions, confirmed from the raw JSON per file).
+- [Phase 02]: 02-04: Fixed nr-coverage.sh missing-file check to also exclude proofs.rs (Rule 1 bug), mirroring 02-01's lib.rs fix -- proofs.rs is cfg(kani)-gated and a normal llvm-cov build, even on the pinned nightly, never compiles it, so it can never appear in the report regardless of test coverage.
+- [Phase 02]: 02-04: Task 2's tdd=true was interpreted as empirical-verification discipline rather than a literal RED/GREEN commit pair, since the production code already existed and was already correct (coverage backfill, not new-feature TDD); executed as one task commit per this project's established one-commit-per-task convention.
+- [Phase 02]: 02-04: Left EmergencyStop::default() untested (94.1 percent function coverage, not 100) -- it has zero branches of its own, D-53 scopes the gate to branches only, and the plan's own text forbids writing tests speculatively beyond the branches a coverage run actually names.
 
 ### Pending Todos
 
@@ -290,8 +295,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-15T06:35:16.891Z
-Stopped at: Completed 02-03-PLAN.md (eleven Kani harnesses across D-46's four families, all verifying; docs/proofs/ and the generated D-54 proof report)
+Last session: 2026-09-15T06:55:00.633Z
+Stopped at: Completed 02-04-PLAN.md (blocking kani and coverage CI gates, both proven to catch a real regression; crates/stop confirmed at 100 percent branch coverage; STOP-05 and STOP-06 closed)
 Resume file: None
 
 Next: plan 01-15 (wave 22), the rig install runbook and the last plan of the phase. Three blocking human-action checkpoints, all needing the rig: deploy the repository and a scoped push credential to /opt/neurorust, install the systemd units and drive one full loop by hand, then leave the machine alone and confirm the first scheduled fire. Task 3 waits for the coming Sunday by design and accepts two outcomes, a run that happened or a refusal recorded as a coverage gap under D-08. It closes BENCH-08 and PLAT-02, and owns the six findings in deferred-items.md.
