@@ -10,3 +10,6 @@
 //! What this crate proves, what the compiler proves, and what nothing in Phase 2 proves are
 //! stated in `docs/proofs/emergency-stop-proof-scope.md`. Read that before quoting anything
 //! here as verified.
+
+pub mod event;
+pub mod state;

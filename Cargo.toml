@@ -39,6 +39,11 @@ tempfile = "3.27.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+# `kani` is a real cfg, set by `cargo kani` itself when it compiles proof harnesses (plan
+# 02-03), never by this workspace's own build. Declaring it here stops rustc's check-cfg lint
+# from flagging every `#[cfg_attr(kani, ...)]` in crates/stop as an unexpected cfg name under
+# the `-D warnings` gate every crate in this workspace is built under.
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
 
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
