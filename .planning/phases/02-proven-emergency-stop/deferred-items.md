@@ -35,3 +35,21 @@ originating plan; noted here for a future plan or maintenance pass to pick up.
   tasks 2 and 3 should build every `nr-stop-harness`/`nr-run-measurement stop-harness`
   invocation from `main.rs`'s real clap surface (or the two confirmed-real sources
   above), never from this plan's own inline text.
+
+## From 02-08 task 1 (found during the first rig checkpoint, 2026-09-15)
+
+- **Cargo is installed on the rig but unreachable from any shell.** `~/.cargo/bin/cargo` is a
+  working rustup shim (cargo 1.98.0, rustc 1.98.0, toolchain
+  `stable-x86_64-unknown-linux-gnu`), and `~/.cargo/env` exists, but no rc file sources it:
+  `grep -n cargo ~/.bashrc ~/.profile ~/.bash_profile` returns nothing, and the login `PATH` is
+  the stock one with no `~/.cargo/bin`. So a plain `cargo build` on the rig fails with
+  "Command 'cargo' not found" and suggests installing it, which would be the wrong fix.
+  The workaround is `. "$HOME/.cargo/env"` first, or an absolute `~/.cargo/bin/cargo`.
+
+  Whoever built `target/release/nrmeasure` there on 2026-09-10 must have done one of those and
+  it was never recorded, so the next person hit it cold. This is a reproducibility gap of the
+  same kind `docs/measurement-protocol.md` exists to close: a third party following the written
+  procedure cannot build the harness. Whichever plan next owns rig documentation should either
+  add the source line to the runbook, or wire `~/.cargo/env` into the rig's shell rc so the
+  documented command works as written. Not fixed here: changing the rig's shell environment is
+  outside a capture plan's scope, and the workaround is one line.
