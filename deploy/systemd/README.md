@@ -254,6 +254,48 @@ line itself; the script is what restricts arguments (the `--measurements-root`/`
 loop), and that loop already covers whatever `"$@"` holds regardless of which subcommand token
 leads it.
 
+### Observed behaviour, 2026-09-16
+
+The first real use of this subcommand, plan 02-08. Three runs were admitted, all with no login
+session and all fifteen preconditions passing, all under the pushed-stamp provenance of
+`65b4cc3`:
+
+| run | period | wall clock |
+|-----|--------|------------|
+| `2026-09-16-precision3591-recon-04` (characterise) | n/a | under one second |
+| `2026-09-16-precision3591-headline-02` (abort-latency) | 33,000 ns | 7.887 s |
+| `2026-09-16-precision3591-headline-03` (abort-latency) | 1,000,000 ns | 3 min 21.339 s |
+
+An abort-latency run's wall clock is close to `trials * period_ns`, because the hot loop now waits
+a real period between polls: 200,000 trials at 1 ms is 200 s of measurement and took 201.3 s. Size
+the `TimeoutStartSec` expectation from that, not from the 33 us run.
+
+Refusals seen, all of them the mechanism working: `NoActiveSshSessions` twice, once as a
+deliberate test of the refusal path and once because a session was opened during the roughly one
+second between the launcher's own check and the harness gathering its facts. A refused run writes
+`ATTEMPT.json` and nothing else, which is the correct outcome: it publishes no evidence it did not
+earn. Three such directories sit on the rig (`-recon`, `-recon-02`, `-recon-03`) and were not
+collected.
+
+Two defects were found here that no amount of dev-host testing had surfaced, both now fixed:
+
+- Pinning was gated on `core_affinity::get_core_ids()`, which reports the process's inherited
+  affinity mask. `isolcpus=6-11` exists to take those cores out of that mask, so every isolated
+  core was rejected as unavailable. A capture cannot pin to the cores it exists to measure.
+- The hot loop's busy-wait deadline was anchored at `period_ns` rather than at a clock reading,
+  while being compared against `CLOCK_MONOTONIC_RAW`, which counts from boot. The deadline was
+  therefore always already past, and the loop spun unpaced. The first 33 us capture reported a
+  222 ns median for a 33,000 ns poll period and was discarded, not collected; it survives on the
+  rig as `2026-09-16-precision3591-headline` and must not be collected.
+
+One operational hazard worth knowing before a capture session. `nr-measurement.service` is not
+garbage-collected after a run, successful or otherwise: its transient fragment stays in
+`/run/systemd/transient/` and the next `systemd-run` fails with "Unit nr-measurement.service was
+already loaded or has a fragment file". Clearing it needs root, which the NOPASSWD grant does not
+cover. The working sequence, in this order, is `systemctl reset-failed nr-measurement.service`,
+then remove the fragment file, then `systemctl daemon-reload`. Removing the fragment while the
+unit sits at `LoadState=error` instead yields "Device or resource busy" on the next launch.
+
 ## Why `TimeoutStartSec`, not its sibling
 
 `neurorust-measure.service` is `Type=oneshot`, and for a oneshot unit the whole run is the
