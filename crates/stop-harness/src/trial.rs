@@ -205,7 +205,21 @@ pub fn hot_side_trial<C: MonotonicRawClock>(
     barrier.wait();
 
     let period_ns = period_ns.max(1);
-    let mut next_deadline = period_ns;
+    // Anchored to a reading from the same clock the deadline is later compared against, never to
+    // zero. CLOCK_MONOTONIC_RAW counts nanoseconds since boot, so on any machine that has been up
+    // for more than an instant every reading dwarfs a poll period measured in microseconds. A
+    // deadline of `period_ns` alone is therefore already in the past at the first comparison: the
+    // busy-wait below returns without waiting, `next_deadline += period_ns` never catches up, and
+    // this loop degenerates into an unpaced spin that polls the latch as fast as it can read the
+    // clock. `busy_wait_ns` in this same file always anchored correctly; this loop did not.
+    //
+    // It survived to the rig because every fixture clock in the test suite starts at 0, which is
+    // the one origin where the broken arithmetic behaves. The 2026-09-16 33 us capture is what it
+    // cost: a 222 ns median for a 33,000 ns poll period, a figure with no poll period in it.
+    let mut next_deadline = clock
+        .now_ns()
+        .ok_or(TrialError::ClockUnavailable { trial })?
+        .saturating_add(period_ns);
     loop {
         // The fixed point in the iteration where the latch is polled (D-32).
         if stop.state() != State::Running {

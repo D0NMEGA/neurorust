@@ -1,9 +1,11 @@
 use std::sync::Barrier;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
+use nr_stop::event::Cause;
 use nr_stop::latch::EmergencyStop;
 use nr_stop::state::State;
 
-use nr_stop_harness::clock::FixtureClock;
+use nr_stop_harness::clock::{FixtureClock, MonotonicRawClock};
 use nr_stop_harness::trial::{
     TrialConfig, TrialError, abort_side_trial, hot_side_trial, run_trials,
 };
@@ -162,4 +164,71 @@ fn the_sample_vector_is_preallocated() {
     let outcome = run_trials(&clock, &config).expect("fixture provides ample headroom");
     assert_eq!(outcome.rows.len(), 7);
     assert_eq!(outcome.rows.capacity(), 7);
+}
+
+/// A clock that closes the latch part-way through the readings it hands out.
+///
+/// The hot loop only paces while the latch is still `Running`, so a single-threaded test of its
+/// pacing needs something to close the latch mid-flight. Doing it from the clock keeps the whole
+/// test deterministic: no second thread, no real time, no dependence on how the two are scheduled.
+struct LatchClosingClock<'a> {
+    stop: &'a EmergencyStop,
+    base_ns: u64,
+    step_ns: u64,
+    close_after_reads: usize,
+    reads: AtomicUsize,
+}
+
+impl MonotonicRawClock for LatchClosingClock<'_> {
+    fn now_ns(&self) -> Option<u64> {
+        let index = self.reads.fetch_add(1, Ordering::SeqCst);
+        let reading = self.base_ns + (index as u64) * self.step_ns;
+        if index == self.close_after_reads {
+            self.stop.abort(Cause::Operator, reading);
+        }
+        Some(reading)
+    }
+}
+
+#[test]
+fn the_hot_loop_polls_once_per_period_against_a_boot_relative_clock() {
+    // `CLOCK_MONOTONIC_RAW` counts nanoseconds since boot, so on any machine that has been up for
+    // more than an instant every reading dwarfs a poll period measured in microseconds. A busy-wait
+    // deadline anchored at 0 instead of at a clock reading is therefore already in the past at the
+    // first comparison: the wait returns immediately, the deadline never catches up, and the loop
+    // degenerates into an unpaced spin that polls the latch as fast as it can read the clock.
+    //
+    // Every other fixture in this file starts at 0, which is the one origin where that arithmetic
+    // behaves, which is exactly why the defect reached the rig. On 2026-09-16 a 33,000 ns poll
+    // period produced a 222 ns median end to end: bare cross-core propagation, with no poll period
+    // in it at all. This fixture starts where a real clock starts.
+    const BASE_NS: u64 = 432_000_000_000_000; // about five days of uptime
+    const STEP_NS: u64 = 1;
+    const PERIOD_NS: u64 = 1_000;
+    const CLOSE_AFTER_READS: usize = 5;
+
+    let stop = EmergencyStop::new();
+    let clock = LatchClosingClock {
+        stop: &stop,
+        base_ns: BASE_NS,
+        step_ns: STEP_NS,
+        close_after_reads: CLOSE_AFTER_READS,
+        reads: AtomicUsize::new(0),
+    };
+    // One party, so `wait` returns immediately and this stays single-threaded.
+    let barrier = Barrier::new(1);
+
+    let observed =
+        hot_side_trial(&clock, &stop, &barrier, PERIOD_NS, 0).expect("this clock never runs out");
+
+    // The latch closed five readings in, well inside the first period. D-32 says the hot path
+    // checks the latch once per iteration, so the loop must not observe that close until its first
+    // period boundary. Unpaced, it observes within a handful of readings of the close and this
+    // lands far below the boundary.
+    assert!(
+        observed >= BASE_NS + PERIOD_NS,
+        "observed {observed} is inside the first poll period (boundary {}), so the loop polled the \
+         latch without pacing",
+        BASE_NS + PERIOD_NS
+    );
 }
