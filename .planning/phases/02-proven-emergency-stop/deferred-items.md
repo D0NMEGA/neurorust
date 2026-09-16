@@ -105,3 +105,16 @@ originating plan; noted here for a future plan or maintenance pass to pick up.
   without widening the sudoers grant by one entry and without giving up the fixed name. Not done
   in 02-08, whose file scope is the rig and `measurements/` only, and whose task 2 is a capture
   rather than a change to the root entry point.
+
+- **Plan 02-08 task 2's acceptance criteria require `metrics-entry.json` in the characterise run
+  directory, which no characterise run has ever written.** `metrics-entry.json` is written inside
+  `run_abort_latency` (crates/stop-harness/src/main.rs:591-608); `run_characterise`
+  (main.rs:256-455) does not write one, and 02-07-SUMMARY.md already said so in as many words:
+  "characterise and abort-latency each leave a validating run directory (raw capture,
+  manifest.json, REPORT.md; abort-latency also metrics-entry.json)". The 2026-09-16 run is
+  therefore correct with three files and not missing a fourth.
+
+  Same class as the stale CLI flags logged above, and the same resolution: where 02-08's own text
+  and `main.rs` disagree, `main.rs` and 02-07-SUMMARY.md win. Recorded rather than silently
+  treated as met, because "the artifact list was wrong" and "the artifact is missing" are the two
+  readings a later reader has to choose between, and only one of them is true here.
