@@ -56,40 +56,52 @@ originating plan; noted here for a future plan or maintenance pass to pick up.
 
 ## From 02-08 task 2 (found while driving the D-35 capture, 2026-09-16)
 
-- **A refused run can wedge `nr-measurement.service` so that no later capture can start, and
-  clearing it needs a password the NOPASSWD grant deliberately withholds.** The 2026-09-16
-  04:17:45Z refusal (task 1's deliberate `NoActiveSshSessions` test) left its transient unit
-  behind. Sixteen minutes later, with the operator's session closed and the machine idle, a
-  correctly-launched characterise run died before reaching any precondition:
+- **`--collect` never reaps `nr-measurement.service` on this rig, so every capture wedges the unit
+  name for the next one.** Any run through `nr-run-measurement` leaves
+  `/run/systemd/transient/nr-measurement.service` on disk and the unit at `LoadState=loaded`. The
+  next launch then dies before reaching a single precondition:
   `Failed to start transient service unit: Unit nr-measurement.service was already loaded or has
   a fragment file.`
 
-  Observed state at that point, which is the part worth keeping: `LoadState=loaded`,
-  `ActiveState=inactive`, `SubState=dead`, `Result=success`, `CollectMode=inactive-or-failed`,
-  `FragmentPath=/run/systemd/transient/nr-measurement.service`, that file still present and
-  dated to the refused run. So `--collect` was in force and the unit was still not reaped.
+  This was first read as something a *refused* run does. That was too narrow, and the narrower
+  version is wrong. It was isolated by launching a deliberately trivial unit under the same name:
 
-  `systemctl reset-failed nr-measurement.service`, `systemctl stop`, and `systemctl daemon-reload`
-  all ran without error and changed nothing. Removing the stale fragment file directly and then
-  reloading cleared it (`LoadState=not-found`), and the capture launched normally afterwards.
+      sudo systemd-run --unit=nr-measurement --collect --property=Type=oneshot /bin/true
 
-  The mechanism is NOT established and is not claimed here. `Result=success` on a unit whose
-  process exited 1 is the odd part, and it is consistent with something having already cleared the
-  failed state earlier in the session, after which `reset-failed` is a no-op and the ordinary
-  remedy silently stops working. That is a hypothesis, not a finding; nobody watched it happen.
+  That succeeded ("Running as unit: nr-measurement.service"), `/bin/true` exited 0, and 25 seconds
+  later the fragment file was still present with `LoadState=loaded`, `ActiveState=inactive`,
+  `Result=success`, `CollectMode=inactive-or-failed`. Nothing had failed and nothing had refused,
+  and the unit still was not collected. So the trigger is running at all, not failing.
 
-  Why it matters beyond this one run. `scripts/nr-run-measurement` pins a single unit name on
-  purpose, so two captures cannot contend for the isolated cores invisibly, and that is right.
-  The cost is that one wedged name blocks every capture that goes through the root entry point,
-  and the operator account cannot clear it: `systemctl` is not one of the four fixed paths in
-  `deploy/sudoers/nr-measurement`, by the same deliberate asymmetry that made the 2026-09-04
-  runaway stoppable only by the operator. A rig left in this state looks exactly like a rig
-  refusing a run, which is the failure mode this project cares most about telling apart. The
-  weekly timer is NOT affected: it drives `neurorust-measure.service`, a different unit.
+  What does and does not clear it, all confirmed on the machine:
+
+  - `systemctl reset-failed` does NOT remove the fragment file. On a unit that is merely loaded
+    and dead (`Result=success`) it is a no-op, which is why it appears to do nothing; on a genuinely
+    failed unit it clears the failed state and still leaves the file, so the unit reloads from it.
+  - `systemctl stop` and `systemctl daemon-reload` alone change nothing.
+  - Removing the fragment file and then reloading does clear it, to `LoadState=not-found`, after
+    which `systemd-run` reuses the name normally. This is the only working recovery found.
+  - Removing the file while the unit sits at `LoadState=error` leaves systemd in a state where the
+    next `systemd-run` fails with `Device or resource busy` instead. Recover by removing the file
+    and reloading again from a clean (non-error) state. No lingering cgroup was involved:
+    `/sys/fs/cgroup/system.slice/nr-measurement.service` was absent throughout.
+
+  The underlying reason systemd declines to garbage-collect a unit whose `CollectMode` permits it
+  is NOT established here and is not claimed. What is established is the behaviour and the
+  recovery, both reproduced several times in one sitting.
+
+  Why it matters beyond one run. `scripts/nr-run-measurement` pins a single unit name on purpose,
+  so two captures cannot contend for the isolated cores invisibly, and that is right. The cost is
+  that the name wedges after every use and the operator account cannot unwedge it: `systemctl` is
+  not one of the four fixed paths in `deploy/sudoers/nr-measurement`, by the same deliberate
+  asymmetry that made the 2026-09-04 runaway stoppable only by the operator. A rig in this state
+  looks exactly like a rig refusing a run, which is the one distinction this project most needs to
+  keep sharp. Every capture in this plan needed a root cleanup between attempts. The weekly timer
+  is NOT affected: it drives `neurorust-measure.service`, a different unit.
 
   Possible fix, for whichever plan next owns the wrapper, not applied here: `nr-run-measurement`
-  already runs as root, so it can clear a stale same-named unit itself, immediately after its
-  existing `systemctl is-active` check proves nothing is actually running. That closes the wedge
-  without widening the sudoers grant by a single entry and without giving up the fixed name.
-  Not done in 02-08, whose file scope is the rig and `measurements/` only, and whose task 2 is a
-  capture rather than a change to the root entry point.
+  already runs as root, so immediately after its existing `systemctl is-active` check proves
+  nothing is actually running, it can clear a stale same-named unit itself. That closes the wedge
+  without widening the sudoers grant by one entry and without giving up the fixed name. Not done
+  in 02-08, whose file scope is the rig and `measurements/` only, and whose task 2 is a capture
+  rather than a change to the root entry point.
