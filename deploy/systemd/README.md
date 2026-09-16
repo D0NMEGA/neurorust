@@ -71,6 +71,43 @@ journalctl -u neurorust-measure.service --no-pager | tail -5
 A push that fails on authentication is recorded as a coverage gap like any other refusal, so
 a botched rotation shows up in `metrics/coverage.json` rather than passing unnoticed.
 
+## Where a run gets pushed, and why it is not main
+
+Each run pushes to its own branch, `rig/<date>-weekly-<short sha>`, and the operator merges it.
+The rig never pushes to `main`.
+
+It used to. On 2026-09-13 that produced the failure mode the branch exists to prevent: the run
+itself was clean (p99 9 us, contamination verdict clean, admitted to the series) and the push
+was rejected as non-fast-forward, because dev-host commits had landed on `main` during the
+week. `systemd` recorded the unit as FAILED, so a good measurement read as a rig fault, and
+the only copy of it stayed on the rig until someone went looking five days later.
+
+Adding a fetch and rebase would have been the smaller change and the wrong one. It would have
+an unattended machine rewrite its own measurement commit onto remote work nobody had reviewed,
+and it still fails on a real conflict, so it narrows the race rather than removing it. A branch
+per run removes it: the rig only ever creates refs nothing else writes to, so no amount of
+dev-host activity can reject its push. D-11's division is preserved and sharpened, with the rig
+publishing evidence and a human deciding what reaches `main`.
+
+Two states that look similar and are not:
+
+- A branch exists and has not been merged. The run happened and its evidence is safe. Merge it.
+- No branch exists for that week. The run did not happen, or was refused. That is the coverage
+  gap D-08 means, and it is recorded in `metrics/coverage.json`.
+
+Merging is a normal reviewed merge from the dev host:
+
+```sh
+# On the Mac, from the repo root:
+git fetch origin
+git log --oneline origin/main..origin/rig/<date>-weekly-<sha>   # read what the rig recorded
+git merge --ff-only origin/rig/<date>-weekly-<sha>              # or a normal merge if main moved
+git push origin main
+```
+
+The regression and provenance workflows run on the merge, which is what gates the figure
+reaching `main`, so nothing is checked later than it was before.
+
 ## Two checkouts
 
 The rig carries two trees of this repository and they are not the same tree:

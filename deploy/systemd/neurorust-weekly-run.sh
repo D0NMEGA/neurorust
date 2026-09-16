@@ -28,10 +28,36 @@ cd "$REPO"
 # on a value that happens to start with a dash. GIT_ASKPASS=/bin/true stops git falling back
 # to an interactive prompt if the helper ever returns nothing, rather than hanging an
 # unattended unit forever.
+#
+# The destination is a per-run branch, never main. An earlier version pushed straight to
+# main with no fetch, which assumed nothing else had moved since the previous weekly run.
+# On 2026-09-13 that assumption broke for the first time: the run itself was clean (p99 9 us,
+# verdict clean, admitted to the series) and the push was rejected as non-fast-forward,
+# because commits had landed on main during the week. systemd then recorded the whole unit as
+# FAILED, so a good measurement looked like a rig fault, and the only copy of it sat on this
+# laptop until someone went looking.
+#
+# Fetch-and-rebase was the obvious repair and is the wrong one here: it would have an
+# unattended machine rewrite its own measurement commit onto remote work nobody reviewed, and
+# it still fails on a real conflict, so it narrows the race rather than removing it. A branch
+# per run removes it. The rig only ever creates refs nothing else writes, so the push cannot
+# be rejected by anything a week of dev-host work does, and D-11's division stands: the rig
+# measures and publishes evidence, a human decides what reaches main.
+#
+# The operator merges these branches. A week whose branch exists but is unmerged is therefore
+# a different state from a week with no run at all, and only the second is a coverage gap
+# under D-08. See deploy/systemd/README.md.
+# The branch carries the commit's own short sha, not just the date, so it cannot collide and
+# so no push here ever needs a force. Two runs on one day is not hypothetical: 2026-09-10 had
+# both a manual trigger and a scheduled one. A date-only name would have made the second push
+# either a rejection or a force, and an unattended unit should never be in a position to need
+# either.
 push_to_origin() {
+    branch="rig/$(date -u +%Y-%m-%d)-weekly-$(git rev-parse --short HEAD)"
     GIT_ASKPASS=/bin/true git \
         -c credential.helper='!f(){ printf "username=%s\n" x-access-token; printf "password=%s\n" "$(cat "$TOKEN_FILE")"; };f' \
-        push origin HEAD:refs/heads/main
+        push origin "HEAD:refs/heads/$branch"
+    echo "pushed to $branch; merge it to publish this run"
 }
 
 # D-09: the weekly watch covers scheduling latency and the firmware floor together, because
