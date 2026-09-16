@@ -337,8 +337,12 @@ Next: plan 02-09 (wave 8), the published abort latency figure and its instrument
 characterisation. It ends in a review checkpoint. Everything it needs is committed:
 `measurements/2026-09-16-precision3591-headline-02` (33,000 ns period, exact maximum 33,434 ns),
 `-headline-03` (1,000,000 ns period, exact maximum 1,000,256 ns) and
-`-recon-04` (the D-35 characterisation), all under the pushed-stamp provenance of 65b4cc3 with
-fifteen of fifteen preconditions passing on each. 02-08-SUMMARY.md's "Plan-mandated output"
+`-recon-04` (the D-35 characterisation), with fifteen of fifteen preconditions passing on each.
+Provenance is per run and is NOT uniform: the two abort-latency runs are pushed-stamp at
+65b4cc3, the characterisation at 7c0e4fd, because it was taken before the pacing fix landed.
+That is immaterial to the characterisation and the reason is checkable: the only source change
+between those revisions is `crates/stop-harness/src/trial.rs`, and `characterise.rs` imports
+only `clock` and `sched`, never `trial`. 02-08-SUMMARY.md's "Plan-mandated output"
 section lists the three things the published figure must carry.
 
 STOP-07 stays Pending deliberately. The measurement exists; the requirement asks for it to be
