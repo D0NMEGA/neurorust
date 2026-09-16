@@ -118,3 +118,31 @@ originating plan; noted here for a future plan or maintenance pass to pick up.
   and `main.rs` disagree, `main.rs` and 02-07-SUMMARY.md win. Recorded rather than silently
   treated as met, because "the artifact list was wrong" and "the artifact is missing" are the two
   readings a later reader has to choose between, and only one of them is true here.
+
+- **The rig now depends on a launcher script that is not in this repository.**
+  `/home/d0nmega/nr-capture-launch.sh`, written during 02-08 task 2. It exists because
+  `NoActiveSshSessions` expects zero established connections to port 22, while
+  `nr-run-measurement` checks preconditions within milliseconds of being launched, which is
+  necessarily from a session that is still established. The gap between "launched" and "safe to
+  check" is the whole problem, and Phase 1 closed it with a delayed `systemd-run` trigger that
+  needs root beyond the four fixed paths in the NOPASSWD grant. This closes it from inside the
+  grant: it polls the same `ss -Htn state established '( sport = :22 )'` query
+  `LiveFacts::active_ssh_sessions` itself runs, waits for zero, settles 45 seconds, re-checks, and
+  only then launches. Waiting on the condition rather than sleeping a guessed duration is the
+  point: a fixed delay is a bet about how long an operator takes to close a terminal.
+
+  It worked, and every capture in 02-08 went through it. The problem is that it is rig-only, so
+  the documented procedure in `docs/measurement-protocol.md` still cannot be followed by a third
+  party, and a rig rebuild loses it. Exactly the reproducibility gap the `cargo`-not-on-PATH entry
+  above describes, created rather than merely found.
+
+  Whichever plan next owns rig deployment should take it into `deploy/` alongside
+  `neurorust-weekly-run.sh`, with the settle window and the 30 minute deadline as named constants
+  and the `ss` query cross-referenced to `sources.rs` so the two cannot drift. Not done in 02-08,
+  whose file scope is `measurements/`, `INDEX.md` and `deploy/systemd/README.md`, and adding a new
+  deployable script is a larger change than a capture plan should make unilaterally.
+
+  One sharp edge to carry with it: there is a roughly one second window between the launcher's
+  final zero-session check and the harness gathering its own facts. A session opened inside that
+  window refuses the run. That happened once during 02-08, from reconnecting to collect a result
+  at the moment the previous capture fired.
