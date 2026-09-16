@@ -1,0 +1,547 @@
+{
+  "schema_version": 1,
+  "provenance_tier": "harness-generated",
+  "run_id": "2026-09-16-precision3591-headline-02",
+  "run_class": "headline",
+  "instrument_class": "headline-series",
+  "thermal_profile": "normal",
+  "utc_start": "2026-09-16T05:05:04.764545776Z",
+  "utc_end": "2026-09-16T05:05:12.561311565Z",
+  "harness": {
+    "version": "0.1.0",
+    "git_sha": "65b4cc3ea3bfb61bb8b2c4f61b28fca1cfe5042b",
+    "git_dirty": false,
+    "git_sha_source": "pushed-stamp",
+    "executable_blake3": "448f3867f83e10e3ad91f0c90571b17c1199fee663615860ef54e87db6fa633f",
+    "executable_bytes": 2464248
+  },
+  "host": {
+    "rig_slug": "precision3591",
+    "system_vendor": "Dell Inc.",
+    "system_model": "Precision 3591",
+    "bios_version": "1.23.0",
+    "bios_release_date": "04/24/2026",
+    "cpu_model": "Intel(R) Core(TM) Ultra 9 185H",
+    "microcode": "0x28",
+    "logical_cpus": 22,
+    "physical_cores": 16,
+    "sockets": 1,
+    "p_cores": "",
+    "e_cores": "",
+    "memory_gb": 30
+  },
+  "kernel": {
+    "release": "7.0.0-31-realtime",
+    "version_string": "#31.1-Ubuntu SMP PREEMPT_RT Tue Aug 11 15:50:26 UTC 2026",
+    "is_realtime": true,
+    "preempt_model": "PREEMPT_RT",
+    "cmdline": "BOOT_IMAGE=/boot/vmlinuz-7.0.0-31-realtime root=[redacted] ro quiet splash isolcpus=6-11 nohz_full=6-11 rcu_nocbs=6-11 irqaffinity=0-5,12-21 intel_idle.max_cstate=1 processor.max_cstate=1 nosoftlockup nowatchdog nmi_watchdog=0 tsc=reliable skew_tick=1 crashkernel=2G-4G:320M,4G-32G:512M,32G-64G:1024M,64G-128G:2048M,128G-:4096M",
+    "isolcpus": "6-11",
+    "nohz_full": "6-11",
+    "rcu_nocbs": "6-11",
+    "irqaffinity": "0-5,12-21"
+  },
+  "os": {
+    "distro": "Ubuntu",
+    "version": "26.04.1 LTS (Resolute Raccoon)",
+    "session_kind": "installed",
+    "systemd_default_target": "multi-user.target",
+    "display_manager_active": false
+  },
+  "tuning": {
+    "per_cpu_governor": [
+      {
+        "cpu": 0,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 1,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 2,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 3,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 4,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 5,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 6,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 7,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 8,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 9,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 10,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 11,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 12,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 13,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 14,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 15,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 16,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 17,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 18,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 19,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 20,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      },
+      {
+        "cpu": 21,
+        "governor": "performance",
+        "energy_performance_preference": "default"
+      }
+    ],
+    "no_turbo": true,
+    "cstates": [
+      {
+        "cpu": 0,
+        "name": "POLL",
+        "disabled": false
+      },
+      {
+        "cpu": 0,
+        "name": "C1E",
+        "disabled": false
+      }
+    ],
+    "rt_tuning_service": {
+      "unit": "rt-tuning.service",
+      "active_state": "active",
+      "sub_state": "exited",
+      "unit_file_state": "enabled"
+    }
+  },
+  "power": {
+    "ac_online": true,
+    "battery_status": "Not charging",
+    "battery_percent": 100,
+    "thermal_zones": [
+      {
+        "name": "TCPU",
+        "temp_c_start": 58.05,
+        "temp_c_end": 58.05
+      },
+      {
+        "name": "TCPU_PCI",
+        "temp_c_start": 59.0,
+        "temp_c_end": 59.0
+      },
+      {
+        "name": "INT3400 Thermal",
+        "temp_c_start": 20.0,
+        "temp_c_end": 20.0
+      },
+      {
+        "name": "SEN1",
+        "temp_c_start": 34.05,
+        "temp_c_end": 34.05
+      },
+      {
+        "name": "SEN2",
+        "temp_c_start": 47.05,
+        "temp_c_end": 47.05
+      },
+      {
+        "name": "SEN3",
+        "temp_c_start": 47.05,
+        "temp_c_end": 47.05
+      },
+      {
+        "name": "SEN4",
+        "temp_c_start": 35.05,
+        "temp_c_end": 35.05
+      },
+      {
+        "name": "SEN5",
+        "temp_c_start": 48.05,
+        "temp_c_end": 48.05
+      },
+      {
+        "name": "SEN6",
+        "temp_c_start": 52.05,
+        "temp_c_end": 52.05
+      },
+      {
+        "name": "SEN7",
+        "temp_c_start": 23.05,
+        "temp_c_end": 23.05
+      },
+      {
+        "name": "x86_pkg_temp",
+        "temp_c_start": 59.0,
+        "temp_c_end": 59.0
+      },
+      {
+        "name": "iwlwifi_1",
+        "temp_c_start": 36.0,
+        "temp_c_end": 36.0
+      }
+    ],
+    "package_temp_c_max": 59.0
+  },
+  "network": {
+    "wired_iface": "enp0s31f6",
+    "wired_driver": "e1000e",
+    "wired_state": "down",
+    "ptp_capabilities": "hardware-clock-present",
+    "wifi_iface": "wlp0s20f3",
+    "wifi_driver": "iwlwifi",
+    "wifi_state": "up"
+  },
+  "preconditions": [
+    {
+      "check": "no-active-ssh-sessions",
+      "status": "pass",
+      "observed": "0",
+      "expected": "0"
+    },
+    {
+      "check": "systemd-default-target-is-multi-user",
+      "status": "pass",
+      "observed": "multi-user.target",
+      "expected": "multi-user.target"
+    },
+    {
+      "check": "display-manager-inactive",
+      "status": "pass",
+      "observed": "gdm.service=inactive, sddm.service=inactive, lightdm.service=inactive",
+      "expected": "inactive"
+    },
+    {
+      "check": "no-graphical-session",
+      "status": "pass",
+      "observed": "0",
+      "expected": "0"
+    },
+    {
+      "check": "no-active-login-sessions",
+      "status": "pass",
+      "observed": "none",
+      "expected": "no local console login session"
+    },
+    {
+      "check": "governor-is-performance-on-all-cpus",
+      "status": "pass",
+      "observed": "performance on 22 CPUs",
+      "expected": "performance on all CPUs"
+    },
+    {
+      "check": "no-turbo-enabled",
+      "status": "pass",
+      "observed": "1",
+      "expected": "1"
+    },
+    {
+      "check": "deep-cstates-disabled",
+      "status": "pass",
+      "observed": "C6 not present, C10 not present on cpus 7-8",
+      "expected": "C6 disabled, C10 disabled"
+    },
+    {
+      "check": "isolcpus-covers-target-cpus",
+      "status": "pass",
+      "observed": "6-11",
+      "expected": "7-8"
+    },
+    {
+      "check": "kernel-is-realtime",
+      "status": "pass",
+      "observed": "1",
+      "expected": "1"
+    },
+    {
+      "check": "rt-tuning-service-active",
+      "status": "pass",
+      "observed": "active",
+      "expected": "active"
+    },
+    {
+      "check": "on-ac-power",
+      "status": "pass",
+      "observed": "AC=1",
+      "expected": "AC=1"
+    },
+    {
+      "check": "thermal-headroom-at-start",
+      "status": "pass",
+      "observed": "59.0 C",
+      "expected": "package temp <= 70 C"
+    },
+    {
+      "check": "no-package-manager-activity",
+      "status": "pass",
+      "observed": "none",
+      "expected": "no apt, dpkg, unattended-upgrade or snapd process"
+    },
+    {
+      "check": "tracers-quiescent",
+      "status": "pass",
+      "observed": "current_tracer=nop events/enable=0 set_event=(empty) tracing_on=0 instances=none samplers=none",
+      "expected": "current_tracer=nop, events/enable=0, set_event=(empty), tracing_on=0, no live tracing instance, no osnoise/timerlat kthread on the target cpus"
+    }
+  ],
+  "interference": {
+    "before": {
+      "isolated_cpus": [
+        7,
+        8
+      ],
+      "cal_ipis": [
+        {
+          "cpu": 7,
+          "count": 28912
+        },
+        {
+          "cpu": 8,
+          "count": 29307
+        }
+      ],
+      "tlb_ipis": [
+        {
+          "cpu": 7,
+          "count": 4
+        },
+        {
+          "cpu": 8,
+          "count": 4
+        }
+      ],
+      "rescheduling_ipis": [
+        {
+          "cpu": 7,
+          "count": 200
+        },
+        {
+          "cpu": 8,
+          "count": 479
+        }
+      ],
+      "irqs": [
+        {
+          "cpu": 7,
+          "count": 4135
+        },
+        {
+          "cpu": 8,
+          "count": 11726
+        }
+      ]
+    },
+    "after": {
+      "isolated_cpus": [
+        7,
+        8
+      ],
+      "cal_ipis": [
+        {
+          "cpu": 7,
+          "count": 28914
+        },
+        {
+          "cpu": 8,
+          "count": 29307
+        }
+      ],
+      "tlb_ipis": [
+        {
+          "cpu": 7,
+          "count": 6
+        },
+        {
+          "cpu": 8,
+          "count": 4
+        }
+      ],
+      "rescheduling_ipis": [
+        {
+          "cpu": 7,
+          "count": 203
+        },
+        {
+          "cpu": 8,
+          "count": 186019
+        }
+      ],
+      "irqs": [
+        {
+          "cpu": 7,
+          "count": 4135
+        },
+        {
+          "cpu": 8,
+          "count": 11726
+        }
+      ]
+    },
+    "delta": {
+      "cal_ipis": [
+        {
+          "cpu": 7,
+          "count": 2
+        },
+        {
+          "cpu": 8,
+          "count": 0
+        }
+      ],
+      "tlb_ipis": [
+        {
+          "cpu": 7,
+          "count": 2
+        },
+        {
+          "cpu": 8,
+          "count": 0
+        }
+      ],
+      "rescheduling_ipis": [
+        {
+          "cpu": 7,
+          "count": 3
+        },
+        {
+          "cpu": 8,
+          "count": 185540
+        }
+      ],
+      "irqs": [
+        {
+          "cpu": 7,
+          "count": 0
+        },
+        {
+          "cpu": 8,
+          "count": 0
+        }
+      ]
+    },
+    "tail_metrics": null,
+    "thresholds_provisional": null,
+    "verdict": "uncalibrated",
+    "windows": []
+  },
+  "tools": [
+    {
+      "name": "nr-stop-harness",
+      "version": "0.1.0",
+      "argv": [
+        "[redacted]/neurorust/target/release/nr-stop-harness",
+        "abort-latency",
+        "--period-ns",
+        "33000",
+        "--trials",
+        "200000",
+        "--hot-cpu",
+        "7",
+        "--abort-cpu",
+        "8",
+        "--priority",
+        "80",
+        "--seed",
+        "1",
+        "--rig-slug",
+        "precision3591",
+        "--characterisation-tsv",
+        "[redacted]/neurorust/measurements/2026-09-16-precision3591-recon-04/clock-characterisation.tsv",
+        "--measurements-root",
+        "[redacted]/neurorust/measurements"
+      ],
+      "exit_code": 0,
+      "artifact_paths": []
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "abort-latency-33000ns.tsv",
+      "bytes": 9956985,
+      "blake3": "b7e8cab2e431cb517433c57f489e56e40e8ad51370119f40393113f58710d3c4",
+      "kind": "other",
+      "stored": "in-repo"
+    }
+  ],
+  "firmware_screens": [],
+  "absent_fields": [
+    {
+      "field_path": "host.p_cores",
+      "reason": "neither cpu_capacity nor cpuinfo_max_freq readable for every CPU"
+    },
+    {
+      "field_path": "host.e_cores",
+      "reason": "neither cpu_capacity nor cpuinfo_max_freq readable for every CPU"
+    }
+  ],
+  "excluded_from_series": true,
+  "exclusion_reason": "excluded_from_series: true per D-37. The emergency_stop.abort_latency stage is not wired into the weekly series or the regression baseline in Phase 2, because the measured hot path is the D-33 stand-in rather than the real runtime and a weekly series taken against the stand-in would track the stand-in, not the runtime. Wiring this stage into the weekly job is deferred to Phase 5 or 6, when the hot path is real. This is a statement about scope, not about this run's quality.",
+  "fixtures_used": [],
+  "notes": null
+}

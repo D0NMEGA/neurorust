@@ -1,0 +1,22 @@
+{
+  "run_id": "2026-09-16-precision3591-headline-03",
+  "run_class": "headline",
+  "instrument_class": "headline-series",
+  "utc_start": "2026-09-16T05:06:45.818911792Z",
+  "iso_week": "2026-W38",
+  "rig_slug": "precision3591",
+  "tool": "nr-stop-harness",
+  "stage": "emergency_stop.abort_latency",
+  "sample_count": 200000,
+  "overflow_count": 0,
+  "p50_us": 501,
+  "p95_us": 949,
+  "p99_us": 990,
+  "p999_us": 999,
+  "max_us": 1000,
+  "population": "abort observation latency (D-31), converted from nanosecond samples in abort-latency-1000000ns.tsv; population is the 200000 abort trials in this run, at a 1000000 ns poll period",
+  "contamination_verdict": "uncalibrated",
+  "excluded_from_series": true,
+  "exclusion_reason": "excluded_from_series: true per D-37. The emergency_stop.abort_latency stage is not wired into the weekly series or the regression baseline in Phase 2, because the measured hot path is the D-33 stand-in rather than the real runtime and a weekly series taken against the stand-in would track the stand-in, not the runtime. Wiring this stage into the weekly job is deferred to Phase 5 or 6, when the hot path is real. This is a statement about scope, not about this run's quality.",
+  "manifest_blake3": "44efeb2b24d3ca0a9d4bf6974d99da79573ffeca172f1d46068fdbee76fd79a7"
+}
