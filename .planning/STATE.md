@@ -297,6 +297,23 @@ None yet.
 
 ### Blockers/Concerns
 
+- ACCEPTED, NOT MITIGATED, 2026-09-15: the operator typed the sudo passwords for both the rig and
+  the dev host into the chat transcript in plaintext, while asking whether the assistant could hold
+  them for the session. Offered rotation, the operator chose to leave them, so the acceptance is
+  recorded here the way T-1-01's is rather than left implicit. The values are deliberately NOT
+  reproduced in this file and must never be written into this repository, which is dual-licensed
+  for publication; what is recorded is the disclosure and the decision, which is the part a later
+  reader needs. The transcript is the exposure and it persists under ~/.claude/projects/ and in
+  every summary derived from it, so deleting a message does not undo it, there is no rotation
+  deadline, and nothing will ever fail to point at it. Neither password was stored anywhere by the
+  assistant. Scope worth stating plainly, because it is the reason this is a small risk rather
+  than a load-bearing one: no measurement path in this project needs either password. D-26's four
+  NOPASSWD entries (nr-recon, nr-probe, nr-measure-mode, nr-run-measurement) cover every capture
+  entry point, which is why plan 02-08's captures are driven without one. A password is required
+  only for actions deliberately left OUTSIDE that grant, and `systemctl stop` on a running capture
+  is the example that matters: the 2026-09-04 runaway was stoppable only by the operator's own
+  password, and that asymmetry is the design (permission to start a measurement, not to stop one),
+  not a gap to close by broadening the grant.
 - RESOLVED 2026-09-09: PLAT-03 is Complete. REQUIREMENTS.md:33-36 stated it as two outcomes, "either brought under 30 us, or the residual is attributed to a named platform cause and published as a documented limitation", while ROADMAP.md Phase 1 success criterion 3 states three, adding "or published as an explicitly unattributed limitation with the run, its raw capture, and the reason attribution failed committed alongside". The 2026-09-08 headline capture closes on that third branch. The operator decided on 2026-09-09 to align the requirement text with the criterion rather than hold PLAT-03 open: the criterion's own sentence "An unattributed residual does not become attributed by being described" exists because this case was anticipated and accepted when criterion 3 was rewritten on 2026-09-07, and REQUIREMENTS.md simply did not receive that edit, the same class of miss as the PROJECT.md:155 Key Decisions row. The requirement was widened by decision, not by a plan assuming it.
 - Open question, Phase 1: a ~3.8 ms global stall appeared on all six isolated threads at nearly identical values (stop_machine or a system-wide TLB shootdown signature). Still UNEXPLAINED. PLAT-01's three-cycle investigation closed 2026-09-08 on stop condition 3, not-reproduced: it was not observed across 6.5 hours of clean running on the rig, 4.5 of them with a nine-event tracer armed and break limits at 200 us and 3000 us, highest excursion anywhere 96 us. That is a non-observation and not a cause, and it bounds no rate or frequency. See docs/rig/plat01-stall-investigation.md. PLAT-01 stays Pending. Latency figures may now be published and each carries the stall as an explicit limitation naming that exposure, per ROADMAP criterion 1 as rewritten 2026-09-07; the earlier rule here, that no figure be published until the stall is named, would have held the phase open on a positive finding no amount of disciplined investigation can guarantee.
 - RESOLVED 2026-09-08: a clean headline run now exists. `measurements/2026-09-08-precision3591-headline` is four hours on cpus 6-11 under the Phase 1 protocol with no login session, all 15 preconditions passing, contamination verdict clean, `excluded_from_series` false. Maximum 81 us against the 30 us gate, so PLAT-03 closes as a documented limitation with the residual explicitly unattributed; see docs/rig/plat03-scheduling-latency-verdict.md. The superseded `cyclictest-rt-isolated-idle-10m.hist` was taken with SSH activity and an active GNOME session, stays committed under `measurements/2026-08-28-precision3591` as a reconstructed run excluded from the series, and is not deleted.
