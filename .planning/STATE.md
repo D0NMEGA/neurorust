@@ -328,21 +328,45 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-15T20:45:31.607Z
-Stopped at: Completed 02-07-PLAN.md (the STOP-07 evidence pipeline: preconditions, manifest, metrics entry, D-34 rendering, end-to-end fixture dry run, rig entry point)
+Last session: 2026-09-16T05:16:00Z
+Stopped at: Completed 02-08-PLAN.md (the three rig captures on the Precision 3591: the D-35 clock
+characterisation and abort latency at both published poll periods)
 Resume file: None
 
-Next: plan 02-06 (wave 5), the STOP-07 harness's measuring components (clock, scheduling setup,
-stand-in hot path, percentile computation). Autonomous, depends only on 02-04, and runs entirely
-on the macOS dev host per its own objective; the rig comes later in this same phase (02-08/02-09).
+Next: plan 02-09 (wave 8), the published abort latency figure and its instrument
+characterisation. It ends in a review checkpoint. Everything it needs is committed:
+`measurements/2026-09-16-precision3591-headline-02` (33,000 ns period, exact maximum 33,434 ns),
+`-headline-03` (1,000,000 ns period, exact maximum 1,000,256 ns) and
+`-recon-04` (the D-35 characterisation), all under the pushed-stamp provenance of 65b4cc3 with
+fifteen of fifteen preconditions passing on each. 02-08-SUMMARY.md's "Plan-mandated output"
+section lists the three things the published figure must carry.
+
+STOP-07 stays Pending deliberately. The measurement exists; the requirement asks for it to be
+published, and ROADMAP Phase 2 criterion 5 says the same. 02-09 closes it. This is the same
+distinction that made STOP-04 reopen in wave 2 after being marked complete on a half-finished
+claim.
+
+CARRY FORWARD, the lesson from 02-08. Two defects reached the rig because every fixture clock in
+the suite starts at 0 and fixture mode tolerates a failed pin. Both were invisible to CI and both
+appeared on first contact with real hardware: pinning was gated on the inherited affinity mask,
+which `isolcpus` exists to empty, and the hot loop's busy-wait deadline was anchored at 0 while
+being compared against a clock that counts from boot, so the poll period was never honoured at
+all. The second produced a complete, validating, manifest-carrying capture that reported 222 ns
+for a 33,000 ns poll period, and only the plan's own instruction to sanity-check the shape before
+committing caught it. A fixture whose origin differs from the real instrument's origin tests a
+different program. Phase 3 onward should assume this class of defect exists rather than that CI
+would have found it.
+
+OPERATIONAL, before the next capture session. `nr-measurement.service` is never garbage-collected
+after a run, successful or not, so its transient fragment blocks the next launch and clearing it
+needs root the NOPASSWD grant does not cover. Sequence, in order: `systemctl reset-failed`, remove
+`/run/systemd/transient/nr-measurement.service`, `systemctl daemon-reload`. See
+`deploy/systemd/README.md` and the phase's deferred-items.md, which carries a suggested fix
+needing no sudoers change.
 
 Also still open, in parallel, Phase 1: plan 01-15 (wave 22), the rig install runbook and the last
-plan of the phase. Three blocking human-action checkpoints, all needing the rig: deploy the
-repository and a scoped push credential to /opt/neurorust, install the systemd units and drive one
-full loop by hand, then leave the machine alone and confirm the first scheduled fire. Task 3 waits
-for the coming Sunday by design and accepts two outcomes, a run that happened or a refusal
-recorded as a coverage gap under D-08. It closes BENCH-08 and PLAT-02, and owns the six findings
-in deferred-items.md. Note for whoever picks this up: the "coming Sunday" this text names is
-2026-09-13, which has already passed as of this plan's own completion date (2026-09-15); this plan
-did not check the rig or touch measurements/ or the Phase 1 planning directory, so whether that
-Sunday's fire happened is unverified here and stated only as an open question, not an outcome.
+plan of the phase. Its three blocking human-action checkpoints all need the rig. Note that the
+weekly timer was confirmed healthy during 02-08: enabled, last fire Sun 2026-09-13 03:00:06 CDT,
+next fire Sun 2026-09-20 03:00 CDT, unchanged by any of this plan's work. The operator action
+still outstanding from 01-14 is deploying the fixed `push_to_origin` to `/opt/neurorust` before
+that next fire.
